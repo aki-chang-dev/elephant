@@ -1,6 +1,6 @@
 # Spec-System Template
 
-> The canonical structure a `author-product-spec` run produces = `global_specs`. Create these as separate files in the project's spec dir (e.g. `docs/<product>/v0/`). Keep the core five (master-spec, object-model, glossary, AD, ED); add domain-specific docs only as needed. Downstream (`decompose-roadmap`, `ship-story`) loads these as context and references AD/ED numbers + entity field contracts.
+> The canonical structure a `author-product-spec` run produces = `global_specs`. Create these as separate files in the project's spec dir (Elephant default: **`docs/elephant/<product>/spec/`**). Keep the core five (master-spec, object-model, glossary, AD, ED); add domain-specific docs only as needed. Downstream (`decompose-roadmap`, `ship-story`) loads these as context and references AD/ED numbers + entity field contracts.
 
 ---
 

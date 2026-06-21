@@ -40,7 +40,7 @@ Turn a product spec foundation (`global_specs`) into a **roadmap**: a phased, de
 4. **Draft dependencies** — cross-slice blockers + ordering within/across phases.
 5. **Draft phase-transition criteria** — the minimal standard to advance between phases.
 6. **Iterate** — present the draft slices/deps/gates; refine on business priority with the user. One question at a time (**REQUIRED DISCIPLINE:** follow superpowers:brainstorming's one-question-at-a-time rule; do NOT dump many questions at once). **Exit:** repeat steps 3–5 (slice-level refinement) until the user confirms the slices; do NOT loop indefinitely. Re-open CHECKPOINT 1 (re-enter Step 2) ONLY if the phasing itself must change — slice tweaks do not re-arm it. Then go to Step 7.
-7. **Capture deferred capabilities** into the roadmap's Out-of-scope section, **seed the change log** (`<date> — initial roadmap`), and **write** the roadmap using `roadmap-template.md`. Ask the user for (or default) the output path — the profile doesn't exist yet to supply one. **🛑 CHECKPOINT 2: user reviews the final roadmap; resume on explicit approval.**
+7. **Capture deferred capabilities** into the roadmap's Out-of-scope section, **seed the change log** (`<date> — initial roadmap`), and **write** the roadmap using `roadmap-template.md`. Output path: the profile doesn't exist yet, so default to Elephant's layout — **`docs/elephant/<product>/roadmap.md`**, co-located with the spec foundation (derive `<product>` from the spec dir you loaded in Step 1). Confirm with the user; an existing project may use a different path — keep theirs. **🛑 CHECKPOINT 2: user reviews the final roadmap; resume on explicit approval.**
 
 ## ID scheme
 

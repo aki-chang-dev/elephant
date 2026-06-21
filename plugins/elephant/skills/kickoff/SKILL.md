@@ -31,10 +31,12 @@ digraph kickoff_detect {
 }
 ```
 
+Look under Elephant's standard layout `docs/elephant/<product>/` first; fall back to a wider `docs/**` scan for projects that predate the convention (a non-`docs/` location → ask rather than assume absence).
+
 | Check | Mechanical detection |
 |---|---|
-| spec system | a `master-spec*` file AND an `object-model*` file-or-dir (e.g. `10-object-model/`). Default search root `docs/**`; if the user used a non-`docs/` spec dir, ask for it rather than assuming absence |
-| roadmap | a `*roadmap*` file containing a phase-overview heading + slice tables (NOT merely a master-spec's "object-model overview" section — that's the spec system, not a roadmap) |
+| spec system | a `master-spec*` file AND an `object-model*` file-or-dir (e.g. `10-object-model/`) — Elephant default `docs/elephant/<product>/spec/` |
+| roadmap | a `*roadmap*` file with a phase-overview heading + slice tables — Elephant default `docs/elephant/<product>/roadmap.md` (NOT a master-spec's "object-model overview" section) |
 | delivery-profile | `.claude/delivery-profile.md` exists |
 | all three | announce **ship-story-ready** and stop |
 

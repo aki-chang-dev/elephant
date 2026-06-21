@@ -2,6 +2,8 @@
 
 The contract between `kickoff` (producer) and `ship-story` (consumer). One markdown file per repo at `.claude/delivery-profile.md`. `ship-story` reads it to decide which gates to insert and where artifacts live. **Zero project-specifics belong in the skills — they all live here.**
 
+**Default layout (Elephant convention).** New projects put all generated docs under `docs/elephant/<product>/`: `spec/` (global_specs) · `roadmap.md` · `specs/` (per-slice specs) · `plans/` (per-slice plans). The profile records the actual paths, so existing projects keep whatever layout they already use — these fields are path-agnostic.
+
 ## Sections
 
 | Section | Fields | Notes |

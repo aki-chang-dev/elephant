@@ -33,7 +33,7 @@ Every right-column entry is a real schema field. If a detection has no schema ho
 | `.changeset/` exists | `versioning.changeset_cmd`, `versioning.empty_cmd` |
 | `.github/workflows/*.yml` | `finish.ci_required_checks` (see recipe) |
 | `git` / `gh` (default branch, squash setting) | `finish.integration`, `finish.branch_pattern` (see recipe) |
-| `docs/**` (`*roadmap*` files; `specs/`+`plans/` dirs; spec-system dir) | `roadmap_path`, `spec_dir`, `plan_dir`, `global_specs` (see disambiguation) |
+| `docs/**` (Elephant layout `docs/elephant/<product>/{spec/,roadmap.md,specs/,plans/}` if present; else any `*roadmap*` files, `specs/`+`plans/` dirs, spec-system dir) | `roadmap_path`, `spec_dir`, `plan_dir`, `global_specs` (see disambiguation) |
 | **CLAUDE.md (root + nested)** ★ | `finish.*`; `language gates`; `design gate`/`field-naming` enabled+refs; `status_flow`; `execution.gotchas` |
 | **memory + `docs/notes`** ★ | `execution.gotchas` |
 
@@ -82,7 +82,7 @@ Sparse repo (thin or no CLAUDE.md). Note: when run as kickoff's Phase C, **Phase
 
 | Field group | Greenfield disposition |
 |---|---|
-| `roadmap_path`, `story_id_pattern`, `global_specs`, `spec_dir`, `plan_dir`, `spec_template` | from Phase A/B if in pipeline; else `TBD` (ship-story needs them before any slice) |
+| `global_specs`, `roadmap_path`, `spec_dir`, `plan_dir` | from Phase A/B if in pipeline. Else default to Elephant's layout under `docs/elephant/<product>/`: `spec/` · `roadmap.md` · `specs/` · `plans/`. **Reuse the `<product>` from the existing spec/roadmap dir if one is present (Phase A already keyed the tree) — only ask the user for `<product>` when standalone on a bare repo with no spec dir.** `story_id_pattern` derived from the roadmap's ID legend; `spec_template` `TBD` until a slice needs it |
 | `filename_rule` | default `[ID]-[slug].md` |
 | `status_flow` | schema example default |
 | `field-naming`, `design gate` | `enabled: false` unless a signal exists |
