@@ -45,11 +45,11 @@ digraph phase_detect {
   "UI slice AND design not pulled?" -> "plan file exists?" [label="no / non-UI"];
   "plan file exists?" -> "Step 3 (plan)" [label="no"];
   "plan file exists?" -> "worktree/branch/PR exists?" [label="yes"];
-  "worktree/branch/PR exists?" -> "Step 5 (finish)" [label="PR open/green"];
+  "worktree/branch/PR exists?" -> "Step 5 (finish)" [label="PR/MR open or in review"];
   "worktree/branch/PR exists?" -> "Step 4 (execute)" [label="branch only / none"];
-  "Step 4 (execute)" -> "PR merged + roadmap=Done?";
-  "PR merged + roadmap=Done?" -> "Step 6 (closeout docs)" [label="merged, docs not done"];
-  "PR merged + roadmap=Done?" -> "DONE" [label="all done"];
+  "Step 4 (execute)" -> "merged + roadmap=Done?";
+  "merged + roadmap=Done?" -> "Step 6 (closeout docs)" [label="merged, docs not done"];
+  "merged + roadmap=Done?" -> "DONE" [label="all done"];
 }
 ```
 

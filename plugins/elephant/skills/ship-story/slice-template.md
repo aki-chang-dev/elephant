@@ -2,7 +2,7 @@
 
 > The structure a per-slice spec follows. `ship-story` writes one of these per roadmap story (to the profile's `spec_dir`, filename per `filename_rule`).
 >
-> **Why this shape: a slice spec is a DUAL-INPUT contract.** It feeds two agents that decompose from different angles — the **engineering** side (Claude Code / `ship-story`, thinks in APIs, data, modules) and the **design** side (Claude Design / DesignSync, thinks in screens, UX, flows). The audience-split sections below let each side advance independently; **§7 Cross-Module Contract is the hard anchor that keeps them consistent.**
+> **Why this shape: a slice spec is a DUAL-INPUT contract.** It feeds two agents that decompose from different angles — the **engineering** side (Claude Code / `ship-story`, thinks in APIs, data, modules) and the **design** side (a design tool — e.g. Claude Design, Figma — thinks in screens, UX, flows). The audience-split sections below let each side advance independently; **§7 Cross-Module Contract is the hard anchor that keeps them consistent.**
 >
 > Copy this, fill it for the real slice, save to `<spec_dir>/<ID>-<slug>.md`.
 

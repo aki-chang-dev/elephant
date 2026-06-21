@@ -43,7 +43,7 @@ Entities, AD, and glossary **co-evolve** — iterate, don't force strict lineari
 
 ## Field-naming convention (downstream hook — do this early)
 
-While authoring the object model, **establish the field-naming convention as an early AD** (e.g. a layered naming rule: a stable baseline layer + a high-frequency-terse layer + a low-frequency-verbose layer). Every field contract follows it. This AD is what `ship-story`'s field-naming gate and `init-profile`'s `field-naming.decision_ref` point at — `decision_ref`'s value is exactly this AD's number token (e.g. `AD-3`). Pin it (and its number) before filling field contracts, not after.
+While authoring the object model, **establish the field-naming convention as an early AD** (e.g. a layered naming rule: a stable baseline layer + a high-frequency-terse layer + a low-frequency-verbose layer). Every field contract follows it. This decision record is what `ship-story`'s field-naming gate and `init-profile`'s `field-naming.decision_ref` point at — `decision_ref`'s value is exactly this record's id token (e.g. `AD-3` / `ADR-7`, per the project's convention). Pin it (and its id) before filling field contracts, not after.
 
 ## Multi-session resume
 
