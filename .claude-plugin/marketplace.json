@@ -1,0 +1,17 @@
+{
+  "name": "elephant",
+  "owner": {
+    "name": "Aki Chang",
+    "url": "https://github.com/aki-chang-dev"
+  },
+  "description": "Elephant — a superpowers-based delivery harness for taking products from idea to shipped, one roadmap story at a time.",
+  "plugins": [
+    {
+      "name": "elephant",
+      "source": "./plugins/elephant",
+      "description": "kickoff (idea → spec foundation → roadmap → delivery-profile) + ship-story (deliver one roadmap story end-to-end).",
+      "category": "workflow",
+      "keywords": ["superpowers", "roadmap", "delivery", "spec-driven", "orchestration"]
+    }
+  ]
+}

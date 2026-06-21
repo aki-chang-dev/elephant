@@ -1,0 +1,13 @@
+{
+  "name": "elephant",
+  "version": "0.1.0",
+  "description": "A superpowers-based delivery harness: kickoff a product from idea to spec foundation, roadmap, and delivery-profile, then ship roadmap stories end-to-end (brainstorm → spec → plan → build → merge).",
+  "author": {
+    "name": "Aki Chang",
+    "url": "https://github.com/aki-chang-dev"
+  },
+  "homepage": "https://github.com/aki-chang-dev/elephant",
+  "repository": "https://github.com/aki-chang-dev/elephant",
+  "license": "MIT",
+  "keywords": ["superpowers", "workflow", "roadmap", "delivery", "spec-driven", "orchestration", "inception"]
+}
