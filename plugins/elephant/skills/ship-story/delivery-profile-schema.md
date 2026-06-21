@@ -9,7 +9,7 @@ The contract between `kickoff` (producer) and `ship-story` (consumer). One markd
 | Section | Fields | Notes |
 |---|---|---|
 | **story source** | `roadmap_path`, `story_id_pattern` | roadmap file; ID prefix rule (e.g. `S-/F-/P-/A-`) for locating a story |
-| **artifact paths** | `spec_dir`, `plan_dir`, `filename_rule`, `spec_template`, `status_flow` | where specs/plans land; filename rule (e.g. `[ID]-[slug].md`); spec template path; status vocabulary (e.g. `Draft→Refined→Implementing→Done`) |
+| **artifact paths** | `spec_dir`, `plan_dir`, `filename_rule`, `spec_template`, `status_flow` | where specs/plans land; filename rule (e.g. `[ID]-[slug].md`); `spec_template` = the per-slice spec structure (**default: the `slice-template.md` bundled in the `ship-story` skill** — a dual-input Code↔Design contract; existing projects may point at their own); status vocabulary (e.g. `Draft→Refined→Implementing→Done`) |
 | **global specs** | `global_specs[]` | immutable spec files to load as context during brainstorm/spec |
 | **field-naming prereq** | `enabled`, `decision_ref`, `field_contract_location` | gate before writing fields; naming-convention ref; where field contracts get back-filled |
 | **design gate** | `enabled`, `ui_detection`, `design_project_ref`, `slice_to_design_mapping`, `design_local_dir`, `ready_signal` | whether UI slices wait for design; how to detect "is UI" (default: spec §6 sensitivity ≠ Low); Claude Design project (DesignSync projectId/name); slice→design-page mapping; local dir DesignSync pulls into (Step 0 detects "design pulled" by its presence); ready-signal source (human) |

@@ -82,7 +82,7 @@ Sparse repo (thin or no CLAUDE.md). Note: when run as kickoff's Phase C, **Phase
 
 | Field group | Greenfield disposition |
 |---|---|
-| `global_specs`, `roadmap_path`, `spec_dir`, `plan_dir` | from Phase A/B if in pipeline. Else default to Elephant's layout under `docs/elephant/<product>/`: `spec/` · `roadmap.md` · `specs/` · `plans/`. **Reuse the `<product>` from the existing spec/roadmap dir if one is present (Phase A already keyed the tree) — only ask the user for `<product>` when standalone on a bare repo with no spec dir.** `story_id_pattern` derived from the roadmap's ID legend; `spec_template` `TBD` until a slice needs it |
+| `global_specs`, `roadmap_path`, `spec_dir`, `plan_dir` | from Phase A/B if in pipeline. Else default to Elephant's layout under `docs/elephant/<product>/`: `spec/` · `roadmap.md` · `specs/` · `plans/`. **Reuse the `<product>` from the existing spec/roadmap dir if one is present (Phase A already keyed the tree) — only ask the user for `<product>` when standalone on a bare repo with no spec dir.** `story_id_pattern` derived from the roadmap's ID legend; `spec_template` defaults to the `slice-template.md` bundled in the `ship-story` skill (the dual-input Code↔Design contract) |
 | `filename_rule` | default `[ID]-[slug].md` |
 | `status_flow` | schema example default |
 | `field-naming`, `design gate` | `enabled: false` unless a signal exists |
