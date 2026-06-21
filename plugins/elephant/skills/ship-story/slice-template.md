@@ -49,24 +49,20 @@
 
 > Direction and constraints, not code.
 
-### Field-naming prerequisite ★ (mandatory if this slice creates fields)
+### Field-naming (★ if this slice creates fields)
 
-If the slice creates or reads any entity field/column/table that is still `TBD` in the object model:
-1. List the fields it needs.
-2. Check the object model's field contracts.
-3. For each `TBD`, agree the name with the user per the naming-convention AD (the profile's `field-naming.decision_ref`).
-4. Write the agreed names back into the `field_contract_location`.
-5. Only then implement.
+> The actual back-fill (TBD → real names in the object model) happens during spec authoring — `ship-story` Step 1 does it before writing this spec, per the project's naming-convention decision (`field-naming.decision_ref`). Here, just **record the outcome**:
 
-(Skip if the slice only reads already-locked fields.)
+- **Fields this slice creates/names:** `<field>` (`<type>`) — …
+- **Convention followed:** `<decision_ref>` (e.g. `AD-3`)
 
-- **Fields to name:** …
+(Omit if the slice only reads already-locked fields.)
 
-### Required endpoints (high level)
-- `<METHOD> /path` — purpose
+### Required interfaces (high level)
+- `<METHOD> /path` or `<function/event>` — purpose
 
 ### Data-model touchpoints
-- Reads: … / Writes: … / Constraints referenced (AD/ED): …
+- Reads: … / Writes: … / Decision records referenced: `<AD/ED or the project's equivalent>`
 
 ### Key technical constraints & implementation notes
 - …
@@ -80,7 +76,11 @@ If the slice creates or reads any entity field/column/table that is still `TBD` 
 ## 6. Design Brief (Design only)
 
 ### Sensitivity
-- **High** — bespoke UX, design from scratch · **Medium** — partly bespoke, partly standard · **Low** — standard patterns (no design gate)
+
+**Sensitivity: `<High | Medium | Low>`** — pick exactly ONE value (the design gate matches this literal string; `≠ Low` ⇒ the slice waits for design):
+- **High** — bespoke UX, design from scratch
+- **Medium** — partly bespoke, partly standard
+- **Low** — standard patterns, OR a non-UI / headless slice (no design gate)
 
 ### Key UX decisions
 - …
@@ -92,28 +92,30 @@ If the slice creates or reads any entity field/column/table that is still `TBD` 
 - …
 
 ### Visual constraints
-- e.g. "Click ID must use a monospace font"
+- e.g. "identifiers shown in a monospace font", "destructive actions need a confirm step"
 
 ## 7. Cross-Module Contract (Code ↔ Design anchor)
 
-> The hard contract between Code and Design. Changing anything here requires notifying the other side.
+> The hard contract across the slice's boundary. Changing anything here requires notifying the other side.
+> For a **UI slice** this is the Code ↔ Design boundary (API ↔ UI). For a **non-UI / headless slice** it's the module/service boundary (interface ↔ caller); fill the parts that apply and drop the rest — §7 is never empty, but its shape follows the slice.
 
-### API ↔ UI mapping
+### Interface ↔ consumer mapping
+> Web/UI slice: API endpoint ↔ UI component. Headless slice: function/endpoint/event ↔ its consumer.
 
-| API endpoint | UI component served | Data schema (high level) | Notes |
+| Producer (endpoint / interface / event) | Consumer (UI component / caller / subscriber) | Data schema (high level) | Notes |
 |---|---|---|---|
-| `GET /api/...` | `<Component>` | `{ ... }` | … |
+| `<producer>` | `<consumer>` | `{ ... }` | … |
 
 ### Shared terms
 - "<term>" = … (both sides must use it the same way)
 
 ### Data-shape agreements
-- timestamps: ISO 8601 UTC; large blobs collapsed in UI; etc.
+- e.g. timestamps ISO 8601 UTC; large payloads paginated/collapsed; null vs absent; etc.
 
 ## 8. Dependencies
 
 - **Slice dependencies:** depends on `<ID>` (done)
-- **Doc references:** AD-`<n>` / ED-`<n>` / entities / glossary terms
+- **Doc references:** decision records (e.g. `AD-<n>` / `ED-<n>`) / entities / glossary terms
 - **Unblocks:** `<downstream IDs>`
 
 ---
