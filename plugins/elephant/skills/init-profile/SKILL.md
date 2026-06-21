@@ -45,11 +45,12 @@ Every right-column entry is a real schema field. If a detection has no schema ho
 - **`finish.ci_required_checks`**: a CI job becomes *required* only if CLAUDE.md/docs name it as a merge gate. If none is named, list all workflow job names and ask the user which gate merge (don't assume all of them).
 - **`finish.integration` / `branch_pattern`**: read CLAUDE.md's finish/merge section first (e.g. "PR + squash + linear main"). If `gh` API is denied (free repo / 403), fall back to CLAUDE.md prose + `git log` branch names; if still unclear, ask. `branch_pattern` = a naming regularity seen in ≥3 recent merged branches, else ask.
 - **`execution.gotchas`**: include a `project_*` memory/notes entry only if it constrains build/test/commit/deploy flow (a trap or known-bug). Exclude `feedback_*` and pure product-rule entries. When unsure, list candidates at confirm and let the user prune.
-- **`design gate` / `field-naming` enabled**: enabled iff CLAUDE.md or docs describe such a gate (e.g. a design-before-UI rule; a field-naming/AD convention). `decision_ref`/`field_contract_location` come from that same prose. No such prose → `enabled: false`.
+- **`field-naming` enabled**: enabled iff CLAUDE.md/docs describe a field-naming convention; `decision_ref` (the decision-record id, e.g. `AD-3` / `ADR-7` / whatever the project uses) + `field_contract_location` come from that prose. No such prose → `enabled: false`.
+- **`design gate`**: enabled iff CLAUDE.md/docs describe a design-before-UI rule. When **enabled**, resolve all sub-fields (not just `enabled`): `ui_detection` → schema default (spec §6 sensitivity ≠ Low); `tool` → `designsync` if the project uses Claude Design, else `manual`; `design_local_dir` → default `docs/elephant/<product>/design/<ID>/`; `design_project_ref` → `TBD` (DesignSync only; never guess); `slice_to_design_mapping` → `TBD` unless docs state it; `ready_signal` → `human`. When **disabled** → `enabled: false`, omit sub-fields.
 
 ### Doc-dir disambiguation
 
-If multiple dirs match the roadmap/spec/plan globs, **prefer the path CLAUDE.md declares as the artifact home**; never auto-pick a generic `docs/superpowers/` if CLAUDE.md routes artifacts elsewhere. Multiple unresolved candidates → show them at confirm and ask.
+If multiple dirs match the roadmap/spec/plan globs, **prefer the path CLAUDE.md declares as the artifact home** (and the Elephant default `docs/elephant/<product>/` if present); never auto-pick an unrelated generic docs dir when CLAUDE.md routes artifacts elsewhere. Multiple unresolved candidates → show them at confirm and ask.
 
 ## Ask only these (typical unknowables)
 

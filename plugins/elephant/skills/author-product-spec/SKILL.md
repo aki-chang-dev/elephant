@@ -24,11 +24,10 @@ Turn a product idea into `global_specs`: a canonical, cross-referenced **spec sy
 | **master-spec** | product definition · scope (in/out) · object-model overview · module index · cross-cutting principles · technical constraints · how-to-use (reading order) · change log (full section list in the template) |
 | **object-model** | overview + `entities/` (per-entity field contracts) + cross-rules (cross-entity invariants) |
 | **glossary** | domain terms (grown throughout) |
-| **AD** (architecture decisions) | product-level what/why, numbered `AD-1..`, each context / decision / rationale / consequences |
-| **ED** (engineering decisions) | implementation-level how (stack / deploy / patterns), numbered `ED-1..` |
+| **decision records** | the project's decision log. **Default taxonomy: split into AD (architecture decisions, product-level what/why) + ED (engineering decisions, implementation how), numbered `AD-1..` / `ED-1..`.** A project may substitute its own convention (ADR, RFC, a single `decisions.md`) — record which it uses; `decision_ref` ids then follow that convention. Each entry: context / decision / rationale / consequences |
 | **+ domain-specific** (optional) | e.g. a taxonomy, only if the product needs it |
 
-**AD vs ED:** AD = product-level, stable, "what & why" (data model shape, scope, business rules). ED = implementation-level, evolves with tech, "how" (framework, deploy topology, patterns). When unsure, ask "would this change if we rewrote in another stack?" — yes → ED, no → AD.
+**AD vs ED (the default split):** AD = product-level, stable, "what & why" (data model shape, scope, business rules). ED = implementation-level, evolves with tech, "how" (framework, deploy topology, patterns). When unsure, ask "would this change if we rewrote in another stack?" — yes → ED, no → AD. (If the project uses a single decision log instead, this distinction is just guidance, not separate files.)
 
 ## Authoring sequence (guided discipline; artifacts co-evolve)
 

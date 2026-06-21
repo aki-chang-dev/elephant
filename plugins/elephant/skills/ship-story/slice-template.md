@@ -122,9 +122,9 @@
 
 ## Status flow
 
-`Draft → Refined → Implementing → Done`
+`Draft → Refined → Implementing → Done` (the default; a project may set its own `status_flow` in the profile — the role of each stage below maps to that project's vocabulary).
 
 - **Draft** — first pass; may have open questions / `TBD`.
-- **Refined** — both sides reviewed; all §7 contract items pinned; ready to build.
-- **Implementing** — Code and Design both building; **§7 frozen** (to change it, return to Refined).
-- **Done** — all AC ✅.
+- **Refined** — both sides reviewed; all §7 contract items pinned; ready to build. (ship-story flips Draft→Refined on spec approval.)
+- **Implementing** — Code and Design both building; **§7 frozen** (to change it, return to Refined). (ship-story flips to this when execution starts.)
+- **Done** — all AC ✅. (ship-story flips to this at closeout.)

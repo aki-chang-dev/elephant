@@ -1,6 +1,6 @@
 # Spec-System Template
 
-> The canonical structure a `author-product-spec` run produces = `global_specs`. Create these as separate files in the project's spec dir (Elephant default: **`docs/elephant/<product>/spec/`**). Keep the core five (master-spec, object-model, glossary, AD, ED); add domain-specific docs only as needed. Downstream (`decompose-roadmap`, `ship-story`) loads these as context and references AD/ED numbers + entity field contracts.
+> The canonical structure a `author-product-spec` run produces = `global_specs`. Create these as separate files in the project's spec dir (Elephant default: **`docs/elephant/<product>/spec/`**). Core docs: master-spec, object-model, glossary, and a **decision log** (default taxonomy = AD + ED files below; a project may instead use ADR/RFC/a single `decisions.md` — keep the filenames matching whatever `decision_ref` convention the project adopts). Add domain-specific docs only as needed. Downstream (`decompose-roadmap`, `ship-story`) loads these as context and references decision-record ids + entity field contracts.
 
 ---
 
