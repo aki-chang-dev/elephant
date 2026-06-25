@@ -57,9 +57,9 @@ digraph phase_detect {
 
 | Phase | Superpowers skill dispatched | Profile-injected gate |
 |---|---|---|
-| 1 — research+brainstorm → spec | `superpowers:brainstorming` | research policy; field-naming prereq; spec_dir/template/status_flow. **🛑 STOP: user reviews spec** |
-| 2 — design gate (UI only) | (per `design.tool`) | only if slice is UI (see detection below). **🛑 STOP: wait for user "ready" signal**, then obtain the design per `design.tool` (auto-pull for `designsync`, user-placed for `manual`) |
-| 3 — plan | `superpowers:writing-plans` | plan_dir; UI plan written against the obtained design. *No stop — flows into execute* |
+| 1 — research+brainstorm → spec | `superpowers:brainstorming` | research policy; field-naming prereq; spec_dir/template/status_flow. **The brainstorm IS the review — no stop.** Write the spec, auto-flip Draft→Refined, continue |
+| 2 — design gate (UI only) | (per `design.tool`) | only if slice is UI (see detection below). **First commit + push the spec to main** (durable & shareable across the design wait), then **🛑 STOP: wait for user "ready" signal**, then obtain the design per `design.tool` (auto-pull for `designsync`, user-placed for `manual`) |
+| 3 — plan | `superpowers:writing-plans` | plan_dir; UI plan written against the obtained design. *No stop — flows into execute (non-UI slices reach here straight from Step 1)* |
 | 4 — execute | `superpowers:using-git-worktrees` + `superpowers:subagent-driven-development` | **flip spec to `Implementing` (§7 Cross-Module Contract now frozen — to change it, drop back to `Refined`)**; isolation; review cadence; profile `gotchas`; run `changeset_cmd` as part of the execute commits (before opening the PR), NOT in closeout |
 | 5 — finish | `superpowers:finishing-a-development-branch` | follow the profile's `finish.integration` (default: GitHub PR + squash). For the PR default: open PR → wait `ci_required_checks` green → **auto squash-merge on green** (if `gh pr merge` errors from a worktree, verify `gh pr view --json state` = MERGED before retry); then clean worktree + sync main. A non-GitHub / trunk-based `integration` uses its own mechanics — don't assume `gh` |
 | 6 — closeout docs | (none) | flip the slice's spec to `Done` (all AC ✅); single commit: roadmap → Done + refresh touched CLAUDE.md + check root snapshot. Object-model/field-contract docs are NOT touched here (Step 1 owns those). Use `empty_cmd` if this commit needs a changeset |
@@ -72,25 +72,27 @@ digraph phase_detect {
 4. If yes → **announce, then confirm before spending tokens**: "Planning to fan out N agents to research X/Y/Z, carrying these questions — go?" On confirm, do a **light fan-out** (3-5 `Explore`/general agents, one vertical each) per the profile's research depth. Synthesize: self-answer what you can, sharpen the rest.
 5. Run `superpowers:brainstorming` with the fewer, sharper remaining questions.
 6. If the profile's field-naming prereq is enabled and this slice creates fields (determined from the slice scope during brainstorm — any new entity/table/column): read the `decision_ref` (the project's naming-convention decision-record id, e.g. `AD-3`) for the convention, agree the names with the user, and **edit the `field_contract_location` files** (flip TBD → real names) BEFORE writing the spec. This is the only object-model doc edit owned by Step 1 — closeout (Step 6) does NOT touch object-model docs.
-7. Write the spec to `spec_dir` **using the profile's `spec_template`** (default: `slice-template.md` in this skill dir), filename per the profile's `filename_rule` (default `[ID]-[slug].md` — Step 0 detection assumes the `<ID>` lead), at status **`Draft`** (first status in `status_flow`). The template is a **dual-input contract** for Code and Design — fill §6 Design Brief (incl. **Sensitivity**, which drives the design gate) and §7 Cross-Module Contract even for backend-leaning slices, so the spec stays consumable by both sides. **🛑 STOP — user reviews the spec.** Resume signal = user approves the spec (re-invoking `/ship-story <ID>` also resumes). On approval, flip the spec to **`Refined`** and continue.
+7. Write the spec to `spec_dir` **using the profile's `spec_template`** (default: `slice-template.md` in this skill dir), filename per the profile's `filename_rule` (default `[ID]-[slug].md` — Step 0 detection assumes the `<ID>` lead), at status **`Draft`** (first status in `status_flow`). The template is a **dual-input contract** for Code and Design — fill §6 Design Brief (incl. **Sensitivity**, which drives the design gate) and §7 Cross-Module Contract even for backend-leaning slices, so the spec stays consumable by both sides. **No spec-review stop** — the research-augmented brainstorm already involved the user heavily, so it *is* the spec review; reliability downstream is assured. Write the spec, immediately flip it to **`Refined`**, and continue. What happens next is decided entirely by the design gate (Step 2): if the slice trips the gate, the gate's commit-push-main + wait-for-design is the only stop; if it doesn't, flow straight through plan → execute with **no stops at all**.
 
 ## Step 2 detail — design gate
 
 - **Gate disabled?** If the profile's `design gate.enabled` is false (e.g. a CLI / library / data-pipeline / headless project), skip Step 2 entirely for every slice — no §6 check, no waiting.
 - **UI detection (default, when gate enabled):** the slice is UI iff its spec §6 Design Brief sensitivity ≠ Low. Pure backend/schema/auth slices skip this gate. **Fail-safe:** if a gate-enabled project's spec has no §6 sensitivity field, do NOT default to non-UI — STOP and ask the user whether this slice needs the design gate.
-- Spec is already at `Refined` (Step 1 flipped it on approval). Tell the user you're waiting for the **ready signal** (human-given — you do NOT generate the design). Resume signal = the user says design is ready (or re-invokes `/ship-story <ID>`). The **wait-for-design gate is tool-agnostic**; only how the design *arrives* depends on the profile's `design.tool`:
+- **On entering the gate, commit + push the spec to main first.** The user is about to walk away to produce the design; pushing the `Refined` spec to remote main makes it durable and shareable (design tooling / collaborators can read it) for the whole wait. Do this BEFORE you stop.
+- Spec is already at `Refined` (Step 1 flipped it on writing — the brainstorm was the review). Tell the user you're waiting for the **ready signal** (human-given — you do NOT generate the design). Resume signal = the user says design is ready (or re-invokes `/ship-story <ID>`). The **wait-for-design gate is tool-agnostic**; only how the design *arrives* depends on the profile's `design.tool`:
   - **`tool: designsync`** — on the ready signal, auto-pull via **DesignSync** (`list_projects` → the profile's `design_project_ref` → `list_files`/`get_file`) using `slice_to_design_mapping`, into the profile's `design_local_dir` for `<ID>`. If `design_project_ref` is `TBD`/empty, STOP and ask for the Claude Design projectId (write it back). Don't ask the user to paste links/tars.
   - **`tool: manual` (or any non-DesignSync):** the user places the design under `design_local_dir` for `<ID>` themselves; you just confirm it's present, then continue. No auto-pull.
 - Either way, "design pulled" = `design_local_dir` for `<ID>` exists and is non-empty (what Step 0 detects).
 
-## Hard checkpoints (only these two stop)
+## Hard checkpoint (only the design gate stops)
 
 | Stop | Fires when | Resume signal |
 |---|---|---|
-| 1 — spec review | spec written (Draft) | user approves → flip spec to Refined → continue |
-| 2 — design gate (UI slices) | spec at Refined, slice is UI | user says design is ready → auto-pull design → continue |
+| design gate (UI slices only) | spec written & at Refined, slice is UI → commit + push spec to main, then wait | user says design is ready → auto-pull / confirm design → continue |
 
-Either stop also resumes by re-invoking `/ship-story <ID>` (Step 0 re-detects phase). Everything else flows automatically: plan → execute → PR → (CI green) → squash-merge → closeout docs.
+**Non-UI slices have NO stop.** They run brainstorm → spec → plan → worktree execute → PR → (CI green) → squash-merge → closeout docs end-to-end. The research-augmented brainstorm (Step 1) is the single point of human involvement; everything after it is automatic, because that early involvement makes downstream reliability assured.
+
+The design-gate stop also resumes by re-invoking `/ship-story <ID>` (Step 0 re-detects phase). Once design is in, plan → execute → PR → (CI green) → squash-merge → closeout docs all flow automatically.
 
 ## Red flags — STOP
 
@@ -98,7 +100,8 @@ Either stop also resumes by re-invoking `/ship-story <ID>` (Step 0 re-detects ph
 - About to hardcode a path, check name, or convention → it belongs in the profile. Read it from there.
 - No `.claude/delivery-profile.md` but proceeding anyway → stop; the repo isn't kicked off.
 - About to merge while a `ci_required_checks` entry is not green → never. Green is the gate.
-- Skipping the spec-review or design-gate stop "to save a round-trip" → those are the two hard gates. Don't.
+- Adding a spec-review or plan-review stop back in → don't. The brainstorm is the review; the design gate (UI only) is the single stop. Non-UI slices run end-to-end with zero stops.
+- Reaching the design gate without first committing + pushing the spec to main → push it first, then wait for the design.
 - Redoing a phase whose artifact already exists → re-detect phase in Step 0 and resume, don't restart.
 
 ## Common mistakes

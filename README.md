@@ -27,7 +27,7 @@ Two halves: **kickoff** bootstraps a project, **ship-story** delivers from it.
 | `elephant:author-product-spec` | Phase A — product-scale brainstorming structured into a canonical, cross-referenced spec system. |
 | `elephant:decompose-roadmap` | Phase B — guided decomposition into coarse, vertical, demoable slices (walking-skeleton → MVP → parity). |
 | `elephant:init-profile` | Phase C — discover repo + CLAUDE.md conventions → a `delivery-profile`; reconciles, never clobbers. |
-| `elephant:ship-story` | The engine — delivers one roadmap story, phase-aware and resumable, with two human gates (spec review, design). |
+| `elephant:ship-story` | The engine — delivers one roadmap story, phase-aware and resumable. The brainstorm is the review; the only stop is the design gate (UI slices). Non-UI slices run end-to-end with no stops. |
 
 Every project-specific value (paths, status flow, gates, CI checks, finish style, conventions) lives in a per-repo **`.claude/delivery-profile.md`** — the contract `init-profile` writes and `ship-story` reads. The skills themselves are zero-hardcoded and reusable across projects.
 
@@ -50,7 +50,7 @@ Runs A→B→C, stopping at each phase boundary for your go-ahead. When it's don
 ```
 /ship-story F-15
 ```
-Phase-aware and resumable: re-invoke any time and it continues where it left off. Stops only for spec review and (for UI slices) the design gate.
+Phase-aware and resumable: re-invoke any time and it continues where it left off. The research-augmented brainstorm is the review, so there's no spec/plan stop. For UI slices it commits + pushes the spec to main and stops only at the design gate to wait for your design; non-UI slices run start-to-finish with no stops.
 
 Each sub-skill also runs standalone — e.g. `/init-profile` to retrofit a delivery-profile onto an existing project.
 
