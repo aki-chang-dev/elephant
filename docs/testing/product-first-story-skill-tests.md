@@ -469,3 +469,64 @@ completed work, invoked no generic brainstorming on v2, and added no owner check
 approved shaping beyond the existing design gate or bounded product/high-risk escalation.
 
 **Verdict: PASS.**
+
+## Ship-story Fix Round 1 GREEN run provenance
+
+Five fresh read-only workers exercised the configured-profile, malformed-artifact, and
+interrupted-resume boundaries added after review.
+
+| Scenario | Canonical worker task | Verdict |
+|---|---|---|
+| Custom templates and filename rules | `/root/task4_ship_story_wiring/fix1_custom_profile` | PASS |
+| Legacy first-status draft resume | `/root/task4_ship_story_wiring/fix1_legacy_draft` | PASS |
+| Invalid v2 and terminal/pairing order | `/root/task4_ship_story_wiring/fix1_invalid_v2_terminal` | PASS |
+| Persisted product-decision return | `/root/task4_ship_story_wiring/fix1_decision_resume` | PASS after atomic-transition refactor |
+| Multiple legacy paths and exact `supersedes` | `/root/task4_ship_story_wiring/fix1_supersedes_exact` | PASS |
+
+### Configured profile and legacy resume
+
+The custom-profile worker rendered `CUS-91--product--clone-flow.md` and
+`CUS-91--technical--clone-flow.md`, passed the configured repository templates and exact output
+paths to their respective author skills, and rejected bundled fallbacks. Broad candidate
+inspection would still detect a wrongly bundled v2 artifact and stop before a duplicate custom
+artifact could be created.
+
+With `status_flow: Seed → Reviewed → Building → Done`, the legacy worker classified `Seed` as
+authoring-incomplete and `Reviewed` as refined/ready. It resumed the existing `Seed` mixed spec,
+kept that status until all required authoring was complete, and did not recreate the file,
+repeat settled questions, or jump to planning.
+
+### Invalid v2, terminal products, and decision return
+
+A v2-looking artifact with invalid schema, kind, rendered filename, or status stopped before
+legacy/missing detection or author dispatch and listed every invalid field and path. A valid
+terminal Product Contract stopped before pairing even when a Technical Contract referenced it;
+technical pairing could not reinterpret `split`, `deferred`, or `rejected` as shaping.
+
+For a `needs-product-decision` Technical Contract still bound to an older approved product, an
+active approved successor carrying the owner answer caused author/fixer dispatch without
+re-asking the owner. The required transition is:
+
+```text
+needs / predecessor / brief
+→ atomically: draft / successor / no brief
+→ remap
+→ review / successor / no brief
+→ affected reviewer rechecks
+```
+
+The pressure worker identified that rebind, brief clearing, and `draft` persistence needed an
+explicit atomicity rule to prevent an interruption from exposing a partial state. The skill and
+focused regression assertion were updated, then the scenario passed. An interruption at
+`review` resumes reviewer/recheck work without returning to the owner.
+
+### Exact multi-path supersession
+
+Given two colliding legacy paths, one exact entry plus one basename-only, case-mismatched, or
+backslash entry stopped with the missing legacy path, nonmatching entry, and full collision set.
+Only a canonical list containing both exact repository-relative POSIX paths selected v2. Reader
+normalization remained deterministic: `null` became `[]`, a scalar became one item, and a string
+list remained canonical. Valid same-story Product predecessors could coexist in the list but
+could not substitute for either legacy path.
+
+**Fix Round 1 verdict: PASS.**

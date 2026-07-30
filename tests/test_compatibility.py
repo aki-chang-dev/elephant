@@ -187,6 +187,110 @@ class CompatibilityValidatorTests(unittest.TestCase):
         ):
             self.assertIn(phrase, runtime)
 
+    def test_dual_profile_values_are_injected(self):
+        skills = ROOT / "plugins/elephant/skills"
+        ship = (skills / "ship-story/SKILL.md").read_text()
+        shape = (skills / "shape-story/SKILL.md").read_text()
+        technical = (skills / "author-technical-contract/SKILL.md").read_text()
+
+        for phrase in (
+            "story_contracts.product_template",
+            "story_contracts.technical_template",
+            "story_contracts.product_filename_rule",
+            "story_contracts.technical_filename_rule",
+            "render the configured",
+            "only when the field is omitted",
+        ):
+            self.assertIn(phrase, ship)
+        self.assertIn("caller-supplied Product Contract template", shape)
+        self.assertIn("caller-supplied Product Contract output path", shape)
+        self.assertIn("caller-supplied Technical Contract template", technical)
+        self.assertIn("caller-supplied Technical Contract output path", technical)
+
+    def test_legacy_resume_uses_configured_status_flow(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+
+        for phrase in (
+            "Parse `status_flow` as an ordered sequence",
+            "first status is authoring-incomplete",
+            "second status is the refined/ready state",
+            "resume legacy authoring from the existing mixed spec",
+            "status is absent or not in `status_flow`",
+        ):
+            self.assertIn(phrase, ship)
+
+    def test_invalid_v2_stops_before_dispatch_and_terminal_precedes_pairing(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+
+        for heading in (
+            "### V2 artifact validation",
+            "### Terminal product dispositions",
+            "### Product/technical pairing",
+        ):
+            self.assertIn(heading, ship)
+        validation = ship.index("### V2 artifact validation")
+        terminal = ship.index("### Terminal product dispositions")
+        pairing = ship.index("### Product/technical pairing")
+        self.assertLess(validation, terminal)
+        self.assertLess(terminal, pairing)
+        for phrase in (
+            "v2-looking",
+            "every Markdown artifact directly under `spec_dir`",
+            "v2 discriminator field",
+            "invalid schema, kind, filename, or status",
+            "STOP and list every invalid field",
+            "Do not treat an invalid v2-looking artifact as legacy or missing",
+        ):
+            self.assertIn(phrase, ship)
+
+    def test_needs_product_decision_has_persisted_return_transition(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+        shape = (
+            ROOT / "plugins/elephant/skills/shape-story/SKILL.md"
+        ).read_text()
+
+        for phrase in (
+            "active approved Product Contract supersedes",
+            "technical author/fixer",
+            "rebind `product_contract`",
+            "set `status: draft`",
+            "set `status: review`",
+            "persist these three field changes atomically",
+            "do not present the same bounded question again",
+        ):
+            self.assertIn(phrase, ship)
+        self.assertIn("lowest unused integer starting at 2", shape)
+
+    def test_supersedes_has_canonical_exact_match_contract(self):
+        skills = ROOT / "plugins/elephant/skills"
+        ship = (skills / "ship-story/SKILL.md").read_text()
+        schema = (
+            skills / "ship-story/delivery-profile-schema.md"
+        ).read_text()
+        product_template = (
+            skills / "shape-story/product-contract-template.md"
+        ).read_text()
+        shared = ship + schema
+
+        self.assertIn("supersedes: []", product_template)
+        for phrase in (
+            "`null` normalizes to an empty list",
+            "scalar string normalizes to a one-item list",
+            "list of strings",
+            "repository-relative POSIX",
+            "case-sensitive",
+            "absolute paths",
+            "`..` segments",
+            "every colliding legacy path",
+        ):
+            self.assertIn(phrase, shared)
+
     def test_readme_and_smoke_cases_cover_both_hosts(self):
         readme = (ROOT / "README.md").read_text()
         smoke = (ROOT / "docs/testing/dual-runtime-smoke-tests.md").read_text()

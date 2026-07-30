@@ -14,9 +14,16 @@ conversation. Run this skill in the main conversation. The only terminal disposi
 ## Inputs and output
 
 Load the roadmap seed, global product specs, current experience in the product, and applicable
-research under the repository's research policy. Write `<ID>-<slug>-product.md` from
-`product-contract-template.md` with `schema: elephant.story/v2`. Keep `design_sensitivity: High |
-Medium | Low` solely as the unchanged design-gate adapter; it is not implementation design.
+research under the repository's research policy. When called by `elephant:ship-story`, use its
+caller-supplied Product Contract template and caller-supplied Product Contract output path
+exactly; do not replace configured profile values with bundled conventions. When those inputs are
+omitted for a standalone invocation, use bundled `product-contract-template.md` and
+`<ID>-<slug>-product.md`.
+
+The output uses `schema: elephant.story/v2`. Keep `design_sensitivity: High | Medium | Low` solely
+as the unchanged design-gate adapter; it is not implementation design. Writers emit
+`supersedes` as a canonical list of repository-relative POSIX paths, using `[]` for no
+predecessor.
 
 Before drafting, classify the story:
 
@@ -29,6 +36,21 @@ Before drafting, classify the story:
 For engineering-only work, return that classification to the caller without inventing a Product
 Contract. Otherwise persist a `status: shaping` draft early and update it as decisions land so an
 interrupted conversation can resume from section 10.
+
+### Decision-return revision
+
+When the caller supplies a `needs-product-decision` brief against an approved Product Contract,
+do not edit that approved file. Create a `status: shaping` successor at the caller-supplied output
+path. Use the repository's normal Product Contract versioned-slug convention; when none exists,
+append `-v<N>` to the prior slug using the lowest unused integer starting at 2, then render that
+slug through the caller's filename rule.
+
+The successor's `supersedes` list copies every normalized predecessor entry and adds the
+repository-relative path of the approved predecessor. Ask only the bounded product question plus
+follow-ups required to make the answer coherent with the whole contract. Run the normal critics
+and recap. Only the owner's explicit disposition persists the successor as approved, split,
+deferred, or rejected. This versioned successor rule preserves the approved predecessor and makes
+interrupted return detection mechanical.
 
 ## Product conversation
 

@@ -18,6 +18,9 @@ The two legal exits from technical authoring before planning are
 Unresolved product meaning requires `needs-product-decision`; do not answer it as an implementation
 choice.
 
+During the author/reviewer loop, use `draft` while the author/fixer is changing the contract and
+`review` only while the latest revision is awaiting applicable read-only review or recheck.
+
 ## 1. Product-contract binding
 
 For a product-facing story, cite the approved Product Contract and map every requirement and state:

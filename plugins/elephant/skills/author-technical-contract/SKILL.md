@@ -7,18 +7,22 @@ description: Use when an approved Product Contract or explicitly engineering-onl
 
 ## Overview
 
-Turn one approved Product Contract or explicitly engineering-only story into a reviewed
-`<ID>-<slug>-technical.md`. Separate product meaning from technical choice. Do not invoke
+Turn one approved Product Contract or explicitly engineering-only story into a reviewed Technical
+Contract. Separate product meaning from technical choice. Do not invoke
 `superpowers:brainstorming` or `superpowers:writing-plans`; the caller owns those transitions.
 
 ## Validate inputs and evidence
 
-Read `technical-contract-template.md` and the applicable canonical prompts under `reviewers/`.
+When called by `elephant:ship-story`, use its caller-supplied Technical Contract template and
+caller-supplied Technical Contract output path exactly. When those inputs are omitted for a
+standalone invocation, use bundled `technical-contract-template.md` and
+`<ID>-<slug>-technical.md`. Read the selected template and applicable canonical prompts under
+`reviewers/`.
 
-For a product-facing story, require `<ID>-<slug>-product.md` with `schema:
-elephant.story/v2`, `kind: product`, and `status: approved`. Reject technical authoring when that
-artifact is absent or not approved and return control to product shaping. The approved Product
-Contract is immutable to the author, fixer, reviewers, and adjudicator.
+For a product-facing story, require the caller-selected Product Contract path with
+`schema: elephant.story/v2`, `kind: product`, and `status: approved`. Reject technical authoring
+when that artifact is absent or not approved and return control to product shaping. The approved
+Product Contract is immutable to the author, fixer, reviewers, and adjudicator.
 
 For an explicitly engineering-only story, require evidence that user and business outcomes remain
 unchanged. Use `product_contract: null` and write an explicit behavior-preservation contract.
@@ -50,8 +54,9 @@ adjudicator before escalating conflicting specialist findings about a pure engin
 
 ## Draft the contract
 
-Copy `technical-contract-template.md` to `<ID>-<slug>-technical.md` and keep `status: draft` while
-authoring or reviewing.
+Copy the selected template to the selected output path and keep `status: draft` while authoring.
+Use `status: review` only while the latest author/fixer revision is ready for applicable read-only
+reviewers or rechecks.
 
 - Product-facing: map every Product Contract requirement, flow, state, rule, and copy boundary
   through `Product contract item | Technical response | Verification`.
@@ -60,6 +65,21 @@ authoring or reviewing.
 - Record unresolved technical questions in section 10. Do not declare readiness with `TBD`,
   placeholders, deferred questions, or unresolved choices.
 - Do not modify `product.md`.
+
+When resuming a persisted `needs-product-decision` after an approved successor Product Contract
+supersedes the contract currently named by `product_contract`, the author/fixer owns the return:
+
+1. rebind `product_contract` to the approved successor;
+2. clear the resolved decision brief;
+3. set `status: draft` before remapping affected product items and technical choices;
+4. set `status: review` only after the revision is ready for every affected reviewer to recheck.
+
+Persist steps 1–3 atomically. An interruption must observe either the unchanged
+`needs-product-decision` artifact or the fully rebound `draft`, never a partial transition that
+could re-present a resolved question.
+
+Reviewers never perform this transition, and the approved predecessor and successor Product
+Contracts remain read-only to every technical role.
 
 ## Select independent reviewers by risk
 

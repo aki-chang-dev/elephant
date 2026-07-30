@@ -26,6 +26,30 @@ story_contracts:
 above. Dual mode writes both artifact kinds under `spec_dir`. Engineering-only stories omit the
 Product Contract and use the technical template with `product_contract: null`.
 
+The two default strings above are compatibility aliases resolved relative to the plugin's
+`skills/` directory. Every other configured template is a repository-relative path resolved from
+the repository root. A configured value must exist; bundled fallback applies only when the field
+is omitted.
+
+Filename rules are basenames under `spec_dir`. Each contains `[ID]` and `[slug]` exactly once,
+ends in `.md`, and contains no absolute path, path separator, `.` segment, or `..` segment.
+`ship-story` renders these configured rules both for candidate detection and author output; it
+does not hardcode the bundled filenames.
+
+### Product Contract `supersedes`
+
+Canonical writers emit a YAML list of strings. Readers accept legacy shapes:
+
+- `null` normalizes to an empty list;
+- a scalar string normalizes to a one-item list;
+- a list of strings is canonical.
+
+Values are exact repository-relative POSIX paths. Comparison is case-sensitive on every host.
+Absolute paths, URIs, backslashes, empty/duplicate values, `.` or `..` segments, repository
+escapes, outside-resolving symlinks, missing files, and another story's artifacts are prohibited.
+When several legacy artifacts collide with one v2 story, the active Product Contract must list
+every colliding legacy path. Partial coverage never selects v2.
+
 ### Compatibility table
 
 | Profile state | Effective mode | Required behavior |
@@ -45,7 +69,7 @@ rename, rewrite, or dual-write existing artifacts. Existing mixed specs remain r
 | Section | Fields | Notes |
 |---|---|---|
 | **story source** | `roadmap_path`, `story_id_pattern` | Roadmap file and ID prefix rule for locating a story. |
-| **story contracts** | `mode`, `product_template`, `technical_template`, `product_filename_rule`, `technical_filename_rule` | Required on new profiles. `mode` is `dual` or `legacy-mixed`. Template and filename fields apply to dual mode. |
+| **story contracts** | `mode`, `product_template`, `technical_template`, `product_filename_rule`, `technical_filename_rule` | Required on new profiles. `mode` is `dual` or `legacy-mixed`. Template and filename fields are injected into dual detection and author dispatch. |
 | **artifact paths** | `spec_dir`, `plan_dir`, optional legacy `filename_rule`, `spec_template`, `status_flow` | `spec_dir` stores story contracts in both modes. The legacy fields preserve the mixed-spec structure; bundled legacy `spec_template` is `slice-template.md`. |
 | **global specs** | `global_specs[]` | Immutable product/spec-system context loaded before authoring. |
 | **field-naming prereq** | `enabled`, `decision_ref`, `field_contract_location` | Legacy mixed-spec gate before writing fields. V2 technical authoring follows repository evidence without modifying the approved Product Contract. |
