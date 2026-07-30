@@ -18,6 +18,43 @@ def load_validator():
 
 
 class CompatibilityValidatorTests(unittest.TestCase):
+    def test_product_first_skill_assets_exist(self):
+        root = ROOT / "plugins/elephant/skills"
+        required = (
+            "shape-story/SKILL.md",
+            "shape-story/product-contract-template.md",
+            "shape-story/reviewers/product-ux-critic.md",
+            "shape-story/reviewers/copy-critic.md",
+            "author-technical-contract/SKILL.md",
+            "author-technical-contract/technical-contract-template.md",
+            "author-technical-contract/reviewers/architecture.md",
+            "author-technical-contract/reviewers/domain-data.md",
+            "author-technical-contract/reviewers/security-operations.md",
+            "author-technical-contract/reviewers/product-conformance.md",
+            "author-technical-contract/reviewers/test.md",
+            "author-technical-contract/reviewers/technical-adjudicator.md",
+        )
+        for relative in required:
+            self.assertTrue((root / relative).is_file(), relative)
+
+    def test_v2_contract_vocabulary_is_wired(self):
+        skills = ROOT / "plugins/elephant/skills"
+        ship = (skills / "ship-story/SKILL.md").read_text()
+        profile = (skills / "ship-story/delivery-profile-schema.md").read_text()
+        init = (skills / "init-profile/SKILL.md").read_text()
+
+        for phrase in (
+            "elephant:shape-story",
+            "elephant:author-technical-contract",
+            "elephant.story/v2",
+            "legacy-mixed",
+            "needs-product-decision",
+        ):
+            self.assertIn(phrase, ship)
+        self.assertIn("story_contracts", profile)
+        self.assertIn("mode: dual", profile)
+        self.assertIn("legacy-mixed", init)
+
     def test_readme_and_smoke_cases_cover_both_hosts(self):
         readme = (ROOT / "README.md").read_text()
         smoke = (ROOT / "docs/testing/dual-runtime-smoke-tests.md").read_text()
@@ -147,6 +184,16 @@ class CompatibilityValidatorTests(unittest.TestCase):
             )
             errors = validator.validate_repository(root)
             self.assertIn("missing Codex plugin manifest", errors)
+
+    def test_missing_v2_asset_is_reported(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            errors = validator.validate_repository(Path(directory))
+            self.assertIn(
+                "missing required v2 asset: "
+                "plugins/elephant/skills/shape-story/SKILL.md",
+                errors,
+            )
 
     def test_forbidden_core_coupling_is_reported(self):
         validator = load_validator()
