@@ -7,11 +7,19 @@ description: Use when bootstrapping a project so it becomes ready for ship-story
 
 ## Overview
 
-Single entry that bootstraps a project until it's **ship-story-ready** — it has `global_specs` + a roadmap + `.claude/delivery-profile.md`. Orchestrates the three inception phases: A `elephant:author-product-spec` → B `elephant:decompose-roadmap` → C `elephant:init-profile`.
+Single entry that bootstraps a project until it's **ship-story-ready** — it has `global_specs` + a roadmap + `.agents/elephant/delivery-profile.md`. Orchestrates the three inception phases: A `elephant:author-product-spec` → B `elephant:decompose-roadmap` → C `elephant:init-profile`.
 
 **Core principle: kickoff is a THIN orchestrator — it produces nothing itself.** It detects which phase the project is at, dispatches the right sub-skill, carries each phase's output path to the next, and stops at phase boundaries. It does NOT reimplement any phase.
 
-**REQUIRED SUB-SKILLS** (dispatch via the Skill tool, don't reinvent): `elephant:author-product-spec` (A), `elephant:decompose-roadmap` (B), `elephant:init-profile` (C).
+**REQUIRED SUB-SKILLS:** invoke the canonical skills `elephant:author-product-spec` (A), `elephant:decompose-roadmap` (B), and `elephant:init-profile` (C). Do not reimplement them.
+
+## Preflight
+
+Before producing artifacts:
+
+1. Read `../../references/runtime-compatibility.md`.
+2. Confirm the three Elephant sub-skills above and their declared Superpowers dependencies are installed.
+3. If any dependency is missing, STOP and give installation guidance for the active host.
 
 ## Step 0 — Detect phase, resume the first that's missing
 
@@ -37,7 +45,7 @@ Look under Elephant's standard layout `docs/elephant/<product>/` first; fall bac
 |---|---|
 | spec system | a `master-spec*` file AND an `object-model*` file-or-dir (e.g. `10-object-model/`) — Elephant default `docs/elephant/<product>/spec/` |
 | roadmap | a `*roadmap*` file with a phase-overview heading + slice tables — Elephant default `docs/elephant/<product>/roadmap.md` (NOT a master-spec's "object-model overview" section) |
-| delivery-profile | `.claude/delivery-profile.md` exists |
+| delivery-profile | `.agents/elephant/delivery-profile.md` exists |
 | all three | announce **ship-story-ready** and stop |
 
 **Detection is binary only for "absent vs present"; completeness is the sub-skill's job.** A present-but-incomplete artifact (e.g. a master-spec with no AD/ED yet, or a roadmap written but not yet user-approved) counts as **the current phase, not a finished one**: dispatch that phase's sub-skill and let its own completeness/resume logic continue it. Do NOT advance past an incomplete artifact. When unsure whether an artifact is complete, dispatch its phase and let the sub-skill decide — never skip a phase on a fuzzy "looks present." **Because approval/completeness isn't on disk, when an artifact is present ask the user "is this complete & approved, or should I resume it?" before advancing** — don't infer "done" from file existence alone.

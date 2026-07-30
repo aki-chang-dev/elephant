@@ -18,6 +18,30 @@ def load_validator():
 
 
 class CompatibilityValidatorTests(unittest.TestCase):
+    def test_orchestration_uses_runtime_neutral_capabilities(self):
+        skills_root = ROOT / "plugins/elephant/skills"
+        kickoff = (skills_root / "kickoff/SKILL.md").read_text()
+        ship_story = (skills_root / "ship-story/SKILL.md").read_text()
+        slice_template = (skills_root / "ship-story/slice-template.md").read_text()
+        shared = "\n".join(
+            path.read_text() for path in sorted(skills_root.glob("*/SKILL.md"))
+        )
+
+        self.assertIn("preflight", kickoff.lower())
+        self.assertIn("preflight", ship_story.lower())
+        self.assertIn("sequential", ship_story.lower())
+        self.assertIn("design-handoff.md", ship_story)
+        self.assertIn("manual", ship_story)
+        self.assertIn("claude-design", ship_story)
+        for phrase in (
+            ".claude/delivery-profile.md",
+            "via the Skill tool",
+            "`Explore`",
+            "claudemd_refresh_targets",
+        ):
+            self.assertNotIn(phrase, shared)
+        self.assertNotIn("Claude Code / `ship-story`", slice_template)
+
     def test_runtime_reference_and_neutral_profile_contract(self):
         init_profile = (
             ROOT / "plugins/elephant/skills/init-profile/SKILL.md"

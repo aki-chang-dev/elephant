@@ -34,7 +34,7 @@ Turn a product spec foundation (`global_specs`) into a **roadmap**: a phased, de
 
 ## The discipline: propose → iterate → write
 
-1. **Locate & load `global_specs`.** The profile does NOT exist yet at Phase B (init-profile is Phase C, later) — so do not look for `.claude/delivery-profile.md`. Find the specs by (a) Phase A's in-session output if chained, else (b) scan the repo for an existing spec system (e.g. a `docs/**` product-spec dir) and confirm with the user, else (c) ask the user for the spec path/dir. Then understand entities, capabilities, user journeys, decisions.
+1. **Locate & load `global_specs`.** The profile does NOT exist yet at Phase B (init-profile is Phase C, later), so do not depend on a delivery-profile. Find the specs by (a) Phase A's in-session output if chained, else (b) scan the repo for an existing spec system (e.g. a `docs/**` product-spec dir) and confirm with the user, else (c) ask the user for the spec path/dir. Then understand entities, capabilities, user journeys, decisions.
 2. **Draft phases** — each phase = a milestone with a goal + DoD (exit criteria), following skeleton → MVP → parity → advantage. **🛑 CHECKPOINT 1: user approves the phase skeleton before slicing; resume on explicit approval.** (The strategic spine is the user's call.)
 3. **Draft slices** per phase — vertical, coarse, demoable; assign IDs by prefix (see below).
 4. **Draft dependencies** — cross-slice blockers + ordering within/across phases.
