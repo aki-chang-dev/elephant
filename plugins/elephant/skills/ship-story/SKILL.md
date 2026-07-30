@@ -7,18 +7,18 @@ description: Use when delivering one roadmap story/slice end-to-end (analysis �
 
 ## Overview
 
-Deliver ONE roadmap story end-to-end by orchestrating superpowers skills, with every project-specific gate, path, and convention injected from the repo's **delivery-profile** (`.claude/delivery-profile.md`).
+Deliver ONE roadmap story end-to-end by orchestrating Superpowers skills, with every project-specific gate, path, and convention injected from the repo's **delivery-profile** (`.agents/elephant/delivery-profile.md`).
 
 **Core principle: ship-story is a THIN orchestrator. It does NOT reimplement brainstorm / plan / execute — it dispatches the superpowers skills that do, and inserts the project's own gates between them.** It adds exactly three things vanilla superpowers lacks: (1) project-profile injection, (2) a research-augmented brainstorm front-end, (3) phase-aware cross-session resume.
 
 ## Prerequisites
 
-- A `.claude/delivery-profile.md` exists in the repo. It is the contract that supplies all project-specifics (paths, gates, finish style, conventions). Schema + how to author one: see `delivery-profile-schema.md` in this skill dir.
-- **If no profile exists:** STOP. Tell the user this repo isn't kicked off yet — either run `kickoff` (when it exists) or hand-author `.claude/delivery-profile.md` from the schema. Do NOT guess project conventions.
+- A `.agents/elephant/delivery-profile.md` exists in the repo. It is the contract that supplies all project-specifics (paths, gates, finish style, conventions). Schema + how to author one: see `delivery-profile-schema.md` in this skill dir.
+- **If no profile exists:** STOP. Tell the user this repo isn't kicked off yet — either run `kickoff` or run `init-profile`. Do NOT guess project conventions.
 
 ## Step 0 — Load, locate, detect phase
 
-1. Read `.claude/delivery-profile.md`.
+1. Read `.agents/elephant/delivery-profile.md`.
 2. Locate `<ID>` in the profile's `roadmap_path`; read that story's scope.
 3. **Detect the current phase from artifacts.** Evaluate the checks **top-to-bottom in this order; resume at the FIRST row whose artifact is absent/incomplete, and stop checking (short-circuit).** The `[slug]` is unknown at detect time, so glob on the ID. Then announce "Story `<ID>` is at phase X — resuming there." Never redo a completed phase.
 
@@ -98,7 +98,7 @@ The design-gate stop also resumes by re-invoking `/ship-story <ID>` (Step 0 re-d
 
 - About to write brainstorm/plan/execute logic yourself → don't. Dispatch the superpowers skill.
 - About to hardcode a path, check name, or convention → it belongs in the profile. Read it from there.
-- No `.claude/delivery-profile.md` but proceeding anyway → stop; the repo isn't kicked off.
+- No `.agents/elephant/delivery-profile.md` but proceeding anyway → stop; the repo isn't kicked off.
 - About to merge while a `ci_required_checks` entry is not green → never. Green is the gate.
 - Adding a spec-review or plan-review stop back in → don't. The brainstorm is the review; the design gate (UI only) is the single stop. Non-UI slices run end-to-end with zero stops.
 - Reaching the design gate without first committing + pushing the spec to main → push it first, then wait for the design.

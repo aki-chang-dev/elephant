@@ -18,6 +18,39 @@ def load_validator():
 
 
 class CompatibilityValidatorTests(unittest.TestCase):
+    def test_runtime_reference_and_neutral_profile_contract(self):
+        init_profile = (
+            ROOT / "plugins/elephant/skills/init-profile/SKILL.md"
+        ).read_text()
+        ship_story = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+        schema = (
+            ROOT
+            / "plugins/elephant/skills/ship-story/delivery-profile-schema.md"
+        ).read_text()
+        runtime = (
+            ROOT / "plugins/elephant/references/runtime-compatibility.md"
+        ).read_text()
+
+        shared_workflow = init_profile + ship_story + schema
+        self.assertIn(".agents/elephant/delivery-profile.md", init_profile)
+        self.assertIn(".agents/elephant/delivery-profile.md", ship_story)
+        self.assertNotIn(".claude/delivery-profile.md", shared_workflow)
+        self.assertIn("instruction_refresh_targets", schema)
+        self.assertIn("provider", schema)
+        self.assertIn("handoff_file", schema)
+
+        for phrase in (
+            "canonical skill",
+            "sequential",
+            "AGENTS.md",
+            "CLAUDE.md",
+            "manual",
+            "claude-design",
+        ):
+            self.assertIn(phrase, runtime)
+
     def test_dual_manifests_and_codex_marketplace_match(self):
         codex_manifest = json.loads(
             (ROOT / "plugins/elephant/.codex-plugin/plugin.json").read_text()

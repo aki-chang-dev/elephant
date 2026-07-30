@@ -1,6 +1,6 @@
 # Delivery-Profile Schema
 
-The contract between `kickoff` (producer) and `ship-story` (consumer). One markdown file per repo at `.claude/delivery-profile.md`. `ship-story` reads it to decide which gates to insert and where artifacts live. **Zero project-specifics belong in the skills — they all live here.**
+The contract between `kickoff` (producer) and `ship-story` (consumer). One markdown file per repo at `.agents/elephant/delivery-profile.md`. `ship-story` reads it to decide which gates to insert and where artifacts live. **Zero project-specifics belong in the skills — they all live here.**
 
 **Default layout (Elephant convention).** New projects put all generated docs under `docs/elephant/<product>/`: `spec/` (global_specs) · `roadmap.md` · `specs/` (per-slice specs) · `plans/` (per-slice plans). The profile records the actual paths, so existing projects keep whatever layout they already use — these fields are path-agnostic.
 
@@ -12,16 +12,17 @@ The contract between `kickoff` (producer) and `ship-story` (consumer). One markd
 | **artifact paths** | `spec_dir`, `plan_dir`, `filename_rule`, `spec_template`, `status_flow` | where specs/plans land; filename rule (e.g. `[ID]-[slug].md`); `spec_template` = the per-slice spec structure (**default: the `slice-template.md` bundled in the `ship-story` skill** — a dual-input Code↔Design contract; existing projects may point at their own); status vocabulary (e.g. `Draft→Refined→Implementing→Done`) |
 | **global specs** | `global_specs[]` | immutable spec files to load as context during brainstorm/spec |
 | **field-naming prereq** | `enabled`, `decision_ref`, `field_contract_location` | gate before writing fields; naming-convention ref; where field contracts get back-filled |
-| **design gate** | `enabled`, `ui_detection`, `tool`, `design_local_dir`, `ready_signal`, `design_project_ref`, `slice_to_design_mapping` | whether UI slices wait for design; how to detect "is UI" (default: spec §6 sensitivity ≠ Low); **`tool`** = how design arrives: `designsync` (auto-pull from Claude Design) \| `manual` (user places the design) \| other; `design_local_dir` = where the slice's design lands (Step 0 detects "design pulled" by its presence); `ready_signal` source (human). **DesignSync-only** sub-fields (ignored when `tool` ≠ `designsync`): `design_project_ref` (projectId/name), `slice_to_design_mapping` |
+| **design gate** | `enabled`, `ui_detection`, `provider`, `design_local_dir`, `handoff_file`, `ready_signal`, optional `claude_design` | whether UI slices wait for design; default detection is spec §6 sensitivity ≠ Low. Supported `provider` values: `manual` (portable default) and `claude-design` (optional DesignSync adapter). `design_local_dir` stores slice artifacts; `handoff_file` defaults to `design-handoff.md`; `ready_signal` defaults to `human`. For `claude-design` only, `claude_design` contains `project_ref` and `slice_to_design_mapping` |
 | **research policy** | `mode`, `depth` | default mode = "auto-assess + announce-then-confirm"; default depth = light fan-out 3-5 `Explore`/general agents; optional deep-research escalation |
 | **execution** | `default_mode`, `isolation`, `review_cadence`, `gotchas[]` | default subagent-driven; worktree isolation; per-task review cadence; known traps (e.g. install flags, filter command form, lockfile checks) |
 | **finish** | `integration`, `branch_pattern`, `ci_required_checks[]`, `auto_merge_on_green` | PR + squash + delete-branch + linear main; how branches/worktrees are named (used by Step 0 detection, e.g. names contain the slice `<ID>`); required green check names; auto-merge on green (default true) |
 | **versioning** | `changeset_cmd`, `empty_cmd` | changeset command; empty form for docs-only |
-| **closeout docs** | `roadmap_done_flip`, `claudemd_refresh_targets`, `root_snapshot_check` | flip roadmap status; which CLAUDE.md files to refresh; whether to check root snapshot; single commit |
+| **closeout docs** | `roadmap_done_flip`, `instruction_refresh_targets`, `root_snapshot_check` | flip roadmap status; which `AGENTS.md` and/or `CLAUDE.md` files to refresh; whether to check root snapshot; single commit |
 | **language / general gates** | `commit_lang`, `dialogue_lang`, `docs_lang`, `context7_first` | commit/PR/changeset language; dialogue language; docs language; context7-before-tech-claims toggle |
 
 ## Authoring notes
 
 - A field that doesn't apply to a project is simply omitted (e.g. `design gate: enabled=false` for a headless service repo → ship-story skips Step 2 for every slice).
 - `ship-story` must fail loudly (not guess) when a gate it's about to run has no profile entry.
-- Generate this file by running the `init-profile` skill, or hand-author it from the schema above. For a worked example, see an existing project's `.claude/delivery-profile.md`.
+- Generate this file by running the `init-profile` skill, or hand-author it from the schema above.
+- Do not read, migrate, or dual-write any runtime-specific legacy profile path.
