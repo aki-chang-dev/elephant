@@ -4,6 +4,19 @@ This document preserves the representative RED worker observations used to shape
 Later GREEN runs use the same scenarios and compare their questions, decisions, and stated
 reasoning against these records.
 
+## Provenance
+
+Each quoted block is a representative verbatim excerpt copied from the completion output of its
+canonical RED worker task on 2026-07-30:
+
+| Scenario | Canonical worker task |
+|---|---|
+| Product drift | `/root/red_product_drift` |
+| Invalid product idea | `/root/red_bad_idea` |
+| Technical overreach | `/root/red_technical_overreach` |
+
+This committed test record is the durable capture; no separate repository transcript file exists.
+
 ## RED baseline: product drift
 
 Current `ship-story` asked about copied entities, tokens, deploy paths, status, endpoints, and
