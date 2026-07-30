@@ -84,13 +84,19 @@ unrelated legacy stories.
 
 ### V2 artifact validation
 
-Treat a candidate as **v2-looking** when any of these is true:
+Build the current-story v2-looking set from exactly two sources:
 
-- its filename matches either rendered configured v2 filename rule;
-- frontmatter contains `schema: elephant.story/v2`;
-- frontmatter declares `kind: product` or `kind: technical`;
-- frontmatter names the requested `story` and contains any v2 discriminator field: `schema`,
-  `kind`, `story_kind`, or `product_contract`, even when that discriminator's value is invalid.
+1. A **configured-path candidate** is any filename that matches either configured v2 filename rule
+   rendered for the requested ID and a slug wildcard. Include it regardless of its frontmatter
+   `story` value so a malformed current-ID artifact cannot evade validation.
+2. A **catch-all candidate** is any other Markdown artifact directly under `spec_dir` whose
+   frontmatter `story` exactly equals the requested ID and that contains any v2 discriminator
+   field: `schema`, `kind`, `story_kind`, or `product_contract`, even when the discriminator's
+   value is invalid.
+
+Among catch-all inspected artifacts, ignore discriminator-bearing files whose `story` is another
+ID. They belong to that other delivery and must neither participate in current-story validation
+nor cause a stop. This does not remove configured-path candidates from the set.
 
 For every v2-looking candidate, validate before phase selection:
 
@@ -103,10 +109,12 @@ For every v2-looking candidate, validate before phase selection:
 - technical status is one of `draft | review | ready | needs-product-decision`, with
   `story_kind: product-facing | engineering-only` and a present `product_contract` field.
 
-An artifact with invalid schema, kind, filename, or status triggers a catch-all hard stop:
-**STOP and list every invalid field and artifact path.** Do not treat an invalid v2-looking artifact as legacy or missing,
-do not create a replacement, and do not dispatch an author. This prevents duplicate
-authoring behind malformed artifacts.
+An invalid required field triggers a catch-all hard stop. Required fields are `schema`, `story`,
+`slug`, `kind`, rendered filename, and `status`. For technical artifacts, `story_kind` or
+`product_contract` is also blocking as applicable. **STOP and list every invalid field and
+artifact path.** Do not treat an invalid v2-looking artifact as legacy or missing; do not create
+a replacement or dispatch an author. This prevents duplicate authoring behind malformed
+artifacts.
 
 ### `supersedes` normalization and coexistence
 

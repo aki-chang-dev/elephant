@@ -225,6 +225,7 @@ class CompatibilityValidatorTests(unittest.TestCase):
         ship = (
             ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
         ).read_text()
+        normalized = " ".join(ship.split())
 
         for heading in (
             "### V2 artifact validation",
@@ -241,11 +242,29 @@ class CompatibilityValidatorTests(unittest.TestCase):
             "v2-looking",
             "every Markdown artifact directly under `spec_dir`",
             "v2 discriminator field",
-            "invalid schema, kind, filename, or status",
+            "invalid required field",
+            "For technical artifacts, `story_kind` or `product_contract`",
             "STOP and list every invalid field",
             "Do not treat an invalid v2-looking artifact as legacy or missing",
         ):
-            self.assertIn(phrase, ship)
+            self.assertIn(phrase, normalized)
+
+    def test_v2_discovery_scopes_catch_all_to_requested_story(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+        normalized = " ".join(ship.split())
+
+        for phrase in (
+            "configured-path candidate",
+            "rendered for the requested ID",
+            "regardless of its frontmatter `story` value",
+            "catch-all candidate",
+            "frontmatter `story` exactly equals the requested ID",
+            "Among catch-all inspected artifacts, ignore discriminator-bearing files "
+            "whose `story` is another ID",
+        ):
+            self.assertIn(phrase, normalized)
 
     def test_needs_product_decision_has_persisted_return_transition(self):
         ship = (
