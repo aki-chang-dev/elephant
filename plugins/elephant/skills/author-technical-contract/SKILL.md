@@ -11,6 +11,10 @@ Turn one approved Product Contract or explicitly engineering-only story into a r
 Contract. Separate product meaning from technical choice. Do not invoke
 `superpowers:brainstorming` or `superpowers:writing-plans`; the caller owns those transitions.
 
+The persisted lifecycle is `draft → ready → implementing → done`, with a branch to
+`needs-product-decision`. This skill owns authoring/review activity at `draft` and the exit to
+`ready` or `needs-product-decision`; `ship-story` owns execution and closeout transitions.
+
 ## Validate inputs and evidence
 
 When called by `elephant:ship-story`, use its caller-supplied Technical Contract template and
@@ -23,6 +27,11 @@ For a product-facing story, require the caller-selected Product Contract path wi
 `schema: elephant.story/v2`, `kind: product`, and `status: approved`. Reject technical authoring
 when that artifact is absent or not approved and return control to product shaping. The approved
 Product Contract is immutable to the author, fixer, reviewers, and adjudicator.
+
+The non-null `product_contract` value must be the exact active Product Contract's
+repository-relative POSIX path. Compare case-sensitive and reject an empty value, URI, absolute
+path, backslash, `.` or `..` segment, repository escape, outside-resolving symlink, missing file,
+other-story file, or near match.
 
 For an explicitly engineering-only story, require evidence that user and business outcomes remain
 unchanged. Use `product_contract: null` and write an explicit behavior-preservation contract.
@@ -55,8 +64,8 @@ adjudicator before escalating conflicting specialist findings about a pure engin
 ## Draft the contract
 
 Copy the selected template to the selected output path and keep `status: draft` while authoring.
-Use `status: review` only while the latest author/fixer revision is ready for applicable read-only
-reviewers or rechecks.
+Independent review is an activity while `status: draft` remains persisted. Record each active
+round and verdict in section 11; do not invent a separate persisted review state.
 
 - Product-facing: map every Product Contract requirement, flow, state, rule, and copy boundary
   through `Product contract item | Technical response | Verification`.
@@ -66,17 +75,27 @@ reviewers or rechecks.
   placeholders, deferred questions, or unresolved choices.
 - Do not modify `product.md`.
 
-When resuming a persisted `needs-product-decision` after an approved successor Product Contract
-supersedes the contract currently named by `product_contract`, the author/fixer owns the return:
+When resuming a persisted `needs-product-decision` after the owner approves the caller-selected
+Product Contract, the author/fixer owns the return for both sources:
 
-1. rebind `product_contract` to the approved successor;
-2. clear the resolved decision brief;
-3. set `status: draft` before remapping affected product items and technical choices;
-4. set `status: review` only after the revision is ready for every affected reviewer to recheck.
+1. rebind `product_contract` to that exact canonical path;
+2. set `story_kind: product-facing`, including a prior engineering-only artifact with
+   `product_contract: null`;
+3. clear the resolved decision brief;
+4. set `status: draft` before remapping affected product items and technical choices.
 
-Persist steps 1–3 atomically. An interruption must observe either the unchanged
+Persist all four field changes atomically. An interruption must observe either the unchanged
 `needs-product-decision` artifact or the fully rebound `draft`, never a partial transition that
-could re-present a resolved question.
+could re-present a resolved question. Keep `draft` while affected reviewers recheck.
+
+When the decision arose after planning or implementation began, preserve the earlier plan,
+execution, code-review, and conformance records as explicitly superseded history. They do not
+satisfy the current revision's readiness, planning, execution-start, or conformance evidence.
+Before returning `ready`, record that invalidation plus a stable marker for the revised contract;
+the caller will create or revise a plan bound to that marker before returning to `implementing`.
+The marker identifies the contract basis: lifecycle-only status/evidence writes preserve it, while
+any later author/fixer change to requirements, traceability, or technical choices replaces it and
+invalidates the prior plan/execution evidence.
 
 Reviewers never perform this transition, and the approved predecessor and successor Product
 Contracts remain read-only to every technical role.
@@ -130,6 +149,11 @@ Set `status: ready` only when all of these are true:
 - selected reviewers report no blocking findings;
 - every affected reviewer has rechecked the author/fixer's latest revision;
 - no unresolved choice changes product meaning.
+
+After the last author/fixer change and affected rechecks, capture one non-placeholder
+contract-basis revision marker for the ready requirements, traceability, and technical choices.
+Record it in section 11 before setting `status: ready`. Lifecycle-only status/evidence writes
+preserve it; a later author/fixer contract change replaces it.
 
 If product meaning must be supplied or changed, the only technical-state escalation is exactly
 `status: needs-product-decision`. Preserve the approved Product Contract, include only the bounded

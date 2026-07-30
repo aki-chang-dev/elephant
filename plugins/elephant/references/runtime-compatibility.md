@@ -12,11 +12,12 @@ Refer to every dependency by its canonical skill name, such as `elephant:shape-s
 - In Claude Code, use the host's installed-skill invocation mechanism.
 - Never require a host-specific Skill tool API from shared workflow text.
 
-Before creating artifacts, entry skills preflight every required Elephant and Superpowers skill.
-Requirements are branch-specific: dual story delivery starts Superpowers at
-`superpowers:writing-plans`; only the explicit legacy mixed-spec branch requires
-`superpowers:brainstorming`. A missing dependency is a hard stop with host-appropriate
-installation guidance.
+Artifact/type selection happens before dependency preflight. Persisted v2 artifacts win under a
+legacy profile; persisted legacy artifacts remain legacy under a refreshed dual profile. Preflight
+only capabilities that the selected branch and remaining phases can dispatch: new v2 authoring
+uses the applicable Elephant author plus later Superpowers skills; legacy authoring alone requires
+`superpowers:brainstorming`; resumed legacy after authoring does not. A missing selected
+dependency is a hard stop with host-appropriate installation guidance.
 
 ## Worker delegation
 
@@ -37,6 +38,11 @@ The canonical Elephant reviewer prompts bundled with each skill are the source o
 Host-native agents are optional adapters for those prompts, never alternate reviewers with
 different standards. Reviewers return findings to the author/fixer and do not edit Product or
 Technical Contracts directly.
+
+For dual-v2 stories, the same contract applies after implementation: the canonical
+implementation-conformance prompt is read-only, an implementation fixer applies findings, and
+affected reviewers recheck before integration. The sequential path uses identical inputs and pass
+criteria. Preserved legacy stories retain their configured delivery/integration behavior.
 
 An approved Product Contract is immutable to technical roles in every host. The product owner
 approves one recap in the main conversation and is not asked to reread the synchronized file.

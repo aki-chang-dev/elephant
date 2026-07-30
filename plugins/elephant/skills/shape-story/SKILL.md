@@ -39,18 +39,20 @@ interrupted conversation can resume from section 10.
 
 ### Decision-return revision
 
-When the caller supplies a `needs-product-decision` brief against an approved Product Contract,
-do not edit that approved file. Create a `status: shaping` successor at the caller-supplied output
-path. Use the repository's normal Product Contract versioned-slug convention; when none exists,
-append `-v<N>` to the prior slug using the lowest unused integer starting at 2, then render that
-slug through the caller's filename rule.
+When the caller supplies a `needs-product-decision` brief, it also owns slug selection and sends
+the exact Product Contract output path. Write exactly that caller-supplied path and slug; do not
+choose a version, render a filename rule, or substitute a bundled path.
 
-The successor's `supersedes` list copies every normalized predecessor entry and adds the
-repository-relative path of the approved predecessor. Ask only the bounded product question plus
-follow-ups required to make the answer coherent with the whole contract. Run the normal critics
-and recap. Only the owner's explicit disposition persists the successor as approved, split,
-deferred, or rejected. This versioned successor rule preserves the approved predecessor and makes
-interrupted return detection mechanical.
+If the decision revises an approved Product Contract, do not edit that file. Create a
+`status: shaping` successor whose `supersedes` list copies every normalized predecessor entry and
+adds the approved predecessor's repository-relative path. If an engineering-only ambiguity
+creates the story's first Product Contract, use `supersedes: []` and shape the supplied bounded
+question against the roadmap, current behavior, and behavior-preservation evidence.
+
+Ask only the bounded product question plus follow-ups required to make the answer coherent with
+the whole contract. Run the normal critics and recap. Only the owner's explicit disposition
+persists the result as approved, split, deferred, or rejected. An interrupted return resumes the
+same caller-allocated path.
 
 ## Product conversation
 

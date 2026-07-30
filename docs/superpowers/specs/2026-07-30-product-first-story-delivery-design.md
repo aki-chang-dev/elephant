@@ -115,6 +115,8 @@ draft → ready → implementing → done
 
 `needs-product-decision` is the only technical-state escalation to the product owner. It is used
 when feasibility, risk, or conflicting requirements require a change to `product.md`.
+Review is an activity while the persisted status remains `draft`; `review` is not a lifecycle
+state. Execution changes `ready` to `implementing`, and closeout changes `implementing` to `done`.
 
 ## Story Triage
 
@@ -278,6 +280,11 @@ author draft → reviewers find evidence-backed issues → author/fixer updates
 This preserves reviewer independence and avoids concurrent writes. Findings must cite a violated
 contract or concrete risk; vague suggestions do not block readiness.
 
+Post-implementation conformance uses the same ownership: canonical reviewers compare the diff and
+evidence with the applicable Product/Technical Contracts or engineering-only
+behavior-preservation boundary, an implementation fixer applies findings, and affected reviewers
+recheck before integration. It adds no routine owner checkpoint.
+
 ## `ship-story` v2 Orchestration
 
 ```text
@@ -307,15 +314,37 @@ Evaluate top-to-bottom and resume at the first incomplete phase:
 
 1. v2 `product.md` with `shaping` → resume shaping;
 2. product disposition `split`, `deferred`, or `rejected` → report and stop;
-3. approved product requiring an incomplete design gate → resume design;
-4. missing v2 `technical.md` → author it;
-5. technical status `draft` → rerun applicable review/fix;
-6. `needs-product-decision` → present only the bounded product escalation;
-7. technical status `ready` with no plan → write plan;
-8. plan/branch/PR/merge/closeout → retain the existing artifact-driven checks.
+3. `needs-product-decision` without an approved answer → allocate/resume product shaping;
+4. approved decision return → atomically rebind/reclassify the Technical Contract and resume
+   `draft` review without repeating the owner question;
+5. approved product requiring an incomplete design gate → resume design;
+6. missing v2 `technical.md` → author it;
+7. technical status `draft` → rerun applicable review/fix;
+8. technical status `ready` with no plan → write plan;
+9. `ready` with a plan → change to `implementing` and execute;
+10. `implementing` → resume implementation, code review, conformance, integration, or closeout
+    from evidence;
+11. `done` → verify/report closeout.
 
 An interrupted review round may be rerun from the latest Technical Contract; review is read-only
 and fixes are idempotent.
+
+An engineering-only `needs-product-decision` artifact with `product_contract: null` is
+reclassified for main-thread shaping. `ship-story` deterministically allocates the Product
+Contract path, then after approval the technical author/fixer atomically sets
+`story_kind: product-facing`, binds the exact Product Contract path, clears the decision brief,
+and resets to `draft`.
+
+If the decision arose after implementation started, the old plan, execution, code-review, and
+conformance records remain auditable but are marked as superseded history. They do not satisfy the
+revised contract. After affected review returns it to `ready`, planning creates or revises a plan
+bound to the latest Technical Contract revision, then delivery transitions back to `implementing`
+and reruns the changed implementation/review/conformance work.
+
+Before this resume table, validate status-dependent invariants: legal design sensitivity, empty
+approved questions, terminal rationale/next condition, bounded decision briefs, readiness with no
+TBD/open/blocking finding and complete reviewer rechecks, and delivery evidence retained by
+`implementing`/`done`. Invalid artifacts hard-stop with exact paths and fields.
 
 ## Delivery-Profile Evolution
 
@@ -388,6 +417,12 @@ Document and exercise:
 - existing design-gate compatibility;
 - technical author plus reviewer/fix/re-review;
 - `needs-product-decision` escalation;
+- engineering-only decision return and technical rebinding;
+- branch-aware preflight across profile/artifact mismatches;
+- invalid status-dependent invariants;
+- custom legacy filename/status contracts and v2-suffix false positives;
+- post-build conformance fixer/recheck;
+- exact `draft → ready → implementing → done` lifecycle;
 - sequential fallback without workers;
 - legacy mixed-spec resume.
 

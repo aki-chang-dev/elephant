@@ -530,3 +530,211 @@ list remained canonical. Valid same-story Product predecessors could coexist in 
 could not substitute for either legacy path.
 
 **Fix Round 1 verdict: PASS.**
+
+## Final follow-up RED run provenance
+
+Two fresh read-only workers received the released `0.3.0` skills as their only workflow authority.
+They did not read the follow-up brief or modify repository files.
+
+| Scenario group | Canonical worker task | RED result |
+|---|---|---|
+| Decision return, branch preflight, invariants, lifecycle | `/root/final_followup_fix/red_v2_pressure` | 4 protocol failures |
+| Legacy classification/configuration and post-build conformance | `/root/final_followup_fix/red_legacy_conformance` | 3 protocol failures |
+
+### RED: decision return and branch-aware preflight
+
+For a legacy profile containing an engineering-only `needs-product-decision` Technical Contract
+with `product_contract: null`, the worker stopped before the owner question because the profile
+required an irrelevant dependency:
+
+> “For `legacy-mixed`, confirm the same downstream Superpowers skills plus
+> `superpowers:brainstorming`.”
+
+After hypothetically supplying that dependency, it still found no legal resume row: the existing
+rows required an active or predecessor Product Contract, while the engineering-only artifact had
+none. The worker reported that the workflow could not allocate a Product Contract, change
+`story_kind`, rebind from `null`, or select a resumable technical state without inventing
+protocol.
+
+The inverse cases failed the same way. A legacy profile with active v2 artifacts preflighted
+brainstorming but not the v2 technical author. A dual profile with an existing legacy ready
+artifact preflighted both Elephant v2 authors even though it needed only planning. The worker's
+verbatim conclusion was:
+
+> “This is over-preflight and also leaves the needed technical-author capability unchecked.”
+
+### RED: status invariants and lifecycle
+
+The released detector did not validate status-dependent content. The worker found that an
+`approved` Product Contract could retain an open question or invalid `Urgent` sensitivity; a
+terminal contract could omit rationale; `needs-product-decision` could omit its brief; and a
+`ready` Technical Contract with `TBD`, a blocker, and no recheck could reach planning. Its exact
+observation for the last case was:
+
+> “Ship Story nevertheless keys only on persisted `status: ready` and dispatches
+> `writing-plans`.”
+
+The persisted technical lifecycle also diverged from the approved contract:
+
+```text
+draft → review → ready → ready during execution → ready after closeout
+```
+
+The worker quoted the released instruction: “Dual mode leaves product `approved` and technical
+`ready`.” No `implementing` or `done` transition existed.
+
+### RED: legacy false positives and custom contracts
+
+With a valid legacy file `PAY-7-reports-product.md`, the default v2 filename wildcard classified
+the file as v2 “regardless of its frontmatter,” then hard-stopped on its legitimate legacy schema,
+kind, and status. A generic legacy template using `schema: company.delivery/v1` and `kind: slice`
+had the same problem when its filename overlapped a v2 suffix. A valid other-story v2 artifact was
+correctly ignored.
+
+For `filename_rule: [slug]-[ID].md`, the legacy detector still searched
+`<spec_dir>/<ID>-*.md`, missed `billing-PAY-9.md`, and could start duplicate authoring. With
+`status_flow: Seed → Reviewed → Building → Complete`, execution and closeout wrote the hardcoded
+values `Implementing` and `Done`; the next resume then rejected those values as outside the
+configured flow. The worker described this as:
+
+> “The workflow has no consistent result: the table proceeds falsely, while its red-flag rule
+> says STOP.”
+
+### RED: missing post-build conformance
+
+After implementation and generic code review, the released workflow routed an open PR directly to
+finish/integration. No canonical prompt inspected the implementation diff, no implementation
+fixer owned findings, and no affected reviewer recheck gated merge. Existing technical reviewers
+were scoped only to the Technical Contract. The worker concluded:
+
+> “If configured CI is green, the current text permits squash-merge despite the known
+> critical-copy contradiction and omitted rollback verification.”
+
+### Deterministic RED
+
+The focused regression command exercised all ten repaired contracts before production edits:
+
+```text
+FFFFFFFFFF
+Ran 10 tests in 0.004s
+FAILED (failures=10)
+```
+
+Every failure was caused by the missing protocol it names; there were no import, syntax, or test
+setup errors.
+
+## Final follow-up GREEN run provenance
+
+The same two canonical worker tasks were restarted against the repaired files. Both re-read the
+complete latest protocol after edits settled; neither read the follow-up brief or modified the
+repository.
+
+| Scenario group | Canonical worker task | GREEN result |
+|---|---|---|
+| Decision return, branch preflight, invariants, lifecycle | `/root/final_followup_fix/green_v2_pressure` | PASS |
+| Legacy classification/configuration and post-build conformance | `/root/final_followup_fix/green_legacy_conformance` | PASS after one pressure-test refactor |
+
+### GREEN: branch selection, classification, and configured legacy mechanics
+
+Artifact classification now precedes capability checks. A legacy profile with active v2
+artifacts selected v2 and did not require brainstorming; a dual profile with an existing legacy
+ready artifact selected legacy and did not require either v2 author. A separate exact-brief
+variant used a dual profile with a first-status `Seed` legacy artifact: it selected legacy
+authoring, required brainstorming plus only its later capabilities, resumed the same file, and
+did not migrate or duplicate it. Resumed legacy work after authoring required only capabilities
+its remaining phases could dispatch.
+
+Exact v2 discriminator values, the rendered legacy filename/status contract, and current-story
+scope correctly classified `-product`/`-technical` legacy slugs and generic legacy
+`schema`/`kind` metadata. A valid other-story v2 artifact was ignored. Genuine ambiguous evidence
+stopped with every candidate and no timestamp inference.
+
+For `[slug]-[ID].md` and `Seed → Reviewed → Building → Complete`, discovery rendered
+`*-PAY-9.md`, planning recognized `Reviewed`, execution wrote `Building`, and closeout wrote
+`Complete`. The worker confirmed that the new implementation-conformance gate remains dual-v2
+only, so the preserved legacy integration path did not change.
+
+### GREEN: decision return, invariants, and exact lifecycle
+
+An engineering-only `needs-product-decision` Technical Contract under a legacy profile selected
+v2, allocated the first Product Contract path deterministically, shaped only the bounded owner
+question, and after approval atomically rebound `product_contract`, changed
+`story_kind: product-facing`, cleared the brief, and reset to `draft`. Applicable design work ran
+before technical remapping; affected reviewers rechecked without repeating the owner question.
+
+Invalid design sensitivity, approved open questions, missing terminal rationale/next condition,
+missing decision briefs, and `ready` artifacts containing placeholders/blockers/missing rechecks
+all stopped with their exact artifact and invariant. The straight-line Technical lifecycle was:
+
+```text
+draft (author/fixer/review activity)
+→ ready
+→ implementing (before implementation)
+→ done (closeout after conformance/integration evidence)
+```
+
+No `review` status was persisted.
+
+### GREEN: post-implementation conformance and late decision return
+
+The canonical read-only reviewer reported the critical-copy and rollback-verification
+contradictions as implementation `FINDINGS`. An implementation fixer owned changes, every affected
+finding required recheck, and integration remained blocked until PASS; code review or schedule
+pressure could not bypass the gate.
+
+The first GREEN pressure run found one remaining dead end when conformance raised a genuine
+observable-product ambiguity after implementation had started: reset to `draft` was specified,
+but old execution evidence made the next `ready` state invalid and no current plan could be
+selected. A focused regression reproduced that gap:
+
+```text
+Ran 1 test in 0.001s
+FAILED (failures=1)
+```
+
+The repaired return preserves the old plan, execution, code-review, and conformance records as
+superseded history, captures a contract-basis marker for the revised `ready` contract, creates or
+revises a plan bound to that marker, and transitions the current revision back to `implementing`.
+Lifecycle-only writes preserve the marker; later author/fixer contract changes replace it.
+Changed implementation, code review, and conformance then rerun, and the earlier PASS cannot be
+reused. The fresh worker re-read the repair and returned PASS with no remaining blocker.
+
+### GREEN: final contradiction audit
+
+A final complete-file audit found five remaining prose-level enforcement gaps:
+
+- shared Plan/Execute/Closeout keyed off profile “mode” instead of the artifact-selected branch;
+- custom legacy `spec_template` had no deterministic resolution/containment/no-fallback rule;
+- `ready` did not require the contract-basis marker, `implementing` did not require an
+  exact-marker plan binding, and custom Technical templates did not require those evidence slots;
+- custom Product and Technical filename rules could render the same output path;
+- `init-profile` defaulted design detection to legacy §6 even for a new dual profile.
+
+Focused assertions reproduced the first three as five failures and the path collision as one
+failure; the branch-aware design default produced one further failure. The repaired shared phases
+now key on the selected dual-v2 or legacy branch, legacy template paths resolve lazily and
+mechanically, marker/binding slots are mandatory and validated, colliding rendered v2 outputs stop
+before mutation, and profile initialization writes the correct branch-specific design detector.
+The six combined focused assertions then passed:
+
+```text
+Ran 6 tests in 0.003s
+OK
+```
+
+### Deterministic GREEN
+
+The ten focused regressions and the complete compatibility suite both passed:
+
+```text
+Ran 10 tests in 0.013s
+OK
+
+Ran 27 tests in 0.045s
+OK
+```
+
+Compatibility validation passed, all seven Elephant skills passed `quick_validate.py`, plugin
+validation passed, and `git diff --check` produced no output.
+
+**Final follow-up verdict: PASS.**

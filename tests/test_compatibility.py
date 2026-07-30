@@ -33,6 +33,7 @@ class CompatibilityValidatorTests(unittest.TestCase):
             "author-technical-contract/reviewers/product-conformance.md",
             "author-technical-contract/reviewers/test.md",
             "author-technical-contract/reviewers/technical-adjudicator.md",
+            "ship-story/reviewers/implementation-conformance.md",
         )
         for relative in required:
             self.assertTrue((root / relative).is_file(), relative)
@@ -105,6 +106,7 @@ class CompatibilityValidatorTests(unittest.TestCase):
             "Product contract item",
             "Technical response",
             "Verification",
+            "draft → ready → implementing → done",
             "ready | needs-product-decision",
         ):
             self.assertIn(phrase, template)
@@ -124,7 +126,7 @@ class CompatibilityValidatorTests(unittest.TestCase):
             "legacy-mixed",
             "needs-product-decision",
             "shaping | approved | split | deferred | rejected",
-            "draft | review | ready | needs-product-decision",
+            "draft | ready | implementing | done | needs-product-decision",
         ):
             self.assertIn(phrase, ship)
 
@@ -192,6 +194,8 @@ class CompatibilityValidatorTests(unittest.TestCase):
         ship = (skills / "ship-story/SKILL.md").read_text()
         shape = (skills / "shape-story/SKILL.md").read_text()
         technical = (skills / "author-technical-contract/SKILL.md").read_text()
+        init_profile = (skills / "init-profile/SKILL.md").read_text()
+        normalized_ship = " ".join(ship.split())
 
         for phrase in (
             "story_contracts.product_template",
@@ -200,26 +204,50 @@ class CompatibilityValidatorTests(unittest.TestCase):
             "story_contracts.technical_filename_rule",
             "render the configured",
             "only when the field is omitted",
+            "rendered Product and Technical output paths must be distinct",
+            "STOP before artifact mutation",
         ):
-            self.assertIn(phrase, ship)
+            self.assertIn(phrase, normalized_ship)
         self.assertIn("caller-supplied Product Contract template", shape)
         self.assertIn("caller-supplied Product Contract output path", shape)
         self.assertIn("caller-supplied Technical Contract template", technical)
         self.assertIn("caller-supplied Technical Contract output path", technical)
+        self.assertIn(
+            "`dual` → Product Contract `design_sensitivity` is `High` or `Medium`",
+            init_profile,
+        )
+        self.assertIn(
+            "`legacy-mixed` → mixed spec §6 sensitivity is not `Low`",
+            init_profile,
+        )
 
     def test_legacy_resume_uses_configured_status_flow(self):
         ship = (
             ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
         ).read_text()
+        normalized = " ".join(ship.split())
 
         for phrase in (
-            "Parse `status_flow` as an ordered sequence",
-            "first status is authoring-incomplete",
-            "second status is the refined/ready state",
-            "resume legacy authoring from the existing mixed spec",
+            "Render the preserved legacy `filename_rule`",
+            "exactly one `[ID]` and exactly one `[slug]`",
+            "four distinct values",
+            "authoring-incomplete, ready, implementing, and done",
+            "`Seed → Reviewed → Building → Complete`",
+            "Resume legacy authoring from the existing mixed spec",
             "status is absent or not in `status_flow`",
+            "write the third configured value",
+            "writing the fourth configured value",
+            "Resolve legacy `spec_template` only when selected legacy authoring will dispatch",
+            "bundled `slice-template.md` relative to this `ship-story` skill directory",
+            "every other legacy template path from the repository root",
+            "do not fall back from an invalid configured legacy template",
         ):
-            self.assertIn(phrase, ship)
+            self.assertIn(phrase, normalized)
+
+        legacy = ship[ship.index("## Legacy-mixed phase detection") :]
+        self.assertNotIn("<spec_dir>/<ID>-*.md", legacy)
+        self.assertNotIn("advances the mixed spec to `Implementing`", legacy)
+        self.assertNotIn("advance the mixed spec to `Done`", legacy)
 
     def test_invalid_v2_stops_before_dispatch_and_terminal_precedes_pairing(self):
         ship = (
@@ -234,14 +262,17 @@ class CompatibilityValidatorTests(unittest.TestCase):
         ):
             self.assertIn(heading, ship)
         validation = ship.index("### V2 artifact validation")
+        invariants = ship.index("### Status-dependent artifact invariants")
         terminal = ship.index("### Terminal product dispositions")
         pairing = ship.index("### Product/technical pairing")
+        self.assertLess(validation, invariants)
+        self.assertLess(invariants, terminal)
         self.assertLess(validation, terminal)
         self.assertLess(terminal, pairing)
         for phrase in (
             "v2-looking",
             "every Markdown artifact directly under `spec_dir`",
-            "v2 discriminator field",
+            "authoritative exact v2 discriminator",
             "invalid required field",
             "For technical artifacts, `story_kind` or `product_contract`",
             "STOP and list every invalid field",
@@ -258,11 +289,10 @@ class CompatibilityValidatorTests(unittest.TestCase):
         for phrase in (
             "configured-path candidate",
             "rendered for the requested ID",
-            "regardless of its frontmatter `story` value",
+            "Inspect it regardless of its frontmatter `story` value",
             "catch-all candidate",
             "frontmatter `story` exactly equals the requested ID",
-            "Among catch-all inspected artifacts, ignore discriminator-bearing files "
-            "whose `story` is another ID",
+            "ignore any valid v2 artifact for another story",
         ):
             self.assertIn(phrase, normalized)
 
@@ -273,18 +303,246 @@ class CompatibilityValidatorTests(unittest.TestCase):
         shape = (
             ROOT / "plugins/elephant/skills/shape-story/SKILL.md"
         ).read_text()
+        normalized = " ".join(ship.split())
 
         for phrase in (
             "active approved Product Contract supersedes",
             "technical author/fixer",
             "rebind `product_contract`",
+            "set `story_kind: product-facing`",
             "set `status: draft`",
-            "set `status: review`",
-            "persist these three field changes atomically",
+            "clear the resolved decision brief",
+            "Persist these four field changes atomically",
             "do not present the same bounded question again",
+            "implementation-stage decision return",
+            "mark every earlier plan, execution, code-review, and conformance record as superseded history",
+            "must not count as a current plan or execution-start evidence",
+            "new plan bound to the latest Technical Contract revision",
+            "transition the latest revision from `ready` to `implementing`",
         ):
-            self.assertIn(phrase, ship)
-        self.assertIn("lowest unused integer starting at 2", shape)
+            self.assertIn(phrase, normalized)
+        for phrase in (
+            "Engineering-only decision return",
+            "product_contract: null",
+            "reclassify the story as product-facing",
+            "lowest unused integer starting at 2",
+            "`ship-story` owns slug and output-path allocation",
+            "passes the exact path",
+        ):
+            self.assertIn(phrase, normalized)
+        self.assertIn(
+            "Write exactly that caller-supplied path",
+            " ".join(shape.split()),
+        )
+        self.assertNotIn(
+            "Use the repository's normal Product Contract versioned-slug convention",
+            shape,
+        )
+
+    def test_branch_aware_preflight_follows_selected_artifacts(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+        runtime = (
+            ROOT / "plugins/elephant/references/runtime-compatibility.md"
+        ).read_text()
+        normalized_ship = " ".join(ship.split())
+        normalized_runtime = " ".join(runtime.split())
+
+        self.assertIn("## Step 0 — Load, locate, and select the branch", ship)
+        self.assertIn("## Branch-aware dependency preflight", ship)
+        detection = ship.index("## Step 0 — Load, locate, and select the branch")
+        preflight = ship.index("## Branch-aware dependency preflight")
+        self.assertLess(detection, preflight)
+        for phrase in (
+            "Artifact classification and phase selection happen before dependency checks",
+            "Existing v2 artifacts take precedence under a legacy profile",
+            "Existing legacy artifacts remain legacy under a dual profile",
+            "Resumed legacy after authoring",
+            "must not require `superpowers:brainstorming`",
+            "only capabilities that the selected branch and remaining phases can dispatch",
+        ):
+            self.assertIn(phrase, normalized_ship)
+        for phrase in (
+            "Artifact/type selection",
+            "before dependency preflight",
+            "resumed legacy after authoring",
+        ):
+            self.assertIn(phrase, normalized_runtime)
+        downstream = ship[ship.index("## Shared downstream detector and delivery") :]
+        for phrase in (
+            "In the selected dual-v2 branch",
+            "In the selected legacy branch",
+        ):
+            self.assertIn(phrase, downstream)
+        for forbidden in (
+            "In dual mode",
+            "In legacy mode",
+            "Dual mode must",
+            "Legacy mode must",
+        ):
+            self.assertNotIn(forbidden, downstream)
+
+    def test_status_dependent_artifact_invariants_hard_stop(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+        normalized = " ".join(ship.split())
+
+        for phrase in (
+            "`design_sensitivity` is exactly `High`, `Medium`, or `Low`",
+            "`approved` requires section 10 to contain no unresolved product questions",
+            "`split`, `deferred`, and `rejected` require both disposition rationale and next condition",
+            "`needs-product-decision` requires exactly one bounded decision brief",
+            "`ready` requires no `TBD`, placeholder, open technical question, or blocking finding",
+            "`ready` also requires one non-placeholder contract-basis revision marker",
+            "every required affected-reviewer recheck",
+            "`implementing` retains every `ready` invariant",
+            "plan bound to that exact marker",
+            "`done` retains every `ready` invariant",
+            "STOP with the exact artifact path, field or section, and violated invariant",
+        ):
+            self.assertIn(phrase, normalized)
+
+    def test_legacy_and_v2_classification_avoid_false_positives(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+        normalized = " ".join(ship.split())
+
+        for phrase in (
+            "authoritative exact v2 discriminator values",
+            "`schema: elephant.story/v2`",
+            "`kind: product` or `kind: technical`",
+            "Render the preserved legacy `filename_rule`",
+            "known configured legacy `status_flow` value",
+            "legacy slug ends in `-product` or `-technical`",
+            "generic `schema` or `kind` key",
+            "genuine ambiguous collision",
+            "STOP and list every candidate",
+            "do not infer recency",
+            "malformed current-story v2 artifact",
+            "valid v2 artifact for another story",
+        ):
+            self.assertIn(phrase, normalized)
+        self.assertNotIn(
+            "contains any v2 discriminator field: `schema`, `kind`, `story_kind`, or "
+            "`product_contract`",
+            normalized,
+        )
+
+    def test_product_contract_reference_is_canonical_and_exact(self):
+        skills = ROOT / "plugins/elephant/skills"
+        ship = (skills / "ship-story/SKILL.md").read_text()
+        schema = (skills / "ship-story/delivery-profile-schema.md").read_text()
+        template = (
+            skills
+            / "author-technical-contract/technical-contract-template.md"
+        ).read_text()
+        shared = " ".join((ship + schema + template).split())
+
+        for phrase in (
+            "`product_contract`",
+            "repository-relative POSIX path",
+            "case-sensitive",
+            "absolute paths",
+            "backslashes",
+            "`..` segments",
+            "existing file",
+            "exact active Product Contract",
+        ):
+            self.assertIn(phrase, shared)
+
+    def test_custom_dual_templates_are_validated_before_authoring(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+        normalized = " ".join(ship.split())
+
+        for phrase in (
+            "Validate a selected custom template immediately before its authoring dispatch",
+            "mandatory v2 frontmatter slots",
+            "all ten Product Contract sections",
+            "all eleven Technical Contract sections",
+            "`supersedes` shape",
+            "`product_contract` shape",
+            "contract-basis marker",
+            "superseded-history",
+            "current-plan",
+            "STOP and list every missing or incompatible slot",
+        ):
+            self.assertIn(phrase, normalized)
+
+    def test_post_implementation_conformance_gates_integration(self):
+        root = ROOT / "plugins/elephant/skills/ship-story"
+        ship = (root / "SKILL.md").read_text()
+        prompt_path = root / "reviewers/implementation-conformance.md"
+        self.assertTrue(prompt_path.is_file(), prompt_path)
+        prompt = prompt_path.read_text()
+
+        self.assertIn("### Post-implementation conformance", ship)
+        execute = ship.index("### Execute")
+        conformance = ship.index("### Post-implementation conformance")
+        finish = ship.index("### Finish")
+        self.assertLess(execute, conformance)
+        self.assertLess(conformance, finish)
+        legacy = ship[
+            ship.index("## Legacy-mixed phase detection") :
+            ship.index("## Shared downstream detector and delivery")
+        ]
+        self.assertNotIn("conformance", legacy.lower())
+
+        for phrase in (
+            "For dual-v2 stories",
+            "implementation evidence and diff",
+            "both the Product Contract and Technical Contract",
+            "behavior-preservation boundary",
+            "implementation fixer",
+            "affected reviewer",
+            "recheck",
+            "before integration",
+            "no routine owner checkpoint",
+            "observable-product ambiguity",
+            "post-implementation conformance PASS for dual-v2 stories",
+        ):
+            self.assertIn(phrase, " ".join(ship.split()))
+        for phrase in (
+            "Read-only",
+            "Verdict: PASS | FINDINGS | NEEDS_PRODUCT_DECISION",
+            "Product conformance",
+            "Technical conformance",
+            "Behavior-preservation conformance",
+            "Integration gate",
+        ):
+            self.assertIn(phrase, prompt)
+
+    def test_technical_contract_lifecycle_is_persisted(self):
+        skills = ROOT / "plugins/elephant/skills"
+        ship = (skills / "ship-story/SKILL.md").read_text()
+        author = (skills / "author-technical-contract/SKILL.md").read_text()
+        template = (
+            skills
+            / "author-technical-contract/technical-contract-template.md"
+        ).read_text()
+        smoke = (ROOT / "docs/testing/product-first-story-smoke-tests.md").read_text()
+        shared = ship + author + template + smoke
+        normalized_shared = " ".join(shared.split())
+
+        for phrase in (
+            "draft → ready → implementing → done",
+            "review is an activity while `status: draft` remains persisted",
+            "change `ready` to `implementing` before implementation",
+            "change `implementing` to `done` during closeout",
+            "capture one non-placeholder contract-basis revision marker",
+        ):
+            self.assertIn(phrase, normalized_shared)
+        for forbidden in (
+            "status: review",
+            "draft | review | ready",
+            "`draft` or `review`",
+            "set `status: review`",
+        ):
+            self.assertNotIn(forbidden, shared)
 
     def test_supersedes_has_canonical_exact_match_contract(self):
         skills = ROOT / "plugins/elephant/skills"
@@ -363,6 +621,12 @@ class CompatibilityValidatorTests(unittest.TestCase):
             "needs-product-decision escalation",
             "sequential fallback without workers",
             "legacy mixed-spec resume",
+            "branch-aware dependency preflight",
+            "invalid status invariants",
+            "legacy suffix and generic metadata classification",
+            "custom legacy filename and lifecycle",
+            "post-build conformance before integration",
+            "exact technical lifecycle",
             "v2/legacy collision without `supersedes`",
         ):
             self.assertIn(case, smoke)
@@ -436,6 +700,8 @@ class CompatibilityValidatorTests(unittest.TestCase):
         self.assertEqual(claude_manifest["version"], codex_manifest["version"])
         self.assertEqual("0.3.0", codex_manifest["version"])
         self.assertEqual("./skills/", codex_manifest["skills"])
+        self.assertIn("product-first", codex_manifest["keywords"])
+        self.assertIn("dual-contract", codex_manifest["keywords"])
 
         marketplace = json.loads(
             (ROOT / ".agents/plugins/marketplace.json").read_text()

@@ -55,16 +55,30 @@ Every right-column entry is a real schema field. If a detection has no schema ho
   `[ID]-[slug]-product.md` and `[ID]-[slug]-technical.md`. If a profile exists, preserve an
   explicit `dual` or `legacy-mixed`. A missing section or missing mode means the existing profile
   behaves as `legacy-mixed`; do not fill that mode as though it were an ordinary missing field.
-- **Legacy `status_flow`:** for an explicit or implicit `legacy-mixed` profile, grep global specs
-  or its mixed-spec template for an arrow-joined status list (`A → B → C`). If absent, use the
-  schema's legacy example default and tag `[default]`. Dual v2 status vocabularies are fixed by
-  the contract templates, not discovered from repository prose.
+  Validate that both v2 rules render distinct paths for the same story and slug.
+- **Legacy artifact contract:** for an explicit or implicit `legacy-mixed` profile, preserve and
+  validate `spec_template` without rewriting it: `slice-template.md` is the bundled alias in the
+  `ship-story` skill directory and every other value is a readable repository-relative path
+  contained by the repository. Validate `filename_rule` as a basename containing `[ID]` and
+  `[slug]` exactly once. Grep global specs or its mixed-spec template for an arrow-joined
+  four-value `status_flow`
+  (`authoring → ready → implementing → done`). If absent, use the schema's legacy example default
+  and tag `[default]`. Dual v2 status vocabularies are fixed by the contract templates, not
+  discovered from repository prose.
 - **Instruction conflicts**: when `AGENTS.md` and `CLAUDE.md` supply different values for the same schema field, keep both candidates and their source paths in the confirmation draft. Apply only the user's resolved value.
 - **`finish.ci_required_checks`**: a CI job becomes *required* only if persistent instructions or docs name it as a merge gate. If none is named, list all workflow job names and ask the user which gate merge (don't assume all of them).
 - **`finish.integration` / `branch_pattern`**: read persistent instructions' finish/merge sections first (e.g. "PR + squash + linear main"). If `gh` API is denied (free repo / 403), fall back to instruction prose + `git log` branch names; if still unclear, ask. `branch_pattern` = a naming regularity seen in ≥3 recent merged branches, else ask.
 - **`execution.gotchas`**: include a `project_*` memory/notes entry only if it constrains build/test/commit/deploy flow (a trap or known-bug). Exclude `feedback_*` and pure product-rule entries. When unsure, list candidates at confirm and let the user prune.
 - **`field-naming` enabled**: enabled iff persistent instructions or docs describe a field-naming convention; `decision_ref` (the decision-record id, e.g. `AD-3` / `ADR-7` / whatever the project uses) + `field_contract_location` come from that prose. No such prose → `enabled: false`.
-- **`design gate`**: enabled iff persistent instructions or docs describe a design-before-UI rule. When **enabled**, resolve every common field: `ui_detection` → schema default (spec §6 sensitivity ≠ Low); `provider` → `manual` unless the project explicitly uses Claude Design; `design_local_dir` → default `docs/elephant/<product>/design/<ID>/`; `handoff_file` → `design-handoff.md`; `ready_signal` → `human`. For `claude-design`, add `claude_design.project_ref` and `claude_design.slice_to_design_mapping`; unresolved applicable values are literal `TBD`. When **disabled** → `enabled: false`, omit sub-fields.
+- **`design gate`**: enabled iff persistent instructions or docs describe a design-before-UI
+  rule. When **enabled**, resolve every common field. Default `ui_detection` by effective branch:
+  `dual` → Product Contract `design_sensitivity` is `High` or `Medium`;
+  `legacy-mixed` → mixed spec §6 sensitivity is not `Low`. Set `provider` to `manual` unless the
+  project explicitly uses Claude Design; default `design_local_dir` to
+  `docs/elephant/<product>/design/<ID>/`, `handoff_file` to `design-handoff.md`, and
+  `ready_signal` to `human`. For `claude-design`, add `claude_design.project_ref` and
+  `claude_design.slice_to_design_mapping`; unresolved applicable values are literal `TBD`. When
+  **disabled** → `enabled: false`, omit sub-fields.
 
 ### Doc-dir disambiguation
 

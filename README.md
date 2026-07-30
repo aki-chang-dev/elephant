@@ -14,7 +14,8 @@ kickoff
 
 ship-story STORY-ID
 └── story seed → shape-story → Product Contract → existing design gate?
-    → Technical Contract + specialist review → writing-plans → delivery
+    → Technical Contract + specialist review → writing-plans → implementation + code review
+    → contract conformance → integration + closeout
 ```
 
 | Skill | Role |
@@ -41,7 +42,8 @@ New profiles use the dual-contract workflow:
 
 ```text
 story seed → shape-story → product contract → existing design gate?
-→ technical contract + specialist review → writing-plans → delivery
+→ technical contract + specialist review → writing-plans → implementation + code review
+→ product/technical conformance → integration + closeout
 ```
 
 `elephant:ship-story` first triages a story. Product-facing stories run
@@ -68,6 +70,12 @@ specs remain resumable through the preserved generic brainstorming path; `superp
 is never used by the dual-contract v2 path. When v2 and legacy artifacts coexist, the Product
 Contract must explicitly record the legacy artifact in `supersedes` or Elephant stops for a
 decision.
+
+Artifact evidence selects v2 or legacy before dependency preflight, so resumed work requires only
+capabilities its remaining branch can dispatch. Technical Contracts persist
+`draft → ready → implementing → done`, with product ambiguity branching through
+`needs-product-decision`. After implementation and code review, a read-only conformance reviewer,
+implementation fixer, and affected rechecks gate integration without a routine owner checkpoint.
 
 ## Prerequisite
 
@@ -119,13 +127,16 @@ The design gate checks an approved artifact contract, not a particular design pr
 
 For Codex and any host without Claude Design:
 
-1. Elephant commits and pushes the `Refined` slice spec.
+1. Elephant commits and pushes the approved Product Contract, or the configured ready legacy
+   mixed spec.
 2. It stops and reports the exact `design_local_dir`.
 3. Place design artifacts and `design-handoff.md` in that directory.
 4. Give the human ready/approved signal.
-5. Elephant validates the artifacts and resumes at planning.
+5. Elephant validates the artifacts and resumes v2 at Technical Contract authoring, or legacy at
+   planning.
 
-The handoff records key screens or states, interactions and transitions, the mapping to the slice spec's cross-module contract, and unresolved implementation constraints.
+The handoff records key screens or states, interactions and transitions, their mapping to Product
+Contract flows/states or the legacy mixed contract, and unresolved implementation constraints.
 
 ### `claude-design` — optional provider
 

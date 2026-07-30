@@ -21,62 +21,98 @@ the authoring, planning, execution, and finishing skills instead of reproducing 
   `elephant:kickoff` or `elephant:init-profile`; do not guess project conventions.
 - Read `delivery-profile-schema.md` in this skill directory and
   `../../references/runtime-compatibility.md`.
-- Read the profile before checking skills because required authoring skills depend on
-  `story_contracts.mode`.
+- Do not check branch-specific skills merely from profile mode. Artifact/type selection comes
+  first because persisted artifacts may select a different branch.
 
-## Preflight
+## Step 0 — Load, locate, and select the branch
 
-Before producing artifacts:
+Artifact classification and phase selection happen before dependency checks.
 
-1. Resolve the effective story-contract mode:
-   - explicit `story_contracts.mode: dual` → dual-contract v2;
-   - explicit `story_contracts.mode: legacy-mixed` → legacy mixed-spec behavior;
+1. Read the profile and resolve its effective mode:
+   - explicit `story_contracts.mode: dual` → dual-contract v2 for a new story;
+   - explicit `story_contracts.mode: legacy-mixed` → legacy mixed authoring for a new story;
    - an existing profile with no `story_contracts` section or no `mode` → `legacy-mixed`.
    Any other value is unsupported; STOP rather than guessing.
-2. For v2 detection in every effective mode, resolve all four profile-injected contract values:
-   - use `story_contracts.product_template` and `story_contracts.technical_template` when
-     present; use the matching bundled template only when the field is omitted;
-   - use `story_contracts.product_filename_rule` and
-     `story_contracts.technical_filename_rule` when present; use
-     `[ID]-[slug]-product.md` and `[ID]-[slug]-technical.md` only when the field is omitted.
-   Resolve the compatibility aliases `shape-story/product-contract-template.md` and
-   `author-technical-contract/technical-contract-template.md` relative to the plugin's `skills/`
-   directory. Resolve every other template path relative to the repository root. A configured
-   path must exist, stay inside its allowed root, and be readable; do not fall back when a
-   configured value is invalid.
-3. Validate each filename rule as a basename ending in `.md`, containing `[ID]` and `[slug]`
-   exactly once, with no absolute path, separator, `.` segment, or `..` segment. The rendered
-   product and technical filenames must be distinct.
-4. For `mode: dual`, confirm `elephant:shape-story`,
-   `elephant:author-technical-contract`, `superpowers:writing-plans`,
-   `superpowers:using-git-worktrees`, `superpowers:subagent-driven-development` or
-   `superpowers:executing-plans`, and `superpowers:finishing-a-development-branch`.
-5. For `legacy-mixed`, confirm the same downstream Superpowers skills plus
-   `superpowers:brainstorming`.
-6. When the design gate is enabled, confirm `design.provider` is `manual` or `claude-design`.
-7. If a required capability is absent, STOP before writing artifacts and give host-appropriate
-   setup guidance.
+2. Locate `<ID>` in `roadmap_path`; read the story seed and `global_specs`.
+3. Resolve the two v2 filename rules for discovery in every effective mode. Use the configured
+   values, or `[ID]-[slug]-product.md` and `[ID]-[slug]-technical.md` only when omitted. Validate
+   each as a `.md` basename containing exactly one `[ID]` and `[slug]`, with no path separator,
+   absolute path, `.` segment, or `..` segment. Render each with the requested ID and a slug
+   wildcard. The rendered Product and Technical output paths must be distinct for the same
+   requested ID and slug; repeat that comparison with the selected concrete slug before either
+   author dispatch. If they collide, list both rules and the rendered path, then STOP before
+   artifact mutation. Do not validate or require an authoring template merely to resume a later
+   phase.
+4. Resolve the preserved legacy artifact contract when present. Render the preserved legacy
+   `filename_rule` with the requested ID and a slug wildcard; do not hardcode an ID-leading glob.
+   Validate it as a `.md` basename with exactly one `[ID]` and exactly one `[slug]`, no separator,
+   absolute path, `.` segment, or `..` segment. Parse `status_flow` as exactly four distinct
+   values representing authoring-incomplete, ready, implementing, and done.
+5. Inspect the rendered candidates and other Markdown artifacts directly under `spec_dir`.
+   Classify them using the v2 and legacy rules below. Existing v2 artifacts take precedence under
+   a legacy profile. Existing legacy artifacts remain legacy under a dual profile, including
+   after an approved profile refresh.
+6. Run the dual-contract detector first, then the legacy detector when no active v2 artifact owns
+   the story. If neither artifact kind exists, effective mode selects new v2 or legacy authoring.
+7. Select the first incomplete phase without dispatching it. Announce
+   `Story <ID> is at phase X — resuming there.` Never redo a completed phase.
 
-## Step 0 — Load, locate, and detect phase
+## Branch-aware dependency preflight
 
-1. Read the profile and resolve its effective mode as above.
-2. Locate `<ID>` in `roadmap_path` and read the story seed plus `global_specs`.
-3. For v2 detection in either mode, render the configured product and technical filename rules
-   with the requested ID and a slug wildcard to discover candidates under `spec_dir`. Also inspect
-   every Markdown artifact directly under `spec_dir` for the v2-looking signals below; do not
-   assume the configured rule places the ID first. Classify matches from frontmatter and the
-   rendered configured rule, not from a bundled filename assumption.
-4. Run the dual-contract v2 detector first. Run the legacy detector only under the conditions it
-   names. Then announce `Story <ID> is at phase X — resuming there.` Never redo a completed phase.
+After Step 0, preflight only capabilities that the selected branch and remaining phases can
+dispatch:
+
+- **New v2 product-facing:** `elephant:shape-story`,
+  `elephant:author-technical-contract`, then `superpowers:writing-plans`,
+  `superpowers:using-git-worktrees`, one of `superpowers:subagent-driven-development` or
+  `superpowers:executing-plans`, and `superpowers:finishing-a-development-branch`.
+- **New v2 engineering-only or v2 technical draft/decision return:**
+  `elephant:author-technical-contract` plus the later Superpowers capabilities; also require
+  `elephant:shape-story` only when the selected decision-return phase will dispatch shaping.
+- **V2 ready/implementing/done resume:** require only the later capabilities that its first
+  incomplete phase can still dispatch.
+- **Legacy authoring:** require `superpowers:brainstorming` plus its later capabilities.
+- **Resumed legacy after authoring:** preflight only its design/planning/execution/finish
+  remainder; it must not require `superpowers:brainstorming` merely because the profile or
+  artifact is legacy.
+
+When the selected incomplete phase enters the design gate, confirm `design.provider` is `manual`
+or `claude-design`. A different or missing required capability is a hard stop before mutation with
+host-appropriate setup guidance.
+
+Resolve an authoring template only when the selected phase will use it. Use
+`story_contracts.product_template` or `story_contracts.technical_template` when present and the
+matching bundled template only when the field is omitted. Resolve the compatibility aliases
+`shape-story/product-contract-template.md` and
+`author-technical-contract/technical-contract-template.md` relative to the plugin `skills/`
+directory; resolve any other path from the repository root. The selected path must be readable
+and remain inside its allowed root.
+
+Resolve legacy `spec_template` only when selected legacy authoring will dispatch. Use the
+configured value when present and the bundled `slice-template.md` only when omitted. Resolve the
+bundled `slice-template.md` relative to this `ship-story` skill directory; resolve every other
+legacy template path from the repository root. The selected file must exist, be readable, and
+remain inside the applicable plugin or repository root. Report the configured value and
+resolution error, then STOP; do not fall back from an invalid configured legacy template.
+
+Validate a selected custom template immediately before its authoring dispatch. Require mandatory
+v2 frontmatter slots and compatible initial values. The Product template requires all ten Product
+Contract sections, the fixed product statuses and `design_sensitivity`, and a valid `supersedes`
+shape. The Technical template requires all eleven Technical Contract sections, traceability
+columns, the fixed technical statuses and decision-brief fields, a valid `product_contract`
+shape, and section 11 slots for the contract-basis marker, superseded-history evidence,
+current-plan binding, implementation/conformance rechecks, verification, integration, and
+closeout. STOP and list every missing or incompatible slot; never author an artifact that the
+next resume would reject.
 
 ## Dual-contract v2 phase detection
 
 The bundled filename defaults are `<ID>-<slug>-product.md` and
 `<ID>-<slug>-technical.md`, but detection and authoring always render the configured
 `story_contracts.product_filename_rule` and `story_contracts.technical_filename_rule` after
-preflight resolution. Product status is exactly
+profile resolution. Product status is exactly
 `shaping | approved | split | deferred | rejected`; technical status is exactly
-`draft | review | ready | needs-product-decision`.
+`draft | ready | implementing | done | needs-product-decision`.
 
 Inspect v2 artifacts before any legacy mixed spec, even when the effective profile mode is
 `legacy-mixed`. This allows an explicitly migrated story to resume mechanically without changing
@@ -84,19 +120,34 @@ unrelated legacy stories.
 
 ### V2 artifact validation
 
-Build the current-story v2-looking set from exactly two sources:
+Inspect every Markdown artifact directly under `spec_dir`, but classify before validating. The
+authoritative exact v2 discriminator values are `schema: elephant.story/v2`, `kind: product` or
+`kind: technical`, `story_kind: product-facing | engineering-only`, and the v2-only
+`product_contract` binding. A generic `schema` or `kind` key with another value is not by itself a
+v2 signal.
 
-1. A **configured-path candidate** is any filename that matches either configured v2 filename rule
-   rendered for the requested ID and a slug wildcard. Include it regardless of its frontmatter
-   `story` value so a malformed current-ID artifact cannot evade validation.
-2. A **catch-all candidate** is any other Markdown artifact directly under `spec_dir` whose
-   frontmatter `story` exactly equals the requested ID and that contains any v2 discriminator
-   field: `schema`, `kind`, `story_kind`, or `product_contract`, even when the discriminator's
-   value is invalid.
+Build the current-story v2-looking set as follows:
 
-Among catch-all inspected artifacts, ignore discriminator-bearing files whose `story` is another
-ID. They belong to that other delivery and must neither participate in current-story validation
-nor cause a stop. This does not remove configured-path candidates from the set.
+1. A **configured-path candidate** matches a configured v2 filename rule rendered for the
+   requested ID and slug wildcard. Inspect it regardless of its frontmatter `story` value, but do
+   not classify it as v2 from its suffix alone.
+2. Render the preserved legacy `filename_rule` for the same requested ID. A configured-path
+   candidate that also matches this legacy glob, has a known configured legacy `status_flow`
+   value, and contains no authoritative exact v2 discriminator is legacy. This remains true when
+   its legacy slug ends in `-product` or `-technical`, or its custom template has a generic
+   `schema` or `kind` key.
+3. A configured-path candidate without that complete legacy evidence is v2-looking. This ensures
+   a malformed current-story v2 artifact still hard-stops instead of disappearing into legacy
+   authoring.
+4. A **catch-all candidate** is any other artifact whose frontmatter `story` exactly equals the
+   requested ID and contains an authoritative exact v2 discriminator or v2-only binding.
+5. Among catch-all inspected artifacts, ignore any valid v2 artifact for another story whose
+   `story` is another ID. It must neither participate in current-story validation nor cause a
+   stop.
+
+If one path carries both authoritative exact v2 evidence and complete legacy evidence, or several
+paths produce a genuine ambiguous collision that the rules cannot classify uniquely, STOP and
+list every candidate plus both evidence sets; do not infer recency.
 
 For every v2-looking candidate, validate before phase selection:
 
@@ -106,7 +157,7 @@ For every v2-looking candidate, validate before phase selection:
 - its repository-relative path equals the filename produced by rendering the configured rule for
   its declared kind, story, and slug;
 - product status is one of `shaping | approved | split | deferred | rejected`;
-- technical status is one of `draft | review | ready | needs-product-decision`, with
+- technical status is one of `draft | ready | implementing | done | needs-product-decision`, with
   `story_kind: product-facing | engineering-only` and a present `product_contract` field.
 
 An invalid required field triggers a catch-all hard stop. Required fields are `schema`, `story`,
@@ -142,6 +193,51 @@ an exact colliding legacy path. Do not merge contents, infer recency, or dispatc
 engineering-only Technical Contract has no Product Contract that can record `supersedes`, so
 coexistence with any legacy artifact also stops.
 
+### Canonical `product_contract` binding
+
+Treat a non-null `product_contract` with the same canonical discipline as `supersedes`. It is one
+repository-relative POSIX path, compared case-sensitive on every host. Reject an empty value,
+URI, absolute path, backslashes, `.` or `..` segments, repository escape, outside-resolving
+symlink, missing existing file, or a reference to another story. Resolve the path without
+case-folding, percent-decoding, or basename inference.
+
+The target must be a valid Product Contract. For `story_kind: product-facing`, require the exact
+active Product Contract except while a persisted decision return is still bound to the exact
+valid predecessor that the active successor supersedes. For `story_kind: engineering-only`,
+require literal `null` until the engineering-only decision-return transition atomically
+reclassifies it. A canonical path that exists but is not the exact active Product Contract is a
+pairing error, not a near match.
+
+### Status-dependent artifact invariants
+
+Validate content invariants before selecting any phase:
+
+- Every Product Contract's `design_sensitivity` is exactly `High`, `Medium`, or `Low`.
+- `approved` requires section 10 to contain no unresolved product questions, `TBD`, placeholder,
+  or unanswered item.
+- `split`, `deferred`, and `rejected` require both disposition rationale and next condition as
+  non-empty, non-placeholder values.
+- `needs-product-decision` requires exactly one bounded decision brief with non-empty ambiguity,
+  evidence, distinct observable outcomes, decision required, and technical impact slots.
+- `ready` requires no `TBD`, placeholder, open technical question, or blocking finding; no
+  deferred choice; complete traceability or behavior-preservation coverage; and every required
+  affected-reviewer recheck recorded against the latest revision. If current-revision
+  execution-start evidence exists, `ready` is stale and invalid; the transition must already have
+  persisted `implementing`. Evidence explicitly retained as superseded history by a completed
+  decision return does not count as current-revision execution evidence.
+- `ready` also requires one non-placeholder contract-basis revision marker for the reviewed
+  requirements, traceability, and technical choices. Capture or replace it after the last
+  author/fixer change and before persisting `ready`.
+- `implementing` retains every `ready` invariant and additionally records its plan bound to that
+  exact marker plus current branch/worktree or equivalent execution evidence.
+- `done` retains every `ready` invariant and additionally records passing post-implementation
+  conformance, completed verification/acceptance evidence, integration evidence, and closeout.
+
+The same checks apply on every resume, not only when a writer changes status. An invalid artifact
+must **STOP with the exact artifact path, field or section, and violated invariant**. Do not
+silently demote it, fall through to legacy/missing detection, dispatch duplicate authoring, or
+advance to a later phase.
+
 ### Terminal product dispositions
 
 After individual validation, `supersedes` normalization, and active-product selection—but before
@@ -160,34 +256,73 @@ pairing would require `approved`.
 Only after terminal Product Contract handling, validate pairing. A Technical Contract with
 `story_kind: product-facing` must reference the active approved Product Contract, except for the
 resolved decision-return transition below. An engineering-only Technical Contract must use
-`product_contract: null`. Multiple active Technical Contracts or mismatched story references are
-ambiguous; STOP and list them instead of choosing by timestamp.
+`product_contract: null`; the only allowed coexisting Product Contract is the deterministic
+`shaping` or newly `approved` output of its own decision return, which must stop or atomically
+reclassify/rebind before any technical work. Multiple active Technical Contracts or mismatched
+story references are ambiguous; STOP and list them instead of choosing by timestamp.
 
 ### Persisted `needs-product-decision` return
 
-When a Technical Contract is `needs-product-decision` and still references the active approved
-Product Contract, the product answer is not yet persisted. Present only its bounded decision
-brief, then dispatch `elephant:shape-story` with the configured Product Contract template and a
-new rendered output path:
+`ship-story` owns slug and output-path allocation for every decision return; `shape-story` writes
+the exact path it receives.
 
-1. The product author creates a `status: shaping` successor Product Contract. It never edits the
-   approved predecessor. The successor copies the predecessor's normalized `supersedes` entries
-   and adds the predecessor's repository-relative path.
-2. `elephant:shape-story` asks the bounded product question, runs its normal critics, presents one
-   Product Contract Recap, and persists the owner's answer only through the normal explicit
-   disposition. The predecessor remains immutable.
-3. If interrupted while the successor is `shaping`, artifact detection resumes shaping there.
-4. Once the active approved Product Contract supersedes the older Product Contract still named by
-   the `needs-product-decision` Technical Contract, the answer is persisted. Dispatch the
-   technical author/fixer; do not present the same bounded question again.
-5. The technical author/fixer—not a reviewer—must rebind `product_contract` to the active approved
-   successor, clear the resolved decision brief, and set `status: draft` before remapping. It may
-   set `status: review` only after applying the product answer and preparing the affected
-   read-only reviewers to recheck; persist these three field changes atomically. The artifact must
-   never expose a partial rebind with `needs-product-decision`, the old brief, or the old product
-   path.
-6. If interrupted at `draft` or `review`, the normal detector resumes the author/fixer or reviewer
-   loop without returning to the owner.
+For a product-facing Technical Contract still bound to an approved Product Contract, derive the
+successor base from that Product Contract's slug. Append `-v<N>` using the lowest unused integer
+starting at 2, render the configured Product filename rule, and pass that exact repository path to
+`elephant:shape-story`. The new Product Contract copies the predecessor's normalized
+`supersedes` entries and adds the predecessor path.
+
+#### Engineering-only decision return
+
+When `status: needs-product-decision`, `story_kind: engineering-only`, and
+`product_contract: null`, reclassify the story as product-facing because observable-product
+ambiguity has invalidated the behavior-preserving classification:
+
+1. Derive the Product Contract base slug from the Technical Contract slug. Render the configured
+   Product filename rule with that slug when unused; on collision append `-v<N>` using the lowest
+   unused integer starting at 2. This deterministic rule is recomputable after interruption.
+2. `ship-story` passes the exact path, configured Product template, roadmap/product context,
+   behavior-preservation evidence, and bounded decision brief to `elephant:shape-story` in the
+   main conversation.
+3. `shape-story` persists `status: shaping`, asks only that bounded owner question plus coherent
+   product follow-ups, runs its critics, and presents one explicit Product Contract Recap.
+4. `split`, `deferred`, or `rejected` records its required rationale/next condition and STOPS the
+   delivery. No technical role answers the ambiguity.
+
+For either decision-return source:
+
+1. The approved predecessor remains immutable. If one exists, the active approved Product
+   Contract supersedes it exactly; an engineering-only return creates the first Product Contract.
+2. An interrupted `shaping` artifact resumes shaping at its deterministic allocated path.
+3. After explicit `approved`, dispatch the technical author/fixer—not a reviewer—to rebind
+   `product_contract` to the exact active Product Contract, set `story_kind: product-facing`,
+   clear the resolved decision brief, and set `status: draft`. Persist these four field changes
+   atomically before remapping or review activity.
+4. Return to phase selection. If the active Product Contract requires an incomplete design gate,
+   complete the unchanged gate before technical remapping.
+5. The author/fixer applies the approved answer, remaps affected traceability and technical
+   choices, and reruns every affected read-only reviewer while the persisted status remains
+   `draft`.
+6. Resume the technical review loop without returning to the owner, and do not present the same
+   bounded question again.
+
+For an implementation-stage decision return, the technical author/fixer must preserve but mark
+every earlier plan, execution, code-review, and conformance record as superseded history before
+the revised contract can leave `draft`. That history must not count as a current plan or
+execution-start evidence. After affected review passes, transition to `ready`, dispatch
+`superpowers:writing-plans` to create or revise a new plan bound to the latest Technical Contract
+revision, then transition the latest revision from `ready` to `implementing`. Resume the changed
+implementation, code-review, and conformance work; never reuse the earlier PASS. Record a stable
+contract revision marker, such as the Technical Contract commit or content digest, with each
+current plan and execution evidence set so resume can distinguish it from superseded history.
+Capture that contract-basis marker when author/fixer work reaches `ready`; lifecycle-only status
+and delivery-evidence writes preserve it through `implementing` and `done`. Any later author/fixer
+change to requirements, traceability, or technical choices replaces the marker and invalidates
+the prior plan/execution evidence.
+
+An interruption must expose either the unchanged `needs-product-decision` artifact or the fully
+rebound `draft`; it must never expose a partial rebind, stale brief, old/null product path, or old
+story kind.
 
 ### V2 resume table
 
@@ -195,14 +330,16 @@ After the validation and terminal rules above, evaluate these checks top-to-bott
 
 | Order | Mechanical artifact state | Resume action |
 |---|---|---|
-| 1 | Product Contract has `status: approved` and its design gate is incomplete | Resume the existing design gate using `design_sensitivity`. |
-| 2 | Approved Product Contract has no Technical Contract | Dispatch `elephant:author-technical-contract` with the configured Technical Contract template, rendered output path, approved product, and any completed design handoff. |
-| 3 | Engineering-only triage returned no Product Contract and no Technical Contract exists | Dispatch `elephant:author-technical-contract` with the configured Technical Contract template, rendered output path, `product_contract: null`, and behavior-preservation evidence. |
-| 4 | Technical Contract has `status: needs-product-decision` and references the active approved Product Contract | Run the persisted decision-return flow above. |
-| 5 | Technical Contract has `status: needs-product-decision` and its referenced predecessor is superseded by the active approved Product Contract | Dispatch the technical author/fixer to rebind and reset it; do not re-ask the owner. |
-| 6 | Technical Contract has `status: draft` or `status: review` | Resume its author/fixer and applicable read-only reviewer loop from the latest artifact. |
-| 7 | Technical Contract has `status: ready` and no plan exists | Dispatch `superpowers:writing-plans`. |
-| 8 | Plan, branch, PR/merge, or closeout state exists | Continue with the shared downstream detector. |
+| 1 | Technical Contract has `status: needs-product-decision` and no approved Product Contract has persisted its answer | Allocate/reuse the deterministic Product output and run the applicable decision-return shaping flow. |
+| 2 | Technical Contract has `status: needs-product-decision` and an active approved Product Contract has persisted the answer, either as the first Product Contract or as a successor | Dispatch the technical author/fixer for the atomic reclassification/rebind/reset; do not re-ask the owner. |
+| 3 | Product Contract has `status: approved` and its design gate is incomplete | Resume the existing design gate using `design_sensitivity`. |
+| 4 | Approved Product Contract has no Technical Contract | Dispatch `elephant:author-technical-contract` with the configured Technical Contract template, rendered output path, approved product, and any completed design handoff. |
+| 5 | Engineering-only triage returned no Product Contract and no Technical Contract exists | Dispatch `elephant:author-technical-contract` with the configured Technical Contract template, rendered output path, `product_contract: null`, and behavior-preservation evidence. |
+| 6 | Technical Contract has `status: draft` | Resume its author/fixer and applicable read-only reviewer loop from the latest artifact. |
+| 7 | Technical Contract has `status: ready` and no plan bound to the latest contract revision exists | Dispatch `superpowers:writing-plans` to create or revise that current plan. |
+| 8 | Technical Contract has `status: ready` with a current compatible plan but implementation has not started for this revision | Change it to `implementing` and enter shared execution. |
+| 9 | Technical Contract has `status: implementing` | Resume implementation, code review, post-implementation conformance, integration, or closeout at the first missing evidence. |
+| 10 | Technical Contract has `status: done` | Verify roadmap/closeout state and report or resume only the missing closeout document step. |
 
 If no v2 artifact exists:
 
@@ -278,21 +415,27 @@ Use this detector only when no v2 artifact exists for the ID, or when a v2 Produ
 explicitly names the legacy artifact in `supersedes` and therefore makes the legacy file
 historical. In the latter case, continue through the v2 detector; never resume both formats.
 
-Parse `status_flow` as an ordered sequence before checking presence. It must contain at least two
-distinct values: the first status is authoring-incomplete; the second status is the refined/ready state
-that unlocks design or planning. Later values retain their configured
-execution/closeout meanings. If a mixed spec's status is absent or not in `status_flow`, STOP and
-report the path and value; do not infer readiness.
+Render the preserved legacy `filename_rule` into the discovery glob by substituting the exact
+requested ID and a wildcard for `[slug]`. It must contain exactly one `[ID]` and exactly one
+`[slug]`; never replace it with `<ID>-*.md`.
+
+Parse `status_flow` as four distinct values before checking phase. Their positional roles are
+authoring-incomplete, ready, implementing, and done. All status reads and writes use those values,
+including a custom flow such as `Seed → Reviewed → Building → Complete`. If a mixed spec's status
+is absent or not in `status_flow`, STOP and report the path and value; do not infer readiness or
+translate it to bundled labels.
 
 For an active legacy story, evaluate top-to-bottom:
 
 | Order | Mechanical check | Resume action |
 |---|---|---|
-| 1 | no mixed spec at `<spec_dir>/<ID>-*.md` | Start the preserved authoring flow and write the first configured status. |
-| 2 | mixed spec is at a status before the second configured value | Detect that state and resume legacy authoring from the existing mixed spec; do not create a replacement or rerun settled questions. |
+| 1 | no mixed spec matches the rendered legacy filename glob | Start the preserved authoring flow at the first configured value. |
+| 2 | mixed spec is at the first configured value | Resume legacy authoring from the existing mixed spec; do not create a replacement or rerun settled questions. |
 | 3 | mixed spec is at the second configured value and has an incomplete UI design gate | Resume the legacy design gate. |
 | 4 | mixed spec is at the second configured value and has no plan | Dispatch `superpowers:writing-plans`. |
-| 5 | mixed spec is at a later configured value, or its plan exists | Continue with the shared downstream detector. |
+| 5 | mixed spec is at the second configured value with a plan | Before execution, write the third configured value and enter the shared downstream detector. |
+| 6 | mixed spec is at the third configured value | Resume execution, code review, integration, or closeout from evidence. |
+| 7 | mixed spec is at the fourth configured value | Verify roadmap/closeout evidence and report done or resume only the missing documentation step. |
 
 The preserved legacy authoring flow is:
 
@@ -304,18 +447,18 @@ The preserved legacy authoring flow is:
 3. Dispatch `superpowers:brainstorming`.
 4. When the profile's field-naming prerequisite applies, read `decision_ref`, agree names with the
    user, and update `field_contract_location` before writing the mixed spec.
-5. Write the configured mixed spec using `slice-template.md`, `filename_rule`, and `status_flow`.
-   Keep the first configured status while authoring is incomplete. Advance to the second
-   configured refined/ready status only after the brainstorm decisions, applicable field naming,
-   and required template sections are complete. Then continue without a separate spec-review
-   stop.
+5. Write the configured mixed spec using the selected resolved `spec_template`, rendered
+   `filename_rule`, and configured `status_flow`. Keep the first configured status while
+   authoring is incomplete. Advance to the second configured refined/ready status only after the
+   brainstorm decisions, applicable field naming, and required template sections are complete.
+   Then continue without a separate spec-review stop.
 
 The legacy design gate keeps its prior semantics:
 
 - disabled gates always skip;
 - `ui_detection` reads the mixed spec's §6 Design Brief sensitivity, where non-Low enters the
   gate and Low skips it; a missing sensitivity fails safe and asks the user;
-- commit and push the `Refined` mixed spec to main before waiting;
+- commit and push the mixed spec at the second configured ready value to main before waiting;
 - keep the same `manual` and `claude-design` provider behavior, `design_local_dir`,
   `handoff_file`, DesignSync mapping, human `ready_signal`, and unsupported-provider stop;
 - continue only after the non-empty directory, handoff, and human signal are all present;
@@ -327,18 +470,20 @@ After the selected contract path reaches planning, preserve the existing checks 
 
 | Row → resume at | Mechanical check |
 |---|---|
-| plan missing → plan | glob `<plan_dir>/<ID>-*.md`; any match counts, including split plans such as `<ID>-T8-*.md` |
+| plan missing → plan | legacy: glob `<plan_dir>/<ID>-*.md`, where any match counts, including split plans such as `<ID>-T8-*.md`; dual-v2: require a plan recorded against the latest Technical Contract revision |
 | no branch/PR → execute | inspect `git worktree list` and `git branch --list "*<ID>*"` per `branch_pattern`; for GitHub-PR integration also inspect `gh pr list --search "<ID>"` |
-| PR open, not merged → finish | for GitHub PR use `gh pr view --json state`; non-GitHub integrations use their configured merged check |
+| implementation/code review incomplete → execute | resume the implementation plan and configured code-review cadence from its recorded evidence |
+| dual-v2 implementation complete, conformance PASS missing → conformance | run the canonical post-implementation conformance gate and its fixer/recheck loop |
+| PR open, applicable conformance PASS recorded, not merged → finish | for GitHub PR use `gh pr view --json state`; non-GitHub integrations use their configured merged check |
 | merged, roadmap not Done → closeout | merged per `finish.integration`, but the roadmap row lacks the configured Done marker |
 | merged and roadmap Done | report fully done |
 
 ### Plan
 
-Dispatch `superpowers:writing-plans` and write to `plan_dir`. In dual mode the plan consumes the
-ready Technical Contract, immutable approved Product Contract when present, and completed design
-handoff when applicable. In legacy mode it consumes the mixed spec and design handoff when
-applicable. There is no additional plan-review stop.
+Dispatch `superpowers:writing-plans` and write to `plan_dir`. In the selected dual-v2 branch the
+plan consumes the ready Technical Contract, immutable approved Product Contract when present, and
+completed design handoff when applicable. In the selected legacy branch it consumes the mixed
+spec and design handoff when applicable. There is no additional plan-review stop.
 
 ### Execute
 
@@ -346,28 +491,53 @@ Dispatch `superpowers:using-git-worktrees`, then the profile's available
 `superpowers:subagent-driven-development` or `superpowers:executing-plans` path. Inject isolation,
 review cadence, `execution.gotchas`, and language rules from the profile.
 
-- Legacy mode advances the mixed spec to `Implementing`; its §7 contract is frozen unless the
-  spec returns to `Refined`.
-- Dual mode leaves product `approved` and technical `ready`. Technical roles and implementation
-  roles may not edit the approved Product Contract.
+- The selected legacy branch must write the third configured value before implementation; its §7 contract is
+  frozen unless the mixed spec returns to the second configured ready value.
+- The selected dual-v2 branch must change `ready` to `implementing` before implementation and
+  record the plan plus current branch/worktree or equivalent execution evidence. Technical and
+  implementation roles may not edit the approved Product Contract.
 - Run `changeset_cmd` during execute commits before opening the PR, not in closeout.
+
+### Post-implementation conformance
+
+For dual-v2 stories, after implementation and configured code review but before integration, run
+the canonical read-only `reviewers/implementation-conformance.md` prompt. The preserved legacy
+branch retains its existing code-review/integration behavior.
+
+- Product-facing stories compare the implementation evidence and diff against both the Product
+  Contract and Technical Contract.
+- Engineering-only stories compare the implementation evidence and diff against the Technical
+  Contract and behavior-preservation boundary.
+
+Use isolated reviewers when available or the identical prompt sequentially. Reviewers report
+findings only. An implementation fixer applies evidence-backed findings to implementation, tests,
+or delivery evidence; then every affected reviewer must recheck the changed evidence. Repeat
+until the Integration gate is PASS.
+
+There is no routine owner checkpoint. If conformance reveals observable-product ambiguity or a
+required outcome change, the technical author/fixer persists `needs-product-decision` with one
+bounded brief and routes through the same decision-return transition; no implementation role
+answers it. Record the final PASS and recheck evidence in the Technical Contract. Integration is
+blocked until this gate passes.
 
 ### Finish
 
 Dispatch `superpowers:finishing-a-development-branch` and follow `finish.integration` unchanged.
 For the default GitHub PR flow: open the PR, wait for every `ci_required_checks` entry to be green,
-auto squash-merge when `auto_merge_on_green` permits it, then clean the worktree and sync main. If
-`gh pr merge` errors from a worktree, verify `gh pr view --json state` before retrying. A
-non-GitHub or trunk-based integration uses its own configured mechanics; do not assume `gh`.
+require the recorded post-implementation conformance PASS for dual-v2 stories, auto squash-merge when
+`auto_merge_on_green` permits it, then clean the worktree and sync main. If `gh pr merge` errors
+from a worktree, verify `gh pr view --json state` before retrying. A non-GitHub or trunk-based
+integration uses its own configured mechanics; do not assume `gh`.
 
 ### Closeout docs
 
 Use one closeout commit to set the roadmap story to Done, refresh
-`instruction_refresh_targets`, and run `root_snapshot_check`. In legacy mode also advance the
-mixed spec to `Done` after all acceptance criteria pass. In dual mode keep Product and Technical
-Contract statuses unchanged so their exact v2 vocabulary and approval evidence remain durable.
-Do not edit object-model or field-contract docs here. Use `empty_cmd` when the profile requires a
-changeset for the closeout commit.
+`instruction_refresh_targets`, and run `root_snapshot_check`. In the selected legacy branch also
+advance the mixed spec by writing the fourth configured value after all acceptance criteria pass.
+In the selected dual-v2 branch keep the Product Contract immutable and change `implementing` to
+`done` during closeout only after verification, conformance PASS, and integration evidence are
+recorded. Do not edit object-model or field-contract docs here. Use `empty_cmd` when the profile
+requires a changeset for the closeout commit.
 
 ## Owner checkpoints and escalation
 
@@ -389,8 +559,12 @@ changeset for the closeout commit.
   Product Contract.
 - V2 and legacy artifacts coexist without an exact `supersedes` relationship.
 - A terminal product disposition is being treated as approval.
-- A Technical Contract with `draft`, `review`, or `needs-product-decision` is about to reach
+- A Technical Contract with `draft` or `needs-product-decision` is about to reach
   planning.
+- A persisted `review` status is about to be written; review is an activity while the contract
+  remains `draft`.
+- A dual-v2 integration is about to start without post-implementation conformance PASS and
+  affected reviewer rechecks.
 - A completed artifact phase is about to be repeated instead of resumed mechanically.
 - A path, check name, provider, or convention is being hardcoded instead of read from the profile.
 - A merge is about to proceed while a required CI check is not green.
@@ -402,6 +576,10 @@ changeset for the closeout commit.
   `legacy-mixed`.
 - **Letting profile mode override artifact evidence.** V2 detection runs first; legacy files
   remain resumable when no v2 artifact exists.
+- **Preflighting from profile mode.** Select the active artifact branch and first incomplete phase
+  before requiring capabilities.
+- **Treating a filename suffix as a schema.** Exact v2 discriminator values and complete legacy
+  filename/status evidence classify the artifact.
 - **Inferring ownership by timestamp.** Coexisting formats require explicit `supersedes`.
 - **Adding a new design protocol.** V2 only changes the durable input and handoff mapping; provider
   semantics and the human ready signal stay unchanged.

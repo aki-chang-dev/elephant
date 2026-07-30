@@ -35,6 +35,7 @@ REQUIRED_V2_ASSETS = (
     "author-technical-contract/reviewers/product-conformance.md",
     "author-technical-contract/reviewers/test.md",
     "author-technical-contract/reviewers/technical-adjudicator.md",
+    "ship-story/reviewers/implementation-conformance.md",
 )
 
 
