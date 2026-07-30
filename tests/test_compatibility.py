@@ -37,6 +37,45 @@ class CompatibilityValidatorTests(unittest.TestCase):
         for relative in required:
             self.assertTrue((root / relative).is_file(), relative)
 
+    def test_shape_story_contract(self):
+        skills = ROOT / "plugins/elephant/skills"
+        product_template = (
+            skills / "shape-story/product-contract-template.md"
+        ).read_text()
+        shape_story = (skills / "shape-story/SKILL.md").read_text()
+
+        for phrase in (
+            "schema: elephant.story/v2",
+            "kind: product",
+            "status: shaping",
+            "## 1. User and context",
+            "## 2. Problem and current experience",
+            "## 3. Desired outcome",
+            "## 4. Experience flow",
+            "## 5. States and edge cases",
+            "## 6. Information and copy",
+            "## 7. Product rules and defaults",
+            "## 8. Product acceptance criteria",
+            "## 9. Out of scope",
+            "## 10. Open product questions",
+        ):
+            self.assertIn(phrase, product_template)
+
+        for phrase in (
+            "approved | split | deferred | rejected",
+            "main conversation",
+            "one question at a time",
+            "user, context, and current experience",
+            "entry point, primary flow, branches, exit, and recovery",
+            "loading, empty, error, disabled, and partial-success states",
+            "labels, hints, placeholders, confirmations, feedback, and error copy",
+            "Before the Product Contract Recap",
+            "reviewers/product-ux-critic.md",
+            "reviewers/copy-critic.md",
+            "Do not ask the owner to reread the written file",
+        ):
+            self.assertIn(phrase, shape_story)
+
     def test_v2_contract_vocabulary_is_wired(self):
         skills = ROOT / "plugins/elephant/skills"
         ship = (skills / "ship-story/SKILL.md").read_text()

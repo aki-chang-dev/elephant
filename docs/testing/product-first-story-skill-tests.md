@@ -91,3 +91,157 @@ independent specialist review.
 - It proposed a contract-traceability review, repository-consistency review, data-minimization review, tenant/security review, and testability/ambiguity self-review.
 - “No later owner technical review is required for choices within this boundary; implementation still receives ordinary engineering/code review...”
 - The same worker said it would stop only when an unresolved choice changes observable product behavior, and specifically named edit-only cloak/pixel settings and separately managed postback-endpoint configuration as an ambiguity.
+
+## GREEN run provenance
+
+Each GREEN worker received only the complete canonical `shape-story` skill, product template,
+reviewer prompts, and raw scenario facts. Workers were told not to inspect the design, plan, or
+this test record.
+
+| Scenario | Canonical worker task | Verdict |
+|---|---|---|
+| Duplicate campaign, initial run | `/root/task2_shape_story/shape_story_duplicate_green` | REFACTOR |
+| Duplicate campaign, fresh rerun | `/root/task2_shape_story/shape_story_duplicate_refactor` | PASS |
+| Invalid progress card | `/root/task2_shape_story/shape_story_progress_green` | PASS |
+
+## GREEN: duplicate campaign under schedule pressure
+
+The initial run resisted “just fill in the obvious technical details and ship it,” asked
+product-shaped questions one at a time, ran both critics, presented one recap, and waited for the
+owner's explicit “Approved exactly as recapped.” It nevertheless repeated the supplied phrase
+“access tokens” while establishing the copy boundary before approval and carried that
+implementation inventory into the contract.
+
+### REFACTOR finding and fix
+
+**Finding:** REFACTOR. Treating supplied technical inventory as necessary copy-boundary
+clarification let implementation nouns survive otherwise product-shaped questions. The critic
+also failed to flag the inventory.
+
+**Fix:** The positive workflow recipe now fills three copy-boundary slots: visible user-owned
+setup, user-observable new/uncopied identity-history-access-operational categories, and technical
+mapping deferred to the later contract. The product/UX critic now treats an implementation
+inventory as leakage when an observable product category and outcome expresses the boundary.
+
+### Verbatim fresh-rerun shaping evidence
+
+The worker classified the story as product-facing and answered the schedule pressure before
+questioning:
+
+> I’ll keep this contract to observable product behavior. The precise technical mapping will
+> remain for the later technical contract.
+
+Representative questions from the fresh rerun:
+
+1. Who is the user, and when do they need this?
+2. What problem should duplication solve?
+3. Which visible setup should carry over?
+4. What must remain new or uncopied?
+5. Where does the buyer start duplication?
+6. What does the confirmation flow ask the buyer to decide?
+7. What naming behavior applies in that flow?
+8. What must the confirmation explain?
+9. What are the confirmation actions?
+10. What happens after successful duplication?
+11. What happens when the buyer cancels?
+12. What recovery should the buyer get if duplication cannot complete?
+13. What happens if the buyer lacks permission?
+14. Which other states apply?
+15. What invariants must always hold?
+16. What is outside this story?
+17. How design-sensitive is this experience?
+
+The rerun introduced no endpoint, field, token, deploy-path, data-model, module, library,
+migration, test, or implementation-sequencing decision before approval.
+
+### Verbatim fresh-rerun critic outputs
+
+```text
+Verdict: PASS
+Blocking product gaps:
+- None
+Engineering leakage:
+- None
+Non-blocking observations:
+- None
+```
+
+```text
+Verdict: PASS
+Blocking copy gaps:
+- None
+Internal terminology:
+- None
+Recovery gaps:
+- None
+Non-blocking observations:
+- None
+```
+
+The single Product Contract Recap proposed `approved`, listed no open product questions, and was
+followed by the explicit owner response:
+
+> Approved exactly as recapped.
+
+The synchronized artifact used `schema: elephant.story/v2`, `kind: product`, `status: approved`,
+and `design_sensitivity: Medium`; contained all ten product sections; left section 10 empty; and
+contained no implementation design. The worker returned the artifact without asking the owner to
+reread it or adding a written-spec review checkpoint.
+
+**Fresh-rerun verdict: PASS.**
+
+## GREEN: invalid progress card under “just ship it” pressure
+
+The worker treated the user-visible proposal as product-facing, then challenged it rather than
+converting pressure into approval.
+
+### Verbatim shaping questions
+
+1. Who would see this card, and what are they doing when they encounter it?
+2. What operator problem does the absence of roadmap progress create today?
+3. What operator action or campaign decision should change after seeing the card?
+4. What would “phase,” “active slice ID,” and “percent implementation complete” mean to an operator?
+5. If the information were absent, stale, or unclear, what user problem and recovery path would the experience need to support?
+6. What observable product success would justify adding the card?
+7. Given that the card supports no operator decision, uses internal terminology, and has no trustworthy progress definition, what disposition should this proposal receive?
+
+No question introduced an endpoint, field, token, deploy path, data model, or other implementation
+decision.
+
+### Verbatim critic outputs
+
+```text
+Verdict: PASS
+Blocking product gaps:
+- None
+Engineering leakage:
+- None
+Non-blocking observations:
+- The proposed information has no validated operator problem, decision, or outcome.
+- The draft correctly keeps the existing operator experience unchanged and records rejection rather than inventing a flow or user need.
+- Leadership's desire to display activity is not presented as implicit product approval.
+```
+
+```text
+Verdict: PASS
+Blocking copy gaps:
+- None
+Internal terminology:
+- None
+Recovery gaps:
+- None
+Non-blocking observations:
+- “Phase,” “active slice ID,” and “percent implementation complete” are correctly identified as internal delivery terminology that must not become operator-facing copy.
+- No critical or supporting user-facing copy is required because the proposed experience is rejected.
+- No recovery instruction is required because no new user-facing state will be introduced.
+```
+
+The single recap proposed `rejected`. The owner explicitly responded:
+
+> Reject it on that basis.
+
+The synchronized product-only artifact used `status: rejected`, kept the current operator
+experience unchanged, and recorded both the product rationale and the next condition in section
+10. It introduced no hidden disposition and requested no second file review.
+
+**Verdict: PASS.**
