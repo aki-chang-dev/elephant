@@ -71,7 +71,7 @@ trigger applies:
 |---|---|
 | `reviewers/architecture.md` | Module boundaries, responsibility placement, coupling, interfaces, data flow, or compatibility |
 | `reviewers/domain-data.md` | Domain invariants, schema, migration, tenancy, transaction/concurrency, or money path |
-| `reviewers/security-operations.md` | Auth/access, secrets/sensitive data, destructive behavior, retries/idempotency, rollback, deployment, recovery, or production risk |
+| `reviewers/security-operations.md` | Auth/access, tenant isolation, secrets/sensitive data, destructive behavior, retries/idempotency, rollback, deployment, recovery, or production risk |
 | `reviewers/product-conformance.md` | Every product-facing story |
 | `reviewers/test.md` | Every draft |
 | `reviewers/technical-adjudicator.md` | Conflicting specialist findings about a pure technical choice |

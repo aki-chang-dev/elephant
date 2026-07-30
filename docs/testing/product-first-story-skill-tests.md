@@ -303,7 +303,10 @@ spans several buyer-visible setting groups, two distinct observable copied-draft
 question asking which groups copy or reset, and the blocked aggregate/interface/verification
 impact.
 
-All selected canonical roles independently agreed:
+The five selected roles were architecture, domain/data, security/operations,
+product-conformance, and test.
+
+Product-conformance:
 
 ```text
 Verdict: NEEDS_PRODUCT_DECISION
