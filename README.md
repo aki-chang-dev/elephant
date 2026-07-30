@@ -2,7 +2,7 @@
 
 A [Superpowers](https://github.com/obra/superpowers)-based delivery harness for **Claude Code and Codex**. Elephant turns a raw product idea into a spec foundation and roadmap, then delivers one vertical story at a time using the repository's own conventions and gates.
 
-Elephant is a thin orchestration layer. Superpowers supplies atomic workflows such as brainstorming, writing plans, worktree isolation, implementation, review, and branch completion. Elephant composes them into a resumable product-delivery pipeline.
+Elephant is a thin orchestration layer. Superpowers supplies atomic workflows such as writing plans, worktree isolation, implementation, review, and branch completion. Elephant composes them into a resumable product-delivery pipeline.
 
 ## Workflow
 
@@ -13,8 +13,8 @@ kickoff
 └── init-profile          repo → .agents/elephant/delivery-profile.md
 
 ship-story STORY-ID
-└── research → brainstorm → slice spec → optional design gate
-    → plan → isolated implementation → integration → docs closeout
+└── story seed → shape-story → Product Contract → existing design gate?
+    → Technical Contract + specialist review → writing-plans → delivery
 ```
 
 | Skill | Role |
@@ -23,7 +23,9 @@ ship-story STORY-ID
 | `elephant:author-product-spec` | Define product scope, object model, glossary, and decisions. |
 | `elephant:decompose-roadmap` | Build a vertical, demoable, dependency-aware delivery sequence. |
 | `elephant:init-profile` | Discover repository conventions and write the neutral delivery profile. |
-| `elephant:ship-story` | Deliver or resume one roadmap story end-to-end. |
+| `elephant:shape-story` | Shape a product-facing story into an approved Product Contract. |
+| `elephant:author-technical-contract` | Create and independently review a Technical Contract before planning. |
+| `elephant:ship-story` | Deliver or resume one roadmap story through the dual-contract or legacy path. |
 
 Every project-specific path, gate, check, integration rule, and language convention lives in:
 
@@ -32,6 +34,40 @@ Every project-specific path, gate, check, integration rule, and language convent
 ```
 
 This is the only supported profile path in both hosts.
+
+## Story Delivery
+
+New profiles use the dual-contract workflow:
+
+```text
+story seed → shape-story → product contract → existing design gate?
+→ technical contract + specialist review → writing-plans → delivery
+```
+
+`elephant:ship-story` first triages a story. Product-facing stories run
+`elephant:shape-story` in the main conversation and produce an approved Product Contract before
+any technical design. Engineering-only stories may bypass shaping and use
+`product_contract: null` only when user and business outcomes are demonstrably unchanged.
+
+The product owner approves one Product Contract Recap. On the normal path, product owner
+involvement ends after that recap: technical and code review is agent-owned, and the owner is not
+asked to reread the saved contract or approve routine technical choices. Elephant returns to the
+owner only for a required Product Contract change, a user-visible compromise forced by a technical
+constraint, materially different product outcomes, a scope split, contradictory or incomplete
+product requirements, or destructive, money-sensitive, security-sensitive, or external production
+authority beyond the original request. Pure technical disagreements go to the technical
+adjudicator instead.
+
+The existing design gate is unchanged in behavior. For approved product-facing contracts it reads
+the contract's design sensitivity and still uses the configured provider, `design-handoff.md`, and
+human ready signal before technical authoring continues.
+
+Existing profiles are not silently migrated. A profile missing `story_contracts` remains
+`legacy-mixed` until an explicit refresh proposes and the owner accepts dual mode. Existing mixed
+specs remain resumable through the preserved generic brainstorming path; `superpowers:brainstorming`
+is never used by the dual-contract v2 path. When v2 and legacy artifacts coexist, the Product
+Contract must explicitly record the legacy artifact in `supersedes` or Elephant stops for a
+decision.
 
 ## Prerequisite
 
@@ -117,7 +153,8 @@ uv run --with pyyaml python \
   plugins/elephant
 ```
 
-The repeatable cross-host cases live in `docs/testing/dual-runtime-smoke-tests.md`.
+The repeatable host/runtime cases live in `docs/testing/dual-runtime-smoke-tests.md`. Product-first
+story phase cases live in `docs/testing/product-first-story-smoke-tests.md`.
 
 ## License
 

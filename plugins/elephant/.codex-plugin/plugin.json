@@ -1,7 +1,7 @@
 {
   "name": "elephant",
-  "version": "0.2.0",
-  "description": "A Superpowers-based delivery harness for taking products from idea to shipped, one roadmap story at a time.",
+  "version": "0.3.0",
+  "description": "A Superpowers-based delivery harness for product-first, dual-contract story delivery from idea to shipped work.",
   "skills": "./skills/",
   "author": {
     "name": "Aki Chang",
@@ -23,7 +23,7 @@
   "interface": {
     "displayName": "Elephant",
     "shortDescription": "Take products from idea to shipped stories.",
-    "longDescription": "A Claude Code and Codex delivery workflow built on Superpowers: define the product, decompose a roadmap, capture repository conventions, and ship one story at a time.",
+    "longDescription": "A Claude Code and Codex delivery workflow built on Superpowers: define the product, decompose a roadmap, shape each new story into a Product Contract, independently review its Technical Contract, and ship it.",
     "developerName": "Aki Chang",
     "category": "Productivity",
     "capabilities": [
@@ -34,7 +34,7 @@
     "defaultPrompt": [
       "Kick off this product with Elephant.",
       "Create an Elephant delivery profile for this repository.",
-      "Ship the next roadmap story with Elephant."
+      "Shape and ship the next roadmap story with Elephant."
     ],
     "brandColor": "#59636E"
   }

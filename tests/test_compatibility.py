@@ -337,6 +337,36 @@ class CompatibilityValidatorTests(unittest.TestCase):
         ):
             self.assertIn(case, smoke)
 
+    def test_product_first_documentation(self):
+        readme = (ROOT / "README.md").read_text()
+        smoke_path = ROOT / "docs/testing/product-first-story-smoke-tests.md"
+        self.assertTrue(smoke_path.is_file(), smoke_path)
+        smoke = smoke_path.read_text().lower()
+
+        for phrase in (
+            "shape-story",
+            "author-technical-contract",
+            "dual-contract",
+            "legacy-mixed",
+            "Product Contract Recap",
+            "technical and code review is agent-owned",
+        ):
+            self.assertIn(phrase, readme)
+
+        for case in (
+            "product-facing triage",
+            "engineering-only bypass",
+            "approved, split, deferred, and rejected",
+            "interrupted shaping resume",
+            "existing design-gate compatibility",
+            "technical author plus reviewer/fix/re-review",
+            "needs-product-decision escalation",
+            "sequential fallback without workers",
+            "legacy mixed-spec resume",
+            "v2/legacy collision without `supersedes`",
+        ):
+            self.assertIn(case, smoke)
+
     def test_orchestration_uses_runtime_neutral_capabilities(self):
         skills_root = ROOT / "plugins/elephant/skills"
         kickoff = (skills_root / "kickoff/SKILL.md").read_text()
@@ -404,6 +434,7 @@ class CompatibilityValidatorTests(unittest.TestCase):
         self.assertEqual("elephant", codex_manifest["name"])
         self.assertEqual(claude_manifest["name"], codex_manifest["name"])
         self.assertEqual(claude_manifest["version"], codex_manifest["version"])
+        self.assertEqual("0.3.0", codex_manifest["version"])
         self.assertEqual("./skills/", codex_manifest["skills"])
 
         marketplace = json.loads(
