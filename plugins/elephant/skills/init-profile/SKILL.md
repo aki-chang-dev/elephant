@@ -11,6 +11,10 @@ Produce (or refresh) a repo's `.agents/elephant/delivery-profile.md` — the con
 
 **Core principle: the profile is DISCOVERED, not interrogated.** Most fields already exist in repository files, persistent instructions, memory, and notes — mine them and draft. Ask the user ONLY for fields that have no repo signal and no safe default. Never make the user re-state what's already written down.
 
+New profiles default to dual Product and Technical Contracts. Existing profiles retain their
+explicit mode, and an existing profile with no `story_contracts.mode` remains mechanically
+`legacy-mixed` until the user approves a proposed migration.
+
 ## Prerequisite
 
 Read the field contract first: the `delivery-profile-schema.md` reference doc bundled with this plugin's `ship-story` skill — it lists every section a profile must map to. Also read `../../references/runtime-compatibility.md` for host capability rules.
@@ -21,7 +25,10 @@ Read the field contract first: the `delivery-profile-schema.md` reference doc bu
 2. **Draft.** Fill every field you can. Tag each value with its provenance: `[detected]` / `[mined:<file>]` / `[default]` / `[asked]` / `[TBD]`.
 3. **Ask only unknowables.** For fields with no signal AND no safe schema default, ask the user — batched, once. Do NOT ask fields you detected or that have a sensible default.
 4. **Confirm.** Present the full drafted profile WITH the provenance tags so the user can scan what was detected vs. guessed vs. asked. User edits/approves. **🛑 This is the only checkpoint.**
-5. **Write.** Save `.agents/elephant/delivery-profile.md`. Validate: every schema section is present; applicable-but-unresolved fields are written as literal `TBD` (see TBD vs. omit below) so ship-story's TBD-stops can catch them.
+5. **Write.** Save `.agents/elephant/delivery-profile.md`. Validate every section applicable to
+   its effective mode. An existing implicit-legacy profile may intentionally keep
+   `story_contracts` absent when migration was not approved. Applicable-but-unresolved fields are
+   literal `TBD` (see TBD vs. omit below) so ship-story's TBD-stops can catch them.
 
 ## Discovery source → field mapping
 
@@ -34,6 +41,7 @@ Every right-column entry is a real schema field. If a detection has no schema ho
 | `.github/workflows/*.yml` | `finish.ci_required_checks` (see recipe) |
 | `git` / `gh` (default branch, squash setting) | `finish.integration`, `finish.branch_pattern` (see recipe) |
 | `docs/**` (Elephant layout `docs/elephant/<product>/{spec/,roadmap.md,specs/,plans/}` if present; else any `*roadmap*` files, `specs/`+`plans/` dirs, spec-system dir) | `roadmap_path`, `spec_dir`, `plan_dir`, `global_specs` (see disambiguation) |
+| existing `.agents/elephant/delivery-profile.md` | `story_contracts` and every explicit path/template/mode value |
 | **`AGENTS.md` + `CLAUDE.md` (root + nested)** ★ | `finish.*`; language gates; design gate/field-naming enabled+refs; `status_flow`; `execution.gotchas`; `closeout.instruction_refresh_targets` |
 | **memory + `docs/notes`** ★ | `execution.gotchas` |
 
@@ -41,7 +49,16 @@ Every right-column entry is a real schema field. If a detection has no schema ho
 
 ### Extraction recipes (the ★ and ambiguous rows)
 
-- **`status_flow`**: grep global-specs / spec-template for an arrow-joined status list (`A → B → C`). Absent → schema example default, tag `[default]`.
+- **`story_contracts` mode:** if no delivery-profile file exists, draft `mode: dual` with bundled
+  `shape-story/product-contract-template.md` and
+  `author-technical-contract/technical-contract-template.md`, plus
+  `[ID]-[slug]-product.md` and `[ID]-[slug]-technical.md`. If a profile exists, preserve an
+  explicit `dual` or `legacy-mixed`. A missing section or missing mode means the existing profile
+  behaves as `legacy-mixed`; do not fill that mode as though it were an ordinary missing field.
+- **Legacy `status_flow`:** for an explicit or implicit `legacy-mixed` profile, grep global specs
+  or its mixed-spec template for an arrow-joined status list (`A → B → C`). If absent, use the
+  schema's legacy example default and tag `[default]`. Dual v2 status vocabularies are fixed by
+  the contract templates, not discovered from repository prose.
 - **Instruction conflicts**: when `AGENTS.md` and `CLAUDE.md` supply different values for the same schema field, keep both candidates and their source paths in the confirmation draft. Apply only the user's resolved value.
 - **`finish.ci_required_checks`**: a CI job becomes *required* only if persistent instructions or docs name it as a merge gate. If none is named, list all workflow job names and ask the user which gate merge (don't assume all of them).
 - **`finish.integration` / `branch_pattern`**: read persistent instructions' finish/merge sections first (e.g. "PR + squash + linear main"). If `gh` API is denied (free repo / 403), fall back to instruction prose + `git log` branch names; if still unclear, ask. `branch_pattern` = a naming regularity seen in ≥3 recent merged branches, else ask.
@@ -73,6 +90,12 @@ Fields that usually have no repo signal — ask, or take the schema default if o
 If `.agents/elephant/delivery-profile.md` already exists, diff your fresh draft against it:
 
 - **Fill only literally-missing fields.** A value already present is never overwritten automatically.
+- **Mode is the compatibility exception:** a missing `story_contracts` section or missing
+  `story_contracts.mode` in an existing profile is not auto-filled. Interpret it as
+  `legacy-mixed`. Show migration to `mode: dual` as a **proposed** confirmation change, and apply
+  it only when the user explicitly approves.
+- **Preserve artifact homes:** migration changes how future story contracts are authored. It must
+  never auto-rewrite existing artifact paths, templates, filenames, or mixed specs.
 - **"Stale" = narrow:** a value is stale-refreshable ONLY if it is provenance-tagged `[detected]` AND its repo source has changed. Refresh those silently.
 - **Untagged existing profile (e.g. a hand-authored one):** treat EVERY value as user-authored. Fill only missing fields; never overwrite. (Hand-filled values like a real `design_project_ref` must survive.)
 - **Detected-vs-existing disagreement:** never auto-apply. Surface it at confirm as a *proposed* change and let the user decide.
@@ -84,9 +107,9 @@ Sparse repo (thin or no persistent instructions). Note: when run as kickoff's Ph
 
 | Field group | Greenfield disposition |
 |---|---|
-| `global_specs`, `roadmap_path`, `spec_dir`, `plan_dir` | from Phase A/B if in pipeline. Else default to Elephant's layout under `docs/elephant/<product>/`: `spec/` · `roadmap.md` · `specs/` · `plans/`. **Reuse the `<product>` from the existing spec/roadmap dir if one is present (Phase A already keyed the tree) — only ask the user for `<product>` when standalone on a bare repo with no spec dir.** `story_id_pattern` derived from the roadmap's ID legend; `spec_template` defaults to the `slice-template.md` bundled in the `ship-story` skill (the dual-input Code↔Design contract) |
-| `filename_rule` | default `[ID]-[slug].md` |
-| `status_flow` | schema example default |
+| `global_specs`, `roadmap_path`, `spec_dir`, `plan_dir` | from Phase A/B if in pipeline. Else default to Elephant's layout under `docs/elephant/<product>/`: `spec/` · `roadmap.md` · `specs/` · `plans/`. **Reuse the `<product>` from the existing spec/roadmap dir if one is present (Phase A already keyed the tree) — only ask the user for `<product>` when standalone on a bare repo with no spec dir.** `story_id_pattern` is derived from the roadmap's ID legend. |
+| `story_contracts` | default `mode: dual`; `product_template: shape-story/product-contract-template.md`; `technical_template: author-technical-contract/technical-contract-template.md`; product and technical filename rules `[ID]-[slug]-product.md` and `[ID]-[slug]-technical.md` |
+| legacy `spec_template`, `filename_rule`, `status_flow` | omit for a new dual profile. Preserve them unchanged on an existing `legacy-mixed` profile; bundled legacy defaults remain `slice-template.md`, `[ID]-[slug].md`, and the schema example status flow |
 | `field-naming`, `design gate` | `enabled: false` unless a signal exists |
 | `research`, `execution.default_mode/isolation`, `auto_merge_on_green` | schema defaults |
 | `execution.gotchas` | empty list (nothing to mine on a bare repo) |
@@ -100,6 +123,10 @@ Sparse repo (thin or no persistent instructions). Note: when run as kickoff's Ph
 
 - Asking the user a field you could have detected or mined → re-check the sources first.
 - Overwriting an existing profile instead of reconciling → diff and preserve user values.
+- Treating a missing mode in an existing profile as the new default → it is `legacy-mixed`;
+  propose migration at confirmation instead.
+- Rewriting existing artifact paths or mixed specs while enabling dual mode → preserve them; new
+  mode does not migrate historical artifacts.
 - Omitting an unresolved field instead of writing `TBD` → ship-story can't catch a missing field; write `TBD`.
 - Inventing a value for a gate (e.g. a fake projectId) → write `TBD` and let ship-story stop later.
 - Generating a roadmap or spec system → out of scope; that's kickoff Phase A/B.

@@ -116,16 +116,76 @@ class CompatibilityValidatorTests(unittest.TestCase):
         init = (skills / "init-profile/SKILL.md").read_text()
 
         for phrase in (
+            "mode: dual",
             "elephant:shape-story",
             "elephant:author-technical-contract",
+            "superpowers:writing-plans",
             "elephant.story/v2",
             "legacy-mixed",
             "needs-product-decision",
+            "shaping | approved | split | deferred | rejected",
+            "draft | review | ready | needs-product-decision",
         ):
             self.assertIn(phrase, ship)
-        self.assertIn("story_contracts", profile)
-        self.assertIn("mode: dual", profile)
-        self.assertIn("legacy-mixed", init)
+
+        for phrase in (
+            "story_contracts",
+            "mode: dual",
+            "product_template",
+            "technical_template",
+            "shape-story/product-contract-template.md",
+            "author-technical-contract/technical-contract-template.md",
+            "legacy-mixed",
+        ):
+            self.assertIn(phrase, profile)
+
+        for phrase in (
+            "mode: dual",
+            "legacy-mixed",
+            "proposed",
+            "never auto-rewrite",
+        ):
+            self.assertIn(phrase, init)
+
+    def test_dual_and_legacy_resume_contract(self):
+        ship = (
+            ROOT / "plugins/elephant/skills/ship-story/SKILL.md"
+        ).read_text()
+        runtime = (
+            ROOT / "plugins/elephant/references/runtime-compatibility.md"
+        ).read_text()
+
+        self.assertIn("## Dual-contract v2 phase detection", ship)
+        self.assertIn("## Legacy-mixed phase detection", ship)
+        v2_start = ship.index("## Dual-contract v2 phase detection")
+        legacy_start = ship.index("## Legacy-mixed phase detection")
+        self.assertLess(v2_start, legacy_start)
+
+        dual_section = ship[v2_start:legacy_start]
+        for phrase in (
+            "<ID>-<slug>-product.md",
+            "<ID>-<slug>-technical.md",
+            "supersedes",
+            "approved",
+            "split",
+            "deferred",
+            "rejected",
+            "design_sensitivity",
+            "needs-product-decision",
+        ):
+            self.assertIn(phrase, dual_section)
+        self.assertNotIn("superpowers:brainstorming", dual_section)
+
+        legacy_section = ship[legacy_start:]
+        self.assertIn("superpowers:brainstorming", legacy_section)
+        self.assertIn("slice-template.md", legacy_section)
+
+        for phrase in (
+            "canonical Elephant reviewer prompts",
+            "optional adapters",
+            "sequential",
+        ):
+            self.assertIn(phrase, runtime)
 
     def test_readme_and_smoke_cases_cover_both_hosts(self):
         readme = (ROOT / "README.md").read_text()

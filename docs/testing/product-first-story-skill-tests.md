@@ -400,3 +400,72 @@ The final state was `ready` with no technical questions. No reviewer edited the 
 migration, tests, or repository. No routine owner review was requested.
 
 **Verdict: PASS.**
+
+## Ship-story GREEN run provenance
+
+Each orchestration worker received only the current canonical `ship-story` skill and one concrete
+profile/artifact snapshot. Workers were read-only and were told neither the implementation brief
+nor the expected phase.
+
+| Scenario | Canonical worker task | Verdict |
+|---|---|---|
+| New dual product-facing story | `/root/task4_ship_story_wiring/task4_pressure_dual_product` | PASS |
+| Dual engineering-only story | `/root/task4_ship_story_wiring/task4_pressure_engineering` | PASS |
+| Interrupted shaping resume | `/root/task4_ship_story_wiring/task4_pressure_shaping_resume` | PASS |
+| `split`, `deferred`, and `rejected` | `/root/task4_ship_story_wiring/task4_pressure_terminal` | PASS |
+| `needs-product-decision` | `/root/task4_ship_story_wiring/task4_pressure_product_decision` | PASS |
+| Manual design-gate resume | `/root/task4_ship_story_wiring/task4_pressure_manual_design` | PASS |
+| Legacy mixed-spec resume | `/root/task4_ship_story_wiring/task4_pressure_legacy_resume` | PASS |
+| V2/legacy collision without `supersedes` | `/root/task4_ship_story_wiring/task4_pressure_collision` | PASS |
+
+## Ship-story GREEN: dual starts and shaping resume
+
+Under schedule pressure, the product-facing worker selected dual triage and
+`elephant:shape-story`. It refused generic brainstorming and endpoint design, kept product
+questions in the main conversation, and retained the single Product Contract Recap decision.
+
+The engineering-only worker also began with triage, then selected
+`elephant:author-technical-contract` with `product_contract: null`; it created no artificial
+Product Contract and did not invoke generic brainstorming.
+
+Given a persisted `status: shaping` Product Contract with two open questions, the resume worker
+continued `elephant:shape-story` from those questions. It neither discarded the artifact nor
+repeated completed shaping work.
+
+**Verdict: PASS.**
+
+## Ship-story GREEN: terminal and escalation states
+
+For `split`, `deferred`, and `rejected`, the terminal-state worker reported each recorded
+disposition, rationale, and next condition, then stopped before design, technical authoring, or
+planning. Available engineering capacity did not turn a terminal disposition into approval.
+
+For `needs-product-decision`, the worker presented only the bounded product-decision brief and
+returned that decision to product shaping. It refused the request for an engineer to select a
+convention, edit the immutable approved Product Contract, or start planning. No generic
+brainstorming ran.
+
+**Verdict: PASS.**
+
+## Ship-story GREEN: design, legacy, and collision compatibility
+
+The manual design-gate worker exercised two snapshots. Design files plus
+`design-handoff.md` without the human ready signal remained stopped at the existing gate. With
+the signal recorded and Product Contract flows/states mapped, it continued to
+`elephant:author-technical-contract` with the approved Product Contract and handoff together. It
+introduced no design-system protocol and did not alter `manual` provider semantics.
+
+An existing profile with no `story_contracts` remained `legacy-mixed`. Its Refined, Low-sensitivity
+mixed spec resumed directly at `superpowers:writing-plans`; the worker did not rerun brainstorming,
+rewrite the profile, or migrate the artifact.
+
+When an approved v2 Product Contract and a legacy mixed spec coexisted with
+`supersedes: null`, the collision worker stopped before either authoring path, listed both files,
+and asked which contract owned the story. It explicitly rejected timestamp/recency as an ownership
+signal.
+
+Across all orchestration scenarios, workers selected the first incomplete phase, duplicated no
+completed work, invoked no generic brainstorming on v2, and added no owner checkpoint after
+approved shaping beyond the existing design gate or bounded product/high-risk escalation.
+
+**Verdict: PASS.**
