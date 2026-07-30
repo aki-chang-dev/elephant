@@ -2,6 +2,10 @@
 
 Run these cases after installing or updating Elephant. Start a new host session before testing. Use a disposable repository or branch for cases that write artifacts.
 
+Product-first story phases, dispositions, review, sequential fallback, and legacy-resume coverage
+are specified in [Product-First Story Smoke Tests](product-first-story-smoke-tests.md). Keep the
+design-provider cases below as the authoritative cross-runtime provider checks.
+
 ## 1. kickoff preflight
 
 **Hosts:** Claude Code, Codex  

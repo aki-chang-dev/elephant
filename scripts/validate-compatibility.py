@@ -22,6 +22,21 @@ FORBIDDEN_CORE_PHRASES = (
     "claudemd_refresh_targets",
 )
 
+REQUIRED_V2_ASSETS = (
+    "shape-story/SKILL.md",
+    "shape-story/product-contract-template.md",
+    "shape-story/reviewers/product-ux-critic.md",
+    "shape-story/reviewers/copy-critic.md",
+    "author-technical-contract/SKILL.md",
+    "author-technical-contract/technical-contract-template.md",
+    "author-technical-contract/reviewers/architecture.md",
+    "author-technical-contract/reviewers/domain-data.md",
+    "author-technical-contract/reviewers/security-operations.md",
+    "author-technical-contract/reviewers/product-conformance.md",
+    "author-technical-contract/reviewers/test.md",
+    "author-technical-contract/reviewers/technical-adjudicator.md",
+)
+
 
 def _load_json(path: Path, label: str, errors: list[str]) -> dict | None:
     if not path.is_file():
@@ -115,12 +130,23 @@ def _validate_skills(root: Path, errors: list[str]) -> None:
                 )
 
 
+def _validate_v2_assets(root: Path, errors: list[str]) -> None:
+    skills_root = root / PLUGIN / "skills"
+    for relative in REQUIRED_V2_ASSETS:
+        path = skills_root / relative
+        if not path.is_file():
+            errors.append(
+                f"missing required v2 asset: {(PLUGIN / 'skills' / relative).as_posix()}"
+            )
+
+
 def validate_repository(root: Path) -> list[str]:
     """Return every compatibility error found below *root*."""
     errors: list[str] = []
     _validate_manifests(root, errors)
     _validate_marketplaces(root, errors)
     _validate_skills(root, errors)
+    _validate_v2_assets(root, errors)
     return errors
 
 

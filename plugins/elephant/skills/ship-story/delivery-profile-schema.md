@@ -1,28 +1,91 @@
 # Delivery-Profile Schema
 
-The contract between `kickoff` (producer) and `ship-story` (consumer). One markdown file per repo at `.agents/elephant/delivery-profile.md`. `ship-story` reads it to decide which gates to insert and where artifacts live. **Zero project-specifics belong in the skills — they all live here.**
+The contract between `elephant:kickoff` or `elephant:init-profile` (producer) and
+`elephant:ship-story` (consumer). Each repository has one runtime-neutral profile at
+`.agents/elephant/delivery-profile.md`. Project-specific paths, gates, and conventions belong in
+that profile, not in shared skills.
 
-**Default layout (Elephant convention).** New projects put all generated docs under `docs/elephant/<product>/`: `spec/` (global_specs) · `roadmap.md` · `specs/` (per-slice specs) · `plans/` (per-slice plans). The profile records the actual paths, so existing projects keep whatever layout they already use — these fields are path-agnostic.
+New projects use the Elephant layout under `docs/elephant/<product>/`: `spec/` for global specs,
+`roadmap.md`, `specs/` for story contracts, and `plans/`. Profiles record actual paths, so
+existing projects keep their current layout.
+
+## Story-contract mode
+
+New profiles include:
+
+```yaml
+story_contracts:
+  mode: dual
+  product_template: shape-story/product-contract-template.md
+  technical_template: author-technical-contract/technical-contract-template.md
+  product_filename_rule: [ID]-[slug]-product.md
+  technical_filename_rule: [ID]-[slug]-technical.md
+```
+
+`product_template` and `technical_template` may be repository paths or the bundled defaults shown
+above. Dual mode writes both artifact kinds under `spec_dir`. Engineering-only stories omit the
+Product Contract and use the technical template with `product_contract: null`.
+
+The two default strings above are compatibility aliases resolved relative to the plugin's
+`skills/` directory. Every other configured template is a repository-relative path resolved from
+the repository root. A configured value must exist; bundled fallback applies only when the field
+is omitted.
+
+Filename rules are basenames under `spec_dir`. Each contains `[ID]` and `[slug]` exactly once,
+ends in `.md`, and contains no absolute path, path separator, `.` segment, or `..` segment.
+`ship-story` renders these configured rules both for candidate detection and author output; it
+does not hardcode the bundled filenames.
+
+### Product Contract `supersedes`
+
+Canonical writers emit a YAML list of strings. Readers accept legacy shapes:
+
+- `null` normalizes to an empty list;
+- a scalar string normalizes to a one-item list;
+- a list of strings is canonical.
+
+Values are exact repository-relative POSIX paths. Comparison is case-sensitive on every host.
+Absolute paths, URIs, backslashes, empty/duplicate values, `.` or `..` segments, repository
+escapes, outside-resolving symlinks, missing files, and another story's artifacts are prohibited.
+When several legacy artifacts collide with one v2 story, the active Product Contract must list
+every colliding legacy path. Partial coverage never selects v2.
+
+### Compatibility table
+
+| Profile state | Effective mode | Required behavior |
+|---|---|---|
+| new or greenfield profile | `dual` | Write `story_contracts` with the two bundled templates and v2 filename rules. |
+| existing profile with explicit `mode: dual` | `dual` | Preserve its explicit templates, paths, and filename rules. |
+| existing profile with explicit `mode: legacy-mixed` | `legacy-mixed` | Preserve its mixed `spec_template`, `filename_rule`, and `status_flow`. |
+| existing profile missing `story_contracts` or `story_contracts.mode` | `legacy-mixed` | Interpret mechanically as legacy; never silently migrate it. |
+| unsupported explicit mode | none | Stop and ask the user to select `dual` or `legacy-mixed`. |
+
+A refresh may propose migration from implicit `legacy-mixed` to `dual` at the normal profile
+confirmation checkpoint. It does not apply the migration without approval and does not move,
+rename, rewrite, or dual-write existing artifacts. Existing mixed specs remain resumable.
 
 ## Sections
 
 | Section | Fields | Notes |
 |---|---|---|
-| **story source** | `roadmap_path`, `story_id_pattern` | roadmap file; ID prefix rule (e.g. `S-/F-/P-/A-`) for locating a story |
-| **artifact paths** | `spec_dir`, `plan_dir`, `filename_rule`, `spec_template`, `status_flow` | where specs/plans land; filename rule (e.g. `[ID]-[slug].md`); `spec_template` = the per-slice spec structure (**default: the `slice-template.md` bundled in the `ship-story` skill** — a dual-input Code↔Design contract; existing projects may point at their own); status vocabulary (e.g. `Draft→Refined→Implementing→Done`) |
-| **global specs** | `global_specs[]` | immutable spec files to load as context during brainstorm/spec |
-| **field-naming prereq** | `enabled`, `decision_ref`, `field_contract_location` | gate before writing fields; naming-convention ref; where field contracts get back-filled |
-| **design gate** | `enabled`, `ui_detection`, `provider`, `design_local_dir`, `handoff_file`, `ready_signal`, optional `claude_design` | whether UI slices wait for design; default detection is spec §6 sensitivity ≠ Low. Supported `provider` values: `manual` (portable default) and `claude-design` (optional DesignSync adapter). `design_local_dir` stores slice artifacts; `handoff_file` defaults to `design-handoff.md`; `ready_signal` defaults to `human`. For `claude-design` only, `claude_design` contains `project_ref` and `slice_to_design_mapping` |
-| **research policy** | `mode`, `depth` | default mode = "auto-assess + announce-then-confirm"; default depth = 3–5 bounded research scopes. Use workers when delegation exists and execute the same scopes sequentially otherwise |
-| **execution** | `default_mode`, `isolation`, `review_cadence`, `gotchas[]` | default subagent-driven; worktree isolation; per-task review cadence; known traps (e.g. install flags, filter command form, lockfile checks) |
-| **finish** | `integration`, `branch_pattern`, `ci_required_checks[]`, `auto_merge_on_green` | PR + squash + delete-branch + linear main; how branches/worktrees are named (used by Step 0 detection, e.g. names contain the slice `<ID>`); required green check names; auto-merge on green (default true) |
-| **versioning** | `changeset_cmd`, `empty_cmd` | changeset command; empty form for docs-only |
-| **closeout docs** | `roadmap_done_flip`, `instruction_refresh_targets`, `root_snapshot_check` | flip roadmap status; which `AGENTS.md` and/or `CLAUDE.md` files to refresh; whether to check root snapshot; single commit |
-| **language / general gates** | `commit_lang`, `dialogue_lang`, `docs_lang`, `context7_first` | commit/PR/changeset language; dialogue language; docs language; context7-before-tech-claims toggle |
+| **story source** | `roadmap_path`, `story_id_pattern` | Roadmap file and ID prefix rule for locating a story. |
+| **story contracts** | `mode`, `product_template`, `technical_template`, `product_filename_rule`, `technical_filename_rule` | Required on new profiles. `mode` is `dual` or `legacy-mixed`. Template and filename fields are injected into dual detection and author dispatch. |
+| **artifact paths** | `spec_dir`, `plan_dir`, optional legacy `filename_rule`, `spec_template`, `status_flow` | `spec_dir` stores story contracts in both modes. The legacy fields preserve the mixed-spec structure; bundled legacy `spec_template` is `slice-template.md`. |
+| **global specs** | `global_specs[]` | Immutable product/spec-system context loaded before authoring. |
+| **field-naming prereq** | `enabled`, `decision_ref`, `field_contract_location` | Legacy mixed-spec gate before writing fields. V2 technical authoring follows repository evidence without modifying the approved Product Contract. |
+| **design gate** | `enabled`, `ui_detection`, `provider`, `design_local_dir`, `handoff_file`, `ready_signal`, optional `claude_design` | Shared gate. Dual `ui_detection` reads Product Contract `design_sensitivity`; legacy reads mixed spec §6. Supported providers remain `manual` and `claude-design`. |
+| **research policy** | `mode`, `depth` | Research scope and depth. Bounded workers may run in parallel; identical sequential fallback is required. |
+| **execution** | `default_mode`, `isolation`, `review_cadence`, `gotchas[]` | Execution skill, worktree isolation, review cadence, and repository-specific traps. |
+| **finish** | `integration`, `branch_pattern`, `ci_required_checks[]`, `auto_merge_on_green` | Integration mechanics, resume detection, required checks, and merge policy. |
+| **versioning** | `changeset_cmd`, `empty_cmd` | Changeset command and docs-only form when applicable. |
+| **closeout docs** | `roadmap_done_flip`, `instruction_refresh_targets`, `root_snapshot_check` | Roadmap completion and durable instruction refresh in one closeout commit. |
+| **language / general gates** | `commit_lang`, `dialogue_lang`, `docs_lang`, `context7_first` | Commit, dialogue, and documentation language plus external-doc policy. |
 
 ## Authoring notes
 
-- A field that doesn't apply to a project is simply omitted (e.g. `design gate: enabled=false` for a headless service repo → ship-story skips Step 2 for every slice).
-- `ship-story` must fail loudly (not guess) when a gate it's about to run has no profile entry.
-- Generate this file by running the `init-profile` skill, or hand-author it from the schema above.
+- Omit sub-fields only when their gate or section is disabled or inapplicable. Use literal `TBD`
+  for an applicable unresolved field so `ship-story` can stop safely.
+- `ship-story` fails loudly when a gate it is about to run has no required profile value.
+- Existing explicit values are user-owned. Refreshing fills missing non-mode fields or proposes
+  changes at confirmation; it never silently overwrites an explicit story-contract mode.
 - Do not read, migrate, or dual-write any runtime-specific legacy profile path.

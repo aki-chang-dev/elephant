@@ -4,14 +4,14 @@
     "name": "Aki Chang",
     "url": "https://github.com/aki-chang-dev"
   },
-  "description": "Elephant — a Superpowers-based delivery harness for Claude Code and Codex, taking products from idea to shipped one story at a time.",
+  "description": "Elephant — a Superpowers-based, product-first delivery harness for Claude Code and Codex, taking Product and Technical Contracts from story seed to shipped work.",
   "plugins": [
     {
       "name": "elephant",
       "source": "./plugins/elephant",
-      "description": "Shared Claude Code and Codex workflows: kickoff a product, then ship one roadmap story end-to-end.",
+      "description": "Shared Claude Code and Codex workflows: kick off a product, then shape and ship one dual-contract roadmap story end-to-end.",
       "category": "workflow",
-      "keywords": ["superpowers", "roadmap", "delivery", "spec-driven", "orchestration"]
+      "keywords": ["superpowers", "roadmap", "delivery", "product-first", "dual-contract", "orchestration"]
     }
   ]
 }
