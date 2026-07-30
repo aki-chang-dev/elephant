@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -17,6 +18,35 @@ def load_validator():
 
 
 class CompatibilityValidatorTests(unittest.TestCase):
+    def test_dual_manifests_and_codex_marketplace_match(self):
+        codex_manifest = json.loads(
+            (ROOT / "plugins/elephant/.codex-plugin/plugin.json").read_text()
+        )
+        claude_manifest = json.loads(
+            (ROOT / "plugins/elephant/.claude-plugin/plugin.json").read_text()
+        )
+        self.assertEqual("elephant", codex_manifest["name"])
+        self.assertEqual(claude_manifest["name"], codex_manifest["name"])
+        self.assertEqual(claude_manifest["version"], codex_manifest["version"])
+        self.assertEqual("./skills/", codex_manifest["skills"])
+
+        marketplace = json.loads(
+            (ROOT / ".agents/plugins/marketplace.json").read_text()
+        )
+        entry = next(item for item in marketplace["plugins"] if item["name"] == "elephant")
+        self.assertEqual(
+            {
+                "name": "elephant",
+                "source": {"source": "local", "path": "./plugins/elephant"},
+                "policy": {
+                    "installation": "AVAILABLE",
+                    "authentication": "ON_INSTALL",
+                },
+                "category": "Productivity",
+            },
+            entry,
+        )
+
     def test_current_repository_passes(self):
         validator = load_validator()
         self.assertEqual([], validator.validate_repository(ROOT))

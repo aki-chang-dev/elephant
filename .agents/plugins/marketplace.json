@@ -1,0 +1,20 @@
+{
+  "name": "elephant",
+  "interface": {
+    "displayName": "Elephant"
+  },
+  "plugins": [
+    {
+      "name": "elephant",
+      "source": {
+        "source": "local",
+        "path": "./plugins/elephant"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "name": "elephant",
+  "version": "0.2.0",
+  "description": "A Superpowers-based delivery harness for taking products from idea to shipped, one roadmap story at a time.",
+  "skills": "./skills/",
+  "author": {
+    "name": "Aki Chang",
+    "email": "its.akichang@gmail.com",
+    "url": "https://github.com/aki-chang-dev"
+  },
+  "homepage": "https://github.com/aki-chang-dev/elephant",
+  "repository": "https://github.com/aki-chang-dev/elephant",
+  "license": "MIT",
+  "keywords": [
+    "superpowers",
+    "workflow",
+    "roadmap",
+    "delivery",
+    "spec-driven",
+    "orchestration",
+    "inception"
+  ],
+  "interface": {
+    "displayName": "Elephant",
+    "shortDescription": "Take products from idea to shipped stories.",
+    "longDescription": "A Claude Code and Codex delivery workflow built on Superpowers: define the product, decompose a roadmap, capture repository conventions, and ship one story at a time.",
+    "developerName": "Aki Chang",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/aki-chang-dev/elephant",
+    "defaultPrompt": [
+      "Kick off this product with Elephant.",
+      "Create an Elephant delivery profile for this repository.",
+      "Ship the next roadmap story with Elephant."
+    ],
+    "brandColor": "#59636E"
+  }
+}
