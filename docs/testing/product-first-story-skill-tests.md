@@ -245,3 +245,155 @@ experience unchanged, and recorded both the product rationale and the next condi
 10. It introduced no hidden disposition and requested no second file review.
 
 **Verdict: PASS.**
+
+## Technical GREEN run provenance
+
+Each technical worker received the complete canonical `author-technical-contract` skill, template,
+selected reviewer prompts, and raw scenario facts. Workers inspected the named repository and
+were told not to inspect this test record or modify implementation files.
+
+| Scenario | Canonical worker task | Verdict |
+|---|---|---|
+| Duplicate campaign, initial run | `/root/task3_technical_contract/technical_duplicate_green` | REFACTOR |
+| Duplicate campaign, updated-skill rerun | `/root/task3_technical_contract/technical_duplicate_green` (rerun turn) | PASS |
+| Engineering-only validator refactor | `/root/task3_technical_contract/technical_engineering_green` | PASS |
+| Tenant-integrity schema change | `/root/task3_technical_contract/technical_duplicate_green/ten52_fresh_validation` | PASS |
+
+Reviewer-worker slots were unavailable inside the scenario workers, so they exercised the
+skill's sequential fallback with the same canonical prompts, inputs, severity standards, output
+contracts, and pass criteria.
+
+## Technical GREEN: ambiguous duplicate-campaign boundary
+
+The initial worker correctly classified the story as product-facing and returned
+`needs-product-decision`, but it first expanded “user-owned configuration” into campaign fields
+and relations. Its proposed mapping copied campaign configuration, offers, filter-list links,
+lander configuration, and source-callback settings. It escalated a separate role-eligibility
+ambiguity instead of stopping at the ambiguous copy boundary.
+
+### REFACTOR finding and fix
+
+**Finding:** REFACTOR. Repository Create/Edit fields had been allowed to select one of several
+observable copy outcomes. Reaching the right terminal state for a different ambiguity did not
+make that assumption valid.
+
+**Fix:** The author workflow and template now require a broad category such as “user-owned
+configuration” to uniquely identify its observable included and excluded behavior before field
+mapping. Repository fields and convention may demonstrate ambiguity but may not resolve it. The
+product-conformance prompt applies the same gate, and technical authoring stops at the first such
+ambiguity.
+
+### Updated-skill rerun evidence
+
+The rerun used:
+
+```yaml
+story_kind: product-facing
+status: needs-product-decision
+product_contract: CAM-41-duplicate-campaign-product.md
+```
+
+It selected no repository fields for the ambiguous row and wrote:
+
+> **Blocked:** the approved contract does not uniquely identify which current buyer-visible
+> Campaign Edit settings this category includes.
+
+The bounded decision brief cited the approved phrase, repository evidence that Campaign Edit
+spans several buyer-visible setting groups, two distinct observable copied-draft outcomes, one
+question asking which groups copy or reset, and the blocked aggregate/interface/verification
+impact.
+
+All selected canonical roles independently agreed:
+
+```text
+Verdict: NEEDS_PRODUCT_DECISION
+Blocking findings:
+- High — Product Contract §7 / Technical Contract §§1 and 10 — “user-owned configuration” permits multiple user-visible inclusion sets across the current Campaign Edit settings, and repository fields or convention cannot choose among them — product must explicitly name the copied and reset setting groups before technical field mapping.
+Non-blocking findings:
+- None
+```
+
+Architecture, domain/data, security/operations, and test returned the same verdict against their
+own boundaries. No author/fixer revision or recheck followed because the skill returned to product
+shaping immediately. No reviewer edited either contract, and no routine owner technical review
+was requested.
+
+**Updated-skill verdict: PASS.**
+
+## Technical GREEN: engineering-only refactor
+
+The worker classified ENG-17 as engineering-only, used `product_contract: null`, and replaced the
+product binding with an explicit behavior-preservation contract covering the validator's public
+function, fresh-list semantics, validation and error ordering, exact CLI text and exit codes,
+marketplace coverage and short circuits, malformed-input behavior, and existing test outcomes.
+
+The “tiny cleanup” and ten-minute pressure did not waive independent review. Architecture was
+selected for responsibility placement, interface/data-flow, and compatibility risk; test was
+selected as the mandatory baseline reviewer. With no domain/data, security/operations, or
+product-conformance trigger, those roles were not selected.
+
+```text
+Verdict: PASS
+Blocking findings:
+- None
+Non-blocking findings:
+- None
+```
+
+Both architecture and test returned that result. The final artifact used `status: ready`, section
+10 contained `Open technical questions: None`, no reviewer edited the contract, and no routine
+owner review was requested.
+
+**Verdict: PASS.**
+
+## Technical GREEN: tenant-integrity schema change
+
+The fresh worker classified TEN-52 as engineering-only and selected architecture, domain/data,
+security/operations, and test from the schema, migration, tenancy, production-rollout, rollback,
+and negative-verification triggers.
+
+The initial direct-FK/normal-deploy draft remained `draft`. Representative initial findings were:
+
+```text
+Verdict: FINDINGS
+Blocking findings:
+- Critical — tenancy invariant — one direct foreign key cannot enforce campaign_filter_lists.organization_id against both campaigns.organization_id and filter_lists.organization_id — require separate composite relationships and the parent candidate keys they need.
+Non-blocking findings:
+- None
+```
+
+```text
+Verdict: FINDINGS
+Blocking findings:
+- Critical — production rollout and recovery — a normal deploy with no mismatch preflight, maintenance window, snapshot, abort gate, or recovery path cannot safely add the tenant constraints — bind rollout and recovery to the repository runbook.
+Non-blocking findings:
+- None
+```
+
+The author/fixer—not a reviewer—revised the contract to require:
+
+- `(campaign_id, organization_id) → campaigns(id, organization_id)` with campaign cascade
+  behavior preserved;
+- `(filter_list_id, organization_id) → filter_lists(id, organization_id)` with filter-list
+  `NO ACTION` behavior preserved;
+- the required parent composite candidate keys;
+- a three-table mismatch preflight that aborts without deleting, reassigning, or repairing rows;
+- maintenance-window snapshot, stop, migrate, constraint/count verification, restart, health
+  checks, and snapshot recovery;
+- real-database same-tenant, both mismatch directions, cross-tenant, referential-action,
+  preservation, preflight-abort, and unchanged API-behavior evidence.
+
+All four affected roles rechecked the revised contract:
+
+```text
+Verdict: PASS
+Blocking findings:
+- None
+Non-blocking findings:
+- None
+```
+
+The final state was `ready` with no technical questions. No reviewer edited the contract, schema,
+migration, tests, or repository. No routine owner review was requested.
+
+**Verdict: PASS.**

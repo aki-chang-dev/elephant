@@ -76,6 +76,39 @@ class CompatibilityValidatorTests(unittest.TestCase):
         ):
             self.assertIn(phrase, shape_story)
 
+    def test_technical_contract(self):
+        template = (
+            ROOT
+            / "plugins/elephant/skills/author-technical-contract"
+            / "technical-contract-template.md"
+        ).read_text()
+
+        for phrase in (
+            "schema: elephant.story/v2",
+            "story: <ID>",
+            "slug: <slug>",
+            "kind: technical",
+            "story_kind: <product-facing | engineering-only>",
+            "status: draft",
+            "product_contract: <path | null>",
+            "## 1. Product-contract binding",
+            "## 2. Current-system context",
+            "## 3. Technical scope",
+            "## 4. Domain and data contracts",
+            "## 5. Interfaces and data flow",
+            "## 6. Product-state implementation",
+            "## 7. Security, privacy, and operational behavior",
+            "## 8. Compatibility and migration",
+            "## 9. Verification strategy",
+            "## 10. Risks and open technical questions",
+            "## 11. Review evidence",
+            "Product contract item",
+            "Technical response",
+            "Verification",
+            "ready | needs-product-decision",
+        ):
+            self.assertIn(phrase, template)
+
     def test_v2_contract_vocabulary_is_wired(self):
         skills = ROOT / "plugins/elephant/skills"
         ship = (skills / "ship-story/SKILL.md").read_text()
