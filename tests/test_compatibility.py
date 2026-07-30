@@ -18,6 +18,33 @@ def load_validator():
 
 
 class CompatibilityValidatorTests(unittest.TestCase):
+    def test_readme_and_smoke_cases_cover_both_hosts(self):
+        readme = (ROOT / "README.md").read_text()
+        smoke = (ROOT / "docs/testing/dual-runtime-smoke-tests.md").read_text()
+
+        for phrase in (
+            "## Claude Code",
+            "## Codex",
+            ".agents/elephant/delivery-profile.md",
+            "Superpowers",
+            "manual",
+            "claude-design",
+            "new session",
+        ):
+            self.assertIn(phrase, readme)
+
+        for case in (
+            "kickoff preflight",
+            "neutral profile output",
+            "instruction conflict",
+            "missing profile",
+            "non-UI bypass",
+            "manual design resume",
+            "claude-design handoff",
+            "sequential research fallback",
+        ):
+            self.assertIn(case, smoke)
+
     def test_orchestration_uses_runtime_neutral_capabilities(self):
         skills_root = ROOT / "plugins/elephant/skills"
         kickoff = (skills_root / "kickoff/SKILL.md").read_text()
