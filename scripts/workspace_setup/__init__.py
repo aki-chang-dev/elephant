@@ -33,6 +33,15 @@ from .apply import (
     SetupApplyError,
     apply_setup,
 )
+from .files import (
+    LocalWrite,
+    WORKSPACE_PATH,
+    apply_local_write,
+    build_local_documents,
+    load_rendered_yaml,
+    plan_local_writes,
+    render_yaml,
+)
 
 __all__ = [
     "ApplyEvidence",
@@ -51,6 +60,7 @@ __all__ = [
     "ExternalDiscovery",
     "ExternalObject",
     "ExternalRecord",
+    "LocalWrite",
     "MutationReceipt",
     "OperationKind",
     "OwnerQuestion",
@@ -62,12 +72,18 @@ __all__ = [
     "TopologyConflict",
     "TopologyProposal",
     "WorkspaceUnit",
+    "WORKSPACE_PATH",
+    "apply_local_write",
     "approve_manifest",
     "apply_setup",
+    "build_local_documents",
     "build_setup_manifest",
     "confirm_topology",
     "discover_repository",
+    "load_rendered_yaml",
     "manifest_fingerprint",
     "normalize_external_discovery",
+    "plan_local_writes",
     "propose_topology",
+    "render_yaml",
 ]

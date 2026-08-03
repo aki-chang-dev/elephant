@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 
@@ -24,6 +26,14 @@ from scripts.workspace_setup import (
     manifest_fingerprint,
 )
 from scripts.workspace_setup.models import SETUP_MANIFEST_SCHEMA
+from scripts.workspace_core import validate_profile, validate_workspace
+from scripts.workspace_setup import (
+    WORKSPACE_PATH,
+    apply_local_write,
+    load_rendered_yaml,
+    plan_local_writes,
+)
+from tests.test_setup_files import body_fingerprint, build_documents
 
 
 def operation(
@@ -802,6 +812,95 @@ class SetupApplyFailureEvidenceTests(unittest.TestCase):
         )
         self.assertIn("local disk unavailable", str(error))
         self.assertEqual(len(writer.calls), 1)
+
+
+class AtomicLocalWriter:
+    def __init__(self, root: Path, events: list[str]) -> None:
+        self.root = root
+        self.events = events
+
+    def __call__(self, path: str, body: object) -> None:
+        writes = plan_local_writes(self.root, {path: body})
+        self.assert_single_write(writes)
+        apply_local_write(self.root, writes[0])
+        self.events.append(f"local:{path}")
+
+    @staticmethod
+    def assert_single_write(writes: object) -> None:
+        if not isinstance(writes, tuple) or len(writes) != 1:
+            raise AssertionError("expected one planned local write")
+
+
+def approved_integrated_manifest():
+    documents = build_documents()
+    local_operations = tuple(
+        operation(
+            OperationKind.WRITE_LOCAL,
+            provider="local",
+            target_key=path,
+            desired_fingerprint=body_fingerprint(body),
+            payload=(("document", body),),
+        )
+        for path, body in documents.items()
+    )
+    return approved(manifest(
+        operation(OperationKind.CREATE),
+        operation(
+            OperationKind.ROUND_TRIP,
+            provider="notion",
+            target_key="setup.round_trip.notion",
+            desired_fingerprint="round-trip-v1",
+            payload=(("disposable", True), ("read_back_required", True)),
+        ),
+        *local_operations,
+    ))
+
+
+class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
+    def test_verified_external_apply_writes_schema_valid_local_documents_last(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            events: list[str] = []
+            adapters = {
+                "linear": RecordingAdapter("linear", events=events),
+                "notion": RecordingAdapter("notion", events=events),
+            }
+
+            result = run_apply(
+                approved_integrated_manifest(),
+                adapters,
+                AtomicLocalWriter(root, events),
+                execution_id="integrated-success",
+            )
+
+            self.assertTrue(result.ready)
+            first_local = next(index for index, event in enumerate(events) if event.startswith("local:"))
+            self.assertTrue(all(event.startswith("local:") for event in events[first_local:]))
+            workspace = load_rendered_yaml((root / WORKSPACE_PATH).read_text(encoding="utf-8"))
+            self.assertEqual(validate_workspace(workspace), ())
+            for path in sorted((root / ".agents/elephant/profiles").glob("*.yaml")):
+                self.assertEqual(
+                    validate_profile(load_rendered_yaml(path.read_text(encoding="utf-8"))),
+                    (),
+                )
+
+    def test_external_read_back_failure_leaves_no_local_setup_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            writer = AtomicLocalWriter(root, [])
+
+            with self.assertRaisesRegex(SetupApplyError, "read-back"):
+                run_apply(
+                    approved_integrated_manifest(),
+                    {
+                        "linear": RecordingAdapter("linear", corrupt_read_back=True),
+                        "notion": RecordingAdapter("notion"),
+                    },
+                    writer,
+                    execution_id="integrated-read-failure",
+                )
+
+            self.assertFalse((root / ".agents/elephant").exists())
 
 
 if __name__ == "__main__":
