@@ -1363,6 +1363,127 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 "replacement-owner",
             )
 
+    def test_identity_loss_during_final_path_attestation_refreshes_error_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapters = integrated_adapters([])
+            original, _ = approved_integrated_manifest(
+                root, adapters, repository_id="repo-sample"
+            )
+            commit_integrated_local(root, original)
+            value, changed_documents = approved_integrated_manifest(
+                root, adapters, repository_id="repo-updated"
+            )
+            native_stage_path_matches = setup_files._stage_path_matches
+            final_attestation_calls = 0
+            stale_stage_name = ""
+            held_stage: Path | None = None
+            replacement_stage: Path | None = None
+            active_workspace_body = "post-loss-active-owner"
+
+            def mutate_during_final_attestation(root_fd, stage, *, name=None):
+                nonlocal final_attestation_calls
+                nonlocal stale_stage_name, held_stage, replacement_stage
+                if name is None:
+                    final_attestation_calls += 1
+                    if final_attestation_calls == 2:
+                        retained_path = root / stage.name
+                        self.assertTrue(retained_path.is_dir())
+                        stale_stage_name = stage.name
+                        held_stage = root / f"{stale_stage_name}.held"
+                        retained_path.rename(held_stage)
+                        (held_stage / "post-loss-retained.txt").write_text(
+                            "retained-tree-owner",
+                            encoding="utf-8",
+                        )
+                        replacement_stage = retained_path
+                        replacement_stage.mkdir()
+                        (replacement_stage / "unrelated.txt").write_text(
+                            "replacement-owner",
+                            encoding="utf-8",
+                        )
+                        (root / WORKSPACE_PATH).write_text(
+                            active_workspace_body,
+                            encoding="utf-8",
+                        )
+                return native_stage_path_matches(root_fd, stage, name=name)
+
+            with mock.patch(
+                "scripts.workspace_setup.files._stage_path_matches",
+                side_effect=mutate_during_final_attestation,
+            ):
+                with self.assertRaisesRegex(
+                    SetupApplyError,
+                    "recovery stage path identity",
+                ) as raised:
+                    run_apply(
+                        value,
+                        adapters,
+                        AtomicLocalWriter(root, []),
+                        execution_id="integrated-final-attestation-race",
+                    )
+
+            self.assertEqual(final_attestation_calls, 2)
+            self.assertTrue(stale_stage_name)
+            self.assertIsNotNone(held_stage)
+            self.assertIsNotNone(replacement_stage)
+            recovery = next(
+                evidence
+                for evidence in raised.exception.partial_evidence
+                if evidence.operation_id == "local.container.recovery"
+            )
+            active = next(
+                evidence
+                for evidence in raised.exception.partial_evidence
+                if evidence.operation_id == "local.container"
+            )
+            per_file = {
+                evidence.target_key: evidence.observed_fingerprint
+                for evidence in raised.exception.partial_evidence
+                if evidence.target_key in changed_documents
+            }
+            held_root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                held_fingerprint = setup_files.fingerprint_container_at(
+                    held_root_fd,
+                    held_stage.name,
+                )
+            finally:
+                os.close(held_root_fd)
+            self.assertEqual(recovery.target_key, "")
+            self.assertEqual(recovery.disposition, "path_identity_lost")
+            self.assertEqual(recovery.observed_fingerprint, held_fingerprint)
+            self.assertNotIn(
+                stale_stage_name,
+                {evidence.target_key for evidence in raised.exception.partial_evidence},
+            )
+            self.assertEqual(active.target_key, ".agents")
+            self.assertEqual(
+                active.observed_fingerprint,
+                fingerprint_local_container(root),
+            )
+            self.assertEqual(
+                per_file,
+                {
+                    path: body_fingerprint(
+                        (root / path).read_text(encoding="utf-8")
+                    )
+                    for path in changed_documents
+                },
+            )
+            self.assertEqual(
+                (root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+                active_workspace_body,
+            )
+            self.assertEqual(
+                (held_stage / "post-loss-retained.txt").read_text(encoding="utf-8"),
+                "retained-tree-owner",
+            )
+            self.assertEqual(
+                (replacement_stage / "unrelated.txt").read_text(encoding="utf-8"),
+                "replacement-owner",
+            )
+
     def test_concurrent_rollback_owner_is_preserved_in_container_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

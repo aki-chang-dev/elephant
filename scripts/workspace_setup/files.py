@@ -876,6 +876,14 @@ def _final_transaction_evidence(
         if retained_stage is None
         else _stage_path_matches(root_fd, retained_stage)
     )
+    if retained_path_attested is False:
+        # The identity-loss event may itself race both trees. Discard every
+        # earlier fingerprint and report only explicit post-detection snapshots:
+        # the exact retained descriptor first, then active state once. There is
+        # deliberately no later name-based attestation; this is observed
+        # evidence, not a guarantee against mutations after return.
+        retained_fingerprint = _retained_stage_fingerprint(root_fd, retained_stage)
+        observation = _observe_active_container(root_fd)
     outcomes = _local_outcomes_from_observation(writes, state, observation)
     return outcomes, _container_outcome(
         disposition,
