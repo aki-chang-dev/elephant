@@ -148,25 +148,40 @@ def observe_container_at(
             raise ValueError("local container symlink is unsupported") from error
         raise ValueError("local container cannot be opened") from error
     try:
-        opened = os.fstat(descriptor)
-        hasher = hashlib.sha256()
-        hasher.update(_TREE_DOMAIN)
-        _frame(hasher, b"directory")
-        _frame(hasher, stat.S_IMODE(opened.st_mode).to_bytes(4, "big"))
-        file_fingerprints: dict[str, str] = {}
-        _hash_directory(descriptor, hasher, b"", file_fingerprints)
+        observation = observe_container_descriptor(descriptor)
         stable = os.fstat(descriptor)
         _stable_entry(root_fd, name, before, stable)
-        return ContainerObservation(
-            hasher.hexdigest(),
-            tuple(sorted(file_fingerprints.items())),
-        )
+        return observation
     finally:
         os.close(descriptor)
 
 
+def observe_container_descriptor(descriptor: int) -> ContainerObservation:
+    """Observe the exact directory referenced by an already-owned descriptor."""
+    opened = os.fstat(descriptor)
+    if not stat.S_ISDIR(opened.st_mode):
+        raise ValueError("local container descriptor is not a directory")
+    hasher = hashlib.sha256()
+    hasher.update(_TREE_DOMAIN)
+    _frame(hasher, b"directory")
+    _frame(hasher, stat.S_IMODE(opened.st_mode).to_bytes(4, "big"))
+    file_fingerprints: dict[str, str] = {}
+    _hash_directory(descriptor, hasher, b"", file_fingerprints)
+    stable = os.fstat(descriptor)
+    if _identity(opened) != _identity(stable):
+        raise ValueError("local container changed during fingerprint")
+    return ContainerObservation(
+        hasher.hexdigest(),
+        tuple(sorted(file_fingerprints.items())),
+    )
+
+
 def fingerprint_container_at(root_fd: int, name: str = ".agents") -> str:
     return observe_container_at(root_fd, name).fingerprint
+
+
+def fingerprint_container_descriptor(descriptor: int) -> str:
+    return observe_container_descriptor(descriptor).fingerprint
 
 
 def fingerprint_local_container(root: object) -> str:

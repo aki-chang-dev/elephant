@@ -480,6 +480,11 @@ class LocalWriteSafetyTests(unittest.TestCase):
         self.assertIsNotNone(result.container.retained_stage_name)
         retained_stage = self.root / result.container.retained_stage_name
         self.assertTrue(retained_stage.is_dir())
+        retained_stat = os.stat(retained_stage, follow_symlinks=False)
+        self.assertEqual(result.container.retained_stage_device, retained_stat.st_dev)
+        self.assertEqual(result.container.retained_stage_inode, retained_stat.st_ino)
+        self.assertIs(result.container.retained_stage_path_attested, True)
+        self.assertEqual(result.container.retained_stage_fingerprint, prior)
         root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
         try:
             self.assertEqual(
@@ -608,6 +613,28 @@ class LocalWriteSafetyTests(unittest.TestCase):
                 apply_local_write(self.root, writes)
 
         self.assertEqual(raised.exception.container.disposition, "rolled_back")
+        retained_name = raised.exception.container.retained_stage_name
+        self.assertIsNotNone(retained_name)
+        retained_stat = os.stat(
+            self.root / retained_name,
+            follow_symlinks=False,
+        )
+        self.assertEqual(
+            raised.exception.container.retained_stage_device,
+            retained_stat.st_dev,
+        )
+        self.assertEqual(
+            raised.exception.container.retained_stage_inode,
+            retained_stat.st_ino,
+        )
+        self.assertIs(
+            raised.exception.container.retained_stage_path_attested,
+            True,
+        )
+        self.assertEqual(
+            raised.exception.container.retained_stage_fingerprint,
+            raised.exception.container.desired_fingerprint,
+        )
         self.assertEqual(unrelated.read_text(encoding="utf-8"), "concurrent-owner")
         self.assertEqual(
             (self.root / WORKSPACE_PATH).read_text(encoding="utf-8"),
@@ -624,7 +651,7 @@ class LocalWriteSafetyTests(unittest.TestCase):
             tuple(write.operation for write in writes),
         )
         native_exchange = setup_files.atomic_exchange
-        native_fingerprint = setup_files.fingerprint_container_at
+        native_retained_fingerprint = setup_files._retained_stage_fingerprint
         exchange_calls = 0
         rollback_exchanged = False
         final_mutation_applied = False
@@ -639,24 +666,20 @@ class LocalWriteSafetyTests(unittest.TestCase):
                 rollback_exchanged = True
             return result
 
-        def mutate_before_final_observation(parent_fd, name=".agents"):
+        def mutate_before_final_observation(parent_fd, retained_stage):
             nonlocal final_mutation_applied
-            if (
-                rollback_exchanged
-                and not final_mutation_applied
-                and name.startswith(".agents.setup-stage-")
-            ):
+            if rollback_exchanged and not final_mutation_applied:
                 (self.root / WORKSPACE_PATH).write_text(
                     "final-active-owner", encoding="utf-8"
                 )
                 final_mutation_applied = True
-            return native_fingerprint(parent_fd, name)
+            return native_retained_fingerprint(parent_fd, retained_stage)
 
         with mock.patch(
             "scripts.workspace_setup.files.atomic_exchange",
             side_effect=mutate_around_exchange,
         ), mock.patch(
-            "scripts.workspace_setup.files.fingerprint_container_at",
+            "scripts.workspace_setup.files._retained_stage_fingerprint",
             side_effect=mutate_before_final_observation,
         ):
             with self.assertRaises(LocalTransactionError) as raised:

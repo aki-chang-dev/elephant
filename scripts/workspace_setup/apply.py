@@ -478,8 +478,37 @@ def _retained_stage_evidence(
 ) -> tuple[ApplyEvidence, ...]:
     stage_name = container.retained_stage_name
     fingerprint = container.retained_stage_fingerprint
+    device = container.retained_stage_device
+    inode = container.retained_stage_inode
+    path_attested = container.retained_stage_path_attested
     if stage_name is None:
-        if fingerprint:
+        if path_attested is False:
+            if (
+                not isinstance(device, int)
+                or isinstance(device, bool)
+                or not isinstance(inode, int)
+                or isinstance(inode, bool)
+            ):
+                raise SetupApplyError(
+                    "local recovery stage identity evidence is incomplete"
+                )
+            if require_observed and len(fingerprint) != 64:
+                raise SetupApplyError("local recovery stage evidence is incomplete")
+            return (
+                ApplyEvidence(
+                    operation_id="local.container.recovery",
+                    target_key="",
+                    external_id=container.owner_id,
+                    observed_fingerprint=fingerprint,
+                    disposition="path_identity_lost",
+                ),
+            )
+        if (
+            fingerprint
+            or device is not None
+            or inode is not None
+            or path_attested is not None
+        ):
             raise SetupApplyError("local recovery stage evidence has no stage name")
         return ()
     if (
@@ -488,6 +517,14 @@ def _retained_stage_evidence(
         or stage_name in {".", ".."}
     ):
         raise SetupApplyError("local recovery stage evidence has an invalid stage name")
+    if (
+        path_attested is not True
+        or not isinstance(device, int)
+        or isinstance(device, bool)
+        or not isinstance(inode, int)
+        or isinstance(inode, bool)
+    ):
+        raise SetupApplyError("local recovery stage identity evidence is incomplete")
     if require_observed and len(fingerprint) != 64:
         raise SetupApplyError("local recovery stage evidence is incomplete")
     return (
@@ -588,6 +625,13 @@ def apply_setup(
             transaction.container,
             require_observed=True,
         )
+        if transaction.container.retained_stage_path_attested is False:
+            raise SetupApplyError(
+                "local recovery stage path identity was lost",
+                partial_evidence=(
+                    local_writes + recovery_evidence + (container_evidence,)
+                ),
+            )
         if container_evidence.disposition not in {"created", "replaced", "unchanged"}:
             raise SetupApplyError("local container did not commit successfully")
     except LocalTransactionError as error:

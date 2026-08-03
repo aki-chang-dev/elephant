@@ -29,6 +29,7 @@ from .container import (
     ContainerObservation,
     clone_directory,
     fingerprint_container_at,
+    fingerprint_container_descriptor,
     fingerprint_local_container,
     observe_container_at,
 )
@@ -371,6 +372,9 @@ class LocalContainerOutcome:
     owner_id: str
     retained_stage_name: str | None = None
     retained_stage_fingerprint: str = ""
+    retained_stage_device: int | None = None
+    retained_stage_inode: int | None = None
+    retained_stage_path_attested: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -687,6 +691,55 @@ def _new_stage_directory(root_fd: int, owner_id: str) -> tuple[str, int]:
     raise OSError("could not allocate local container stage")
 
 
+@dataclass(frozen=True)
+class _RetainedStage:
+    name: str
+    descriptor: int
+    device: int
+    inode: int
+
+
+def _bind_stage_descriptor(name: str, descriptor: int) -> _RetainedStage:
+    observed = os.fstat(descriptor)
+    if not stat.S_ISDIR(observed.st_mode):
+        raise ValueError("local recovery stage descriptor is not a directory")
+    return _RetainedStage(name, descriptor, observed.st_dev, observed.st_ino)
+
+
+def _stage_path_matches(
+    root_fd: int,
+    stage: _RetainedStage,
+    *,
+    name: str | None = None,
+) -> bool:
+    try:
+        observed = os.stat(
+            stage.name if name is None else name,
+            dir_fd=root_fd,
+            follow_symlinks=False,
+        )
+    except OSError:
+        return False
+    return (
+        stat.S_ISDIR(observed.st_mode)
+        and observed.st_dev == stage.device
+        and observed.st_ino == stage.inode
+    )
+
+
+def _select_retained_stage(
+    root_fd: int,
+    preferred: _RetainedStage | None,
+    candidates: tuple[_RetainedStage | None, ...],
+) -> _RetainedStage | None:
+    if preferred is None:
+        return None
+    for candidate in (preferred,) + candidates:
+        if candidate is not None and _stage_path_matches(root_fd, candidate):
+            return candidate
+    return preferred
+
+
 def _stage_write(stage_fd: int, write: LocalWrite) -> None:
     parts = _output_parts(write.path)
     if parts[0] != ".agents":
@@ -760,12 +813,13 @@ def _observe_active_container(root_fd: int) -> ContainerObservation:
 
 def _retained_stage_fingerprint(
     root_fd: int,
-    stage_name: str | None,
+    retained_stage: _RetainedStage | None,
 ) -> str:
-    if stage_name is None:
+    del root_fd
+    if retained_stage is None:
         return ""
     try:
-        return fingerprint_container_at(root_fd, stage_name)
+        return fingerprint_container_descriptor(retained_stage.descriptor)
     except BaseException:
         return ""
 
@@ -778,6 +832,9 @@ def _container_outcome(
     owner_id: str,
     retained_stage_name: str | None = None,
     retained_stage_fingerprint: str = "",
+    retained_stage_device: int | None = None,
+    retained_stage_inode: int | None = None,
+    retained_stage_path_attested: bool | None = None,
 ) -> LocalContainerOutcome:
     return LocalContainerOutcome(
         disposition,
@@ -787,6 +844,9 @@ def _container_outcome(
         owner_id,
         retained_stage_name,
         retained_stage_fingerprint,
+        retained_stage_device,
+        retained_stage_inode,
+        retained_stage_path_attested,
     )
 
 
@@ -798,10 +858,24 @@ def _final_transaction_evidence(
     prior: str,
     desired: str,
     owner_id: str,
-    stage_name: str | None,
+    retained_stage: _RetainedStage | None,
+    stage_candidates: tuple[_RetainedStage | None, ...] = (),
 ) -> tuple[tuple[LocalWriteOutcome, ...], LocalContainerOutcome]:
-    retained_fingerprint = _retained_stage_fingerprint(root_fd, stage_name)
+    retained_stage = _select_retained_stage(
+        root_fd,
+        retained_stage,
+        stage_candidates,
+    )
+    # Bracket the active snapshot so a one-time interleaving in either tree is
+    # reflected by the later observation rather than mixed into stale evidence.
+    _retained_stage_fingerprint(root_fd, retained_stage)
     observation = _observe_active_container(root_fd)
+    retained_fingerprint = _retained_stage_fingerprint(root_fd, retained_stage)
+    retained_path_attested = (
+        None
+        if retained_stage is None
+        else _stage_path_matches(root_fd, retained_stage)
+    )
     outcomes = _local_outcomes_from_observation(writes, state, observation)
     return outcomes, _container_outcome(
         disposition,
@@ -809,8 +883,15 @@ def _final_transaction_evidence(
         desired,
         observation.fingerprint,
         owner_id,
-        stage_name,
+        (
+            retained_stage.name
+            if retained_stage is not None and retained_path_attested
+            else None
+        ),
         retained_fingerprint,
+        retained_stage.device if retained_stage is not None else None,
+        retained_stage.inode if retained_stage is not None else None,
+        retained_path_attested,
     )
 
 
@@ -838,38 +919,68 @@ def _restate_transaction_evidence(
             container.owner_id,
             container.retained_stage_name,
             container.retained_stage_fingerprint,
+            container.retained_stage_device,
+            container.retained_stage_inode,
+            container.retained_stage_path_attested,
         ),
     )
 
 
+def _require_recovery_path_attested(
+    outcomes: tuple[LocalWriteOutcome, ...],
+    container: LocalContainerOutcome,
+    operation: SetupOperation,
+) -> None:
+    if container.retained_stage_path_attested is not False:
+        return
+    error = ValueError("local recovery stage path identity was lost")
+    raise LocalTransactionError(
+        str(error),
+        operation=operation,
+        cause=error,
+        outcomes=outcomes,
+        container=container,
+    ) from error
+
+
 def _rollback_container_exchange(
     root_fd: int,
-    stage_name: str,
+    candidate_stage: _RetainedStage,
+    displaced_stage: _RetainedStage,
     desired_fingerprint: str,
-) -> str:
+) -> tuple[str, _RetainedStage]:
     try:
         active = fingerprint_container_at(root_fd)
     except BaseException:
         active = ""
-    if not hmac.compare_digest(active, desired_fingerprint):
-        return "rollback_failed"
+    if (
+        not hmac.compare_digest(active, desired_fingerprint)
+        or not _stage_path_matches(root_fd, displaced_stage)
+    ):
+        return "rollback_failed", displaced_stage
     try:
-        atomic_exchange(root_fd, ".agents", stage_name)
+        atomic_exchange(root_fd, ".agents", displaced_stage.name)
+        retained_stage = candidate_stage
         os.fsync(root_fd)
     except BaseException:
-        return "rollback_failed"
+        return "rollback_failed", displaced_stage
     try:
-        staged_active = fingerprint_container_at(root_fd, stage_name)
+        staged_active = fingerprint_container_descriptor(
+            candidate_stage.descriptor
+        )
     except BaseException:
         staged_active = ""
     if not hmac.compare_digest(staged_active, desired_fingerprint):
+        if not _stage_path_matches(root_fd, candidate_stage):
+            return "rollback_failed", retained_stage
         try:
-            atomic_exchange(root_fd, ".agents", stage_name)
+            atomic_exchange(root_fd, ".agents", candidate_stage.name)
+            retained_stage = displaced_stage
             os.fsync(root_fd)
         except BaseException:
-            pass
-        return "rollback_failed"
-    return "rolled_back"
+            return "rollback_failed", retained_stage
+        return "rollback_failed", retained_stage
+    return "rolled_back", retained_stage
 
 
 def apply_local_write(
@@ -923,7 +1034,9 @@ def apply_local_write(
 
     root_fd = _open_root(repository_root, expected_root)
     stage_name: str | None = None
-    stage_fd: int | None = None
+    candidate_stage: _RetainedStage | None = None
+    prior_stage: _RetainedStage | None = None
+    retained_stage: _RetainedStage | None = None
     desired_container_fingerprint = ""
     switched = False
     failed_write: LocalWrite | None = None
@@ -955,29 +1068,36 @@ def apply_local_write(
         ):
             raise ValueError("approved local container fingerprint is stale")
 
-        stage_name, stage_fd = _new_stage_directory(root_fd, transaction_owner)
+        stage_name, candidate_fd = _new_stage_directory(root_fd, transaction_owner)
+        try:
+            candidate_stage = _bind_stage_descriptor(stage_name, candidate_fd)
+        except BaseException:
+            os.close(candidate_fd)
+            raise
+        retained_stage = candidate_stage
         if observed_prior == ABSENT_LOCAL_CONTAINER_FINGERPRINT:
-            os.fchmod(stage_fd, 0o755)
-            os.fsync(stage_fd)
+            os.fchmod(candidate_stage.descriptor, 0o755)
+            os.fsync(candidate_stage.descriptor)
         else:
             source_fd = _open_child_directory(root_fd, ".agents", ".agents")
             try:
-                clone_directory(source_fd, stage_fd)
-            finally:
+                prior_stage = _bind_stage_descriptor(stage_name, source_fd)
+            except BaseException:
                 os.close(source_fd)
+                raise
+            clone_directory(source_fd, candidate_stage.descriptor)
             if not hmac.compare_digest(
-                fingerprint_container_at(root_fd, stage_name), observed_prior
+                fingerprint_container_descriptor(candidate_stage.descriptor),
+                observed_prior,
             ):
                 raise ValueError("staged local container is not an exact clone")
 
         for write in writes:
             failed_write = write
-            _stage_write(stage_fd, write)
-        os.fsync(stage_fd)
-        os.close(stage_fd)
-        stage_fd = None
-        desired_container_fingerprint = fingerprint_container_at(
-            root_fd, stage_name
+            _stage_write(candidate_stage.descriptor, write)
+        os.fsync(candidate_stage.descriptor)
+        desired_container_fingerprint = fingerprint_container_descriptor(
+            candidate_stage.descriptor
         )
 
         current_prior = fingerprint_container_at(root_fd)
@@ -992,7 +1112,13 @@ def apply_local_write(
                 observed_prior,
                 desired_container_fingerprint,
                 transaction_owner,
-                stage_name,
+                retained_stage,
+                (candidate_stage, prior_stage),
+            )
+            _require_recovery_path_attested(
+                outcomes,
+                container,
+                failed_write.operation if failed_write else writes[0].operation,
             )
             if not hmac.compare_digest(
                 container.observed_fingerprint,
@@ -1019,21 +1145,36 @@ def apply_local_write(
 
         if observed_prior == ABSENT_LOCAL_CONTAINER_FINGERPRINT:
             atomic_noreplace(root_fd, stage_name, ".agents")
+            retained_stage = None
             stage_name = None
         else:
+            if prior_stage is None:
+                raise ValueError("approved prior container descriptor is missing")
+            descriptor_prior = fingerprint_container_descriptor(
+                prior_stage.descriptor
+            )
+            if (
+                not hmac.compare_digest(descriptor_prior, observed_prior)
+                or not _stage_path_matches(root_fd, prior_stage, name=".agents")
+            ):
+                raise ValueError("approved local container changed before commit")
             atomic_exchange(root_fd, ".agents", stage_name)
+            retained_stage = prior_stage
         switched = True
         os.fsync(root_fd)
 
         if observed_prior != ABSENT_LOCAL_CONTAINER_FINGERPRINT:
             try:
-                displaced_prior = fingerprint_container_at(root_fd, stage_name)
+                displaced_prior = fingerprint_container_descriptor(
+                    prior_stage.descriptor
+                )
             except BaseException:
                 displaced_prior = ""
             if not hmac.compare_digest(displaced_prior, observed_prior):
-                disposition = _rollback_container_exchange(
+                disposition, retained_stage = _rollback_container_exchange(
                     root_fd,
-                    stage_name,
+                    candidate_stage,
+                    prior_stage,
                     desired_container_fingerprint,
                 )
                 outcomes, container = _final_transaction_evidence(
@@ -1044,7 +1185,8 @@ def apply_local_write(
                     observed_prior,
                     desired_container_fingerprint,
                     transaction_owner,
-                    stage_name,
+                    retained_stage,
+                    (candidate_stage, prior_stage),
                 )
                 raise LocalTransactionError(
                     "atomically displaced container failed approved CAS",
@@ -1067,7 +1209,13 @@ def apply_local_write(
             observed_prior,
             desired_container_fingerprint,
             transaction_owner,
-            stage_name,
+            retained_stage,
+            (candidate_stage, prior_stage),
+        )
+        _require_recovery_path_attested(
+            outcomes,
+            container,
+            failed_write.operation if failed_write else writes[0].operation,
         )
         if not hmac.compare_digest(
             container.observed_fingerprint,
@@ -1094,9 +1242,6 @@ def apply_local_write(
     except LocalTransactionError:
         raise
     except BaseException as error:
-        if stage_fd is not None:
-            os.close(stage_fd)
-            stage_fd = None
         disposition = "commit_failed" if switched else "not_applied"
         outcomes, container = _final_transaction_evidence(
             root_fd,
@@ -1106,7 +1251,8 @@ def apply_local_write(
             expected_container_fingerprint,
             desired_container_fingerprint,
             transaction_owner,
-            stage_name,
+            retained_stage,
+            (candidate_stage, prior_stage),
         )
         raise LocalTransactionError(
             str(error) or type(error).__name__,
@@ -1116,6 +1262,10 @@ def apply_local_write(
             container=container,
         ) from error
     finally:
-        if stage_fd is not None:
-            os.close(stage_fd)
+        closed_descriptors: set[int] = set()
+        for stage in (candidate_stage, prior_stage):
+            if stage is None or stage.descriptor in closed_descriptors:
+                continue
+            os.close(stage.descriptor)
+            closed_descriptors.add(stage.descriptor)
         os.close(root_fd)
