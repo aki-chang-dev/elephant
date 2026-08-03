@@ -477,6 +477,19 @@ class LocalWriteSafetyTests(unittest.TestCase):
         self.assertIsInstance(result.container, LocalContainerOutcome)
         self.assertEqual(result.container.disposition, "replaced")
         self.assertEqual(result.container.prior_fingerprint, prior)
+        self.assertIsNotNone(result.container.retained_stage_name)
+        retained_stage = self.root / result.container.retained_stage_name
+        self.assertTrue(retained_stage.is_dir())
+        root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            self.assertEqual(
+                setup_files.fingerprint_container_at(
+                    root_fd, result.container.retained_stage_name
+                ),
+                prior,
+            )
+        finally:
+            os.close(root_fd)
         self.assertEqual(
             result.container.observed_fingerprint,
             fingerprint_local_container(self.root),
@@ -486,6 +499,36 @@ class LocalWriteSafetyTests(unittest.TestCase):
         self.assertEqual(
             {path: (self.root / path).read_text(encoding="utf-8") for path in documents},
             documents,
+        )
+
+    def test_retained_stage_is_non_authoritative_unique_and_never_name_deleted(self):
+        original, changed, writes = self._replacement_fixture(self.root)
+        first = apply_local_write(self.root, writes, owner_id="retained-first")
+        retained_name = first.container.retained_stage_name
+        self.assertIsNotNone(retained_name)
+        retained = self.root / retained_name
+        held = self.root / f"{retained_name}.held"
+        retained.rename(held)
+        replacement = self.root / retained_name
+        replacement.mkdir()
+        (replacement / "unrelated.txt").write_text("owner", encoding="utf-8")
+
+        future = plan_current(self.root, local_operations(changed))
+        second = apply_local_write(self.root, future, owner_id="retained-second")
+
+        self.assertEqual(second.container.disposition, "unchanged")
+        self.assertNotEqual(second.container.retained_stage_name, retained_name)
+        self.assertEqual(
+            (replacement / "unrelated.txt").read_text(encoding="utf-8"),
+            "owner",
+        )
+        self.assertEqual(
+            (held / "elephant/workspace.yaml").read_text(encoding="utf-8"),
+            original[WORKSPACE_PATH],
+        )
+        self.assertEqual(
+            fingerprint_local_container(self.root),
+            second.container.observed_fingerprint,
         )
 
     def test_repository_root_lock_excludes_an_independent_setup_owner(self):
@@ -571,6 +614,73 @@ class LocalWriteSafetyTests(unittest.TestCase):
             original[WORKSPACE_PATH],
         )
         self.assertNotEqual(original[WORKSPACE_PATH], changed[WORKSPACE_PATH])
+
+    def test_rollback_evidence_uses_one_final_active_container_snapshot(self):
+        original, _, writes = self._replacement_fixture(self.root)
+        unrelated = self.root / ".agents/unrelated.txt"
+        unrelated.write_text("approved", encoding="utf-8")
+        writes = plan_current(
+            self.root,
+            tuple(write.operation for write in writes),
+        )
+        native_exchange = setup_files.atomic_exchange
+        native_fingerprint = setup_files.fingerprint_container_at
+        exchange_calls = 0
+        rollback_exchanged = False
+        final_mutation_applied = False
+
+        def mutate_around_exchange(parent_fd, first, second):
+            nonlocal exchange_calls, rollback_exchanged
+            exchange_calls += 1
+            if exchange_calls == 1:
+                unrelated.write_text("prior-race", encoding="utf-8")
+            result = native_exchange(parent_fd, first, second)
+            if exchange_calls == 2:
+                rollback_exchanged = True
+            return result
+
+        def mutate_before_final_observation(parent_fd, name=".agents"):
+            nonlocal final_mutation_applied
+            if (
+                rollback_exchanged
+                and not final_mutation_applied
+                and name.startswith(".agents.setup-stage-")
+            ):
+                (self.root / WORKSPACE_PATH).write_text(
+                    "final-active-owner", encoding="utf-8"
+                )
+                final_mutation_applied = True
+            return native_fingerprint(parent_fd, name)
+
+        with mock.patch(
+            "scripts.workspace_setup.files.atomic_exchange",
+            side_effect=mutate_around_exchange,
+        ), mock.patch(
+            "scripts.workspace_setup.files.fingerprint_container_at",
+            side_effect=mutate_before_final_observation,
+        ):
+            with self.assertRaises(LocalTransactionError) as raised:
+                apply_local_write(self.root, writes)
+
+        self.assertTrue(final_mutation_applied)
+        self.assertEqual(raised.exception.container.disposition, "rolled_back")
+        self.assertEqual(
+            raised.exception.container.observed_fingerprint,
+            fingerprint_local_container(self.root),
+        )
+        workspace_outcome = next(
+            outcome
+            for outcome in raised.exception.outcomes
+            if outcome.path == WORKSPACE_PATH
+        )
+        self.assertEqual(
+            workspace_outcome.observed_fingerprint,
+            hashlib.sha256(b"final-active-owner").hexdigest(),
+        )
+        self.assertNotEqual(
+            (self.root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+            original[WORKSPACE_PATH],
+        )
 
     def test_descendant_move_and_symlink_during_switch_never_writes_outside_root(self):
         original, changed, writes = self._replacement_fixture(self.root)

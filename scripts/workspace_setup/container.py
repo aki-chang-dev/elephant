@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+from dataclasses import dataclass
 import hashlib
 import os
 from pathlib import Path
@@ -13,6 +14,12 @@ ABSENT_LOCAL_CONTAINER_FINGERPRINT = hashlib.sha256(
 ).hexdigest()
 _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW
+
+
+@dataclass(frozen=True)
+class ContainerObservation:
+    fingerprint: str
+    file_fingerprints: tuple[tuple[str, str], ...]
 
 
 def _frame(hasher: object, value: bytes) -> None:
@@ -50,6 +57,7 @@ def _hash_directory(
     descriptor: int,
     hasher: object,
     prefix: bytes,
+    file_fingerprints: dict[str, str],
 ) -> None:
     directory_before = os.fstat(descriptor)
     try:
@@ -76,7 +84,7 @@ def _hash_directory(
                 ) from error
             try:
                 opened = os.fstat(child_fd)
-                _hash_directory(child_fd, hasher, path)
+                _hash_directory(child_fd, hasher, path, file_fingerprints)
                 stable = os.fstat(child_fd)
                 if _identity(opened) != _identity(stable):
                     raise ValueError("local container changed during fingerprint")
@@ -113,6 +121,7 @@ def _hash_directory(
                 os.close(child_fd)
             _frame(hasher, length.to_bytes(8, "big"))
             _frame(hasher, content.digest())
+            file_fingerprints[os.fsdecode(path)] = content.hexdigest()
         else:
             raise ValueError(
                 f"local container has unsupported entry {os.fsdecode(path)}"
@@ -122,11 +131,14 @@ def _hash_directory(
         raise ValueError("local container changed during fingerprint")
 
 
-def fingerprint_container_at(root_fd: int, name: str = ".agents") -> str:
+def observe_container_at(
+    root_fd: int,
+    name: str = ".agents",
+) -> ContainerObservation:
     try:
         before = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
     except FileNotFoundError:
-        return ABSENT_LOCAL_CONTAINER_FINGERPRINT
+        return ContainerObservation(ABSENT_LOCAL_CONTAINER_FINGERPRINT, ())
     if not stat.S_ISDIR(before.st_mode):
         raise ValueError("local container has unsupported .agents shape")
     try:
@@ -141,12 +153,20 @@ def fingerprint_container_at(root_fd: int, name: str = ".agents") -> str:
         hasher.update(_TREE_DOMAIN)
         _frame(hasher, b"directory")
         _frame(hasher, stat.S_IMODE(opened.st_mode).to_bytes(4, "big"))
-        _hash_directory(descriptor, hasher, b"")
+        file_fingerprints: dict[str, str] = {}
+        _hash_directory(descriptor, hasher, b"", file_fingerprints)
         stable = os.fstat(descriptor)
         _stable_entry(root_fd, name, before, stable)
-        return hasher.hexdigest()
+        return ContainerObservation(
+            hasher.hexdigest(),
+            tuple(sorted(file_fingerprints.items())),
+        )
     finally:
         os.close(descriptor)
+
+
+def fingerprint_container_at(root_fd: int, name: str = ".agents") -> str:
+    return observe_container_at(root_fd, name).fingerprint
 
 
 def fingerprint_local_container(root: object) -> str:
@@ -234,20 +254,3 @@ def clone_directory(source_fd: int, destination_fd: int) -> None:
     source_after = os.fstat(source_fd)
     if _identity(source_before) != _identity(source_after):
         raise ValueError("local container changed during clone")
-
-
-def remove_tree_at(parent_fd: int, name: str) -> None:
-    """Remove one transaction-owned directory tree without following links."""
-    descriptor = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
-    try:
-        for child in sorted(os.listdir(descriptor), key=os.fsencode):
-            observed = os.stat(child, dir_fd=descriptor, follow_symlinks=False)
-            if stat.S_ISDIR(observed.st_mode):
-                remove_tree_at(descriptor, child)
-            else:
-                os.unlink(child, dir_fd=descriptor)
-                os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    os.rmdir(name, dir_fd=parent_fd)
-    os.fsync(parent_fd)

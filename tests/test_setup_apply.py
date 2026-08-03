@@ -1195,7 +1195,7 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 original_documents,
             )
 
-    def test_committed_container_cleanup_failure_reports_new_active_tree(self):
+    def test_committed_container_reports_retained_recovery_stage(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             adapters = integrated_adapters([])
@@ -1207,27 +1207,39 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 root, adapters, repository_id="repo-updated"
             )
 
-            with mock.patch(
-                "scripts.workspace_setup.files.remove_tree_at",
-                side_effect=OSError("old container cleanup failed"),
-            ):
-                with self.assertRaises(SetupApplyError) as raised:
-                    run_apply(
-                        value,
-                        adapters,
-                        AtomicLocalWriter(root, []),
-                        execution_id="integrated-fsync-failure",
-                    )
+            result = run_apply(
+                value,
+                adapters,
+                AtomicLocalWriter(root, []),
+                execution_id="integrated-retained-stage",
+            )
 
             local_evidence = tuple(
                 evidence
-                for evidence in raised.exception.partial_evidence
+                for evidence in result.local_writes
                 if evidence.operation_id.startswith("local.")
             )
-            self.assertEqual(
-                {item.disposition for item in local_evidence},
-                {"durable", "cleanup_failed"},
+            recovery = next(
+                evidence
+                for evidence in local_evidence
+                if evidence.operation_id == "local.container.recovery"
             )
+            self.assertTrue(result.ready)
+            self.assertEqual(recovery.disposition, "cleanup_pending")
+            self.assertNotEqual(recovery.target_key, ".agents")
+            self.assertTrue((root / recovery.target_key).is_dir())
+            root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                self.assertEqual(
+                    setup_files.fingerprint_container_at(
+                        root_fd,
+                        recovery.target_key,
+                    ),
+                    recovery.observed_fingerprint,
+                )
+            finally:
+                os.close(root_fd)
+            self.assertEqual(local_evidence[-1].operation_id, "local.container")
             self.assertEqual(
                 {path: (root / path).read_text(encoding="utf-8") for path in changed_documents},
                 changed_documents,

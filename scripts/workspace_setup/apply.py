@@ -471,6 +471,36 @@ def _container_evidence(
     )
 
 
+def _retained_stage_evidence(
+    container: LocalContainerOutcome,
+    *,
+    require_observed: bool,
+) -> tuple[ApplyEvidence, ...]:
+    stage_name = container.retained_stage_name
+    fingerprint = container.retained_stage_fingerprint
+    if stage_name is None:
+        if fingerprint:
+            raise SetupApplyError("local recovery stage evidence has no stage name")
+        return ()
+    if (
+        not stage_name.startswith(".agents.setup-stage-")
+        or "/" in stage_name
+        or stage_name in {".", ".."}
+    ):
+        raise SetupApplyError("local recovery stage evidence has an invalid stage name")
+    if require_observed and len(fingerprint) != 64:
+        raise SetupApplyError("local recovery stage evidence is incomplete")
+    return (
+        ApplyEvidence(
+            operation_id="local.container.recovery",
+            target_key=stage_name,
+            external_id=container.owner_id,
+            observed_fingerprint=fingerprint,
+            disposition="cleanup_pending",
+        ),
+    )
+
+
 def apply_setup(
     approved: ApprovedManifest,
     adapters: Mapping[str, SetupAdapter],
@@ -554,6 +584,10 @@ def apply_setup(
             expected_prior=authority.manifest.expected_local_container_fingerprint,
             require_committed=True,
         )
+        recovery_evidence = _retained_stage_evidence(
+            transaction.container,
+            require_observed=True,
+        )
         if container_evidence.disposition not in {"created", "replaced", "unchanged"}:
             raise SetupApplyError("local container did not commit successfully")
     except LocalTransactionError as error:
@@ -569,6 +603,10 @@ def apply_setup(
                 expected_prior=authority.manifest.expected_local_container_fingerprint,
                 require_committed=False,
             )
+            recovery_evidence = _retained_stage_evidence(
+                error.container,
+                require_observed=False,
+            )
         except SetupApplyError as invalid_outcomes:
             raise _contextual_error(
                 invalid_outcomes,
@@ -579,14 +617,19 @@ def apply_setup(
             error.detail,
             operation=error.operation or local_operations[0],
             cause=error.cause,
-            partial_evidence=tuple(evidence) + local_outcomes + (container_evidence,),
+            partial_evidence=(
+                tuple(evidence)
+                + local_outcomes
+                + recovery_evidence
+                + (container_evidence,)
+            ),
         ) from error
     except Exception as error:
         operation = local_operations[0] if local_operations else None
         if operation is None:
             raise SetupApplyError(str(error) or type(error).__name__, cause=error) from error
         raise _contextual_error(error, operation, tuple(evidence)) from error
-    local_writes = local_writes + (container_evidence,)
+    local_writes = local_writes + recovery_evidence + (container_evidence,)
     evidence.extend(local_writes)
     return ApplyResult(
         ready=True,

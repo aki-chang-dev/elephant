@@ -26,10 +26,11 @@ from scripts.workspace_core.config import (
 from .models import ConfirmedTopology, OperationKind, SetupOperation
 from .container import (
     ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+    ContainerObservation,
     clone_directory,
     fingerprint_container_at,
     fingerprint_local_container,
-    remove_tree_at,
+    observe_container_at,
 )
 from .atomic_switch import atomic_exchange, atomic_noreplace
 
@@ -368,6 +369,8 @@ class LocalContainerOutcome:
     desired_fingerprint: str
     observed_fingerprint: str
     owner_id: str
+    retained_stage_name: str | None = None
+    retained_stage_fingerprint: str = ""
 
 
 @dataclass(frozen=True)
@@ -728,38 +731,41 @@ def _stage_write(stage_fd: int, write: LocalWrite) -> None:
         os.close(current)
 
 
-def _active_file_fingerprint(root_fd: int, path: str) -> str:
-    try:
-        parent_fd = _open_existing_parent(root_fd, path)
-        try:
-            body = _read_target(parent_fd, path)
-        finally:
-            if parent_fd is not None:
-                os.close(parent_fd)
-    except BaseException:
-        return ""
-    return hashlib.sha256(body).hexdigest() if body is not None else ""
-
-
-def _local_outcomes(
-    root_fd: int,
+def _local_outcomes_from_observation(
     writes: tuple[LocalWrite, ...],
     state: str,
+    observation: ContainerObservation,
 ) -> tuple[LocalWriteOutcome, ...]:
+    file_fingerprints = dict(observation.file_fingerprints)
     return tuple(
         LocalWriteOutcome(
             operation_id=write.operation.operation_id,
             path=write.path,
             states=(state,),
-            observed_fingerprint=_active_file_fingerprint(root_fd, write.path),
+            observed_fingerprint=file_fingerprints.get(
+                "/".join(_output_parts(write.path)[1:]),
+                "",
+            ),
         )
         for write in writes
     )
 
 
-def _observed_container_fingerprint(root_fd: int) -> str:
+def _observe_active_container(root_fd: int) -> ContainerObservation:
     try:
-        return fingerprint_container_at(root_fd)
+        return observe_container_at(root_fd)
+    except BaseException:
+        return ContainerObservation("", ())
+
+
+def _retained_stage_fingerprint(
+    root_fd: int,
+    stage_name: str | None,
+) -> str:
+    if stage_name is None:
+        return ""
+    try:
+        return fingerprint_container_at(root_fd, stage_name)
     except BaseException:
         return ""
 
@@ -770,35 +776,88 @@ def _container_outcome(
     desired: str,
     observed: str,
     owner_id: str,
+    retained_stage_name: str | None = None,
+    retained_stage_fingerprint: str = "",
 ) -> LocalContainerOutcome:
-    return LocalContainerOutcome(disposition, prior, desired, observed, owner_id)
+    return LocalContainerOutcome(
+        disposition,
+        prior,
+        desired,
+        observed,
+        owner_id,
+        retained_stage_name,
+        retained_stage_fingerprint,
+    )
 
 
-def _cleanup_owned_stage(
+def _final_transaction_evidence(
     root_fd: int,
-    stage_name: str,
-    expected_fingerprint: str,
-) -> None:
-    observed = fingerprint_container_at(root_fd, stage_name)
-    if not hmac.compare_digest(observed, expected_fingerprint):
-        raise ValueError("transaction-owned cleanup tree changed")
-    remove_tree_at(root_fd, stage_name)
+    writes: tuple[LocalWrite, ...],
+    state: str,
+    disposition: str,
+    prior: str,
+    desired: str,
+    owner_id: str,
+    stage_name: str | None,
+) -> tuple[tuple[LocalWriteOutcome, ...], LocalContainerOutcome]:
+    retained_fingerprint = _retained_stage_fingerprint(root_fd, stage_name)
+    observation = _observe_active_container(root_fd)
+    outcomes = _local_outcomes_from_observation(writes, state, observation)
+    return outcomes, _container_outcome(
+        disposition,
+        prior,
+        desired,
+        observation.fingerprint,
+        owner_id,
+        stage_name,
+        retained_fingerprint,
+    )
+
+
+def _restate_transaction_evidence(
+    outcomes: tuple[LocalWriteOutcome, ...],
+    container: LocalContainerOutcome,
+    state: str,
+    disposition: str,
+) -> tuple[tuple[LocalWriteOutcome, ...], LocalContainerOutcome]:
+    return (
+        tuple(
+            LocalWriteOutcome(
+                outcome.operation_id,
+                outcome.path,
+                (state,),
+                outcome.observed_fingerprint,
+            )
+            for outcome in outcomes
+        ),
+        _container_outcome(
+            disposition,
+            container.prior_fingerprint,
+            container.desired_fingerprint,
+            container.observed_fingerprint,
+            container.owner_id,
+            container.retained_stage_name,
+            container.retained_stage_fingerprint,
+        ),
+    )
 
 
 def _rollback_container_exchange(
     root_fd: int,
     stage_name: str,
     desired_fingerprint: str,
-) -> tuple[str, str]:
-    active = _observed_container_fingerprint(root_fd)
+) -> str:
+    try:
+        active = fingerprint_container_at(root_fd)
+    except BaseException:
+        active = ""
     if not hmac.compare_digest(active, desired_fingerprint):
-        return "rollback_failed", active
+        return "rollback_failed"
     try:
         atomic_exchange(root_fd, ".agents", stage_name)
         os.fsync(root_fd)
     except BaseException:
-        return "rollback_failed", _observed_container_fingerprint(root_fd)
-    displaced = _observed_container_fingerprint(root_fd)
+        return "rollback_failed"
     try:
         staged_active = fingerprint_container_at(root_fd, stage_name)
     except BaseException:
@@ -809,12 +868,8 @@ def _rollback_container_exchange(
             os.fsync(root_fd)
         except BaseException:
             pass
-        return "rollback_failed", _observed_container_fingerprint(root_fd)
-    try:
-        _cleanup_owned_stage(root_fd, stage_name, desired_fingerprint)
-    except BaseException:
-        return "cleanup_failed", displaced
-    return "rolled_back", displaced
+        return "rollback_failed"
+    return "rolled_back"
 
 
 def apply_local_write(
@@ -876,19 +931,22 @@ def apply_local_write(
         try:
             fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as error:
-            observed = _observed_container_fingerprint(root_fd)
+            outcomes, container = _final_transaction_evidence(
+                root_fd,
+                writes,
+                "not_applied",
+                "not_applied",
+                expected_container_fingerprint,
+                "",
+                transaction_owner,
+                None,
+            )
             raise LocalTransactionError(
                 "repository setup lock is held by another owner",
                 operation=writes[0].operation,
                 cause=error,
-                outcomes=_local_outcomes(root_fd, writes, "not_applied"),
-                container=_container_outcome(
-                    "not_applied",
-                    expected_container_fingerprint,
-                    "",
-                    observed,
-                    transaction_owner,
-                ),
+                outcomes=outcomes,
+                container=container,
             ) from error
 
         observed_prior = fingerprint_container_at(root_fd)
@@ -926,18 +984,37 @@ def apply_local_write(
         if not hmac.compare_digest(current_prior, observed_prior):
             raise ValueError("approved local container changed before commit")
         if hmac.compare_digest(desired_container_fingerprint, observed_prior):
-            _cleanup_owned_stage(root_fd, stage_name, desired_container_fingerprint)
-            stage_name = None
-            outcomes = _local_outcomes(root_fd, writes, "durable")
+            outcomes, container = _final_transaction_evidence(
+                root_fd,
+                writes,
+                "durable",
+                "unchanged",
+                observed_prior,
+                desired_container_fingerprint,
+                transaction_owner,
+                stage_name,
+            )
+            if not hmac.compare_digest(
+                container.observed_fingerprint,
+                desired_container_fingerprint,
+            ):
+                outcomes, container = _restate_transaction_evidence(
+                    outcomes,
+                    container,
+                    "not_applied",
+                    "not_applied",
+                )
+                error = ValueError("active local container changed before completion")
+                raise LocalTransactionError(
+                    str(error),
+                    operation=failed_write.operation if failed_write else writes[0].operation,
+                    cause=error,
+                    outcomes=outcomes,
+                    container=container,
+                ) from error
             return LocalTransactionResult(
                 outcomes,
-                _container_outcome(
-                    "unchanged",
-                    observed_prior,
-                    desired_container_fingerprint,
-                    observed_prior,
-                    transaction_owner,
-                ),
+                container,
             )
 
         if observed_prior == ABSENT_LOCAL_CONTAINER_FINGERPRINT:
@@ -954,59 +1031,65 @@ def apply_local_write(
             except BaseException:
                 displaced_prior = ""
             if not hmac.compare_digest(displaced_prior, observed_prior):
-                disposition, active = _rollback_container_exchange(
+                disposition = _rollback_container_exchange(
                     root_fd,
                     stage_name,
                     desired_container_fingerprint,
                 )
-                stage_name = None if disposition == "rolled_back" else stage_name
+                outcomes, container = _final_transaction_evidence(
+                    root_fd,
+                    writes,
+                    disposition,
+                    disposition,
+                    observed_prior,
+                    desired_container_fingerprint,
+                    transaction_owner,
+                    stage_name,
+                )
                 raise LocalTransactionError(
                     "atomically displaced container failed approved CAS",
                     operation=failed_write.operation if failed_write else writes[0].operation,
                     cause=ValueError("displaced prior container fingerprint mismatch"),
-                    outcomes=_local_outcomes(root_fd, writes, disposition),
-                    container=_container_outcome(
-                        disposition,
-                        observed_prior,
-                        desired_container_fingerprint,
-                        active,
-                        transaction_owner,
-                    ),
+                    outcomes=outcomes,
+                    container=container,
                 )
-            try:
-                _cleanup_owned_stage(root_fd, stage_name, observed_prior)
-                stage_name = None
-            except BaseException as error:
-                active = _observed_container_fingerprint(root_fd)
-                raise LocalTransactionError(
-                    "committed local container but prior-tree cleanup failed",
-                    operation=failed_write.operation if failed_write else writes[0].operation,
-                    cause=error,
-                    outcomes=_local_outcomes(root_fd, writes, "durable"),
-                    container=_container_outcome(
-                        "cleanup_failed",
-                        observed_prior,
-                        desired_container_fingerprint,
-                        active,
-                        transaction_owner,
-                    ),
-                ) from error
 
-        active = fingerprint_container_at(root_fd)
-        if not hmac.compare_digest(active, desired_container_fingerprint):
-            raise ValueError("active local container differs after atomic switch")
-        outcomes = _local_outcomes(root_fd, writes, "durable")
+        success_disposition = (
+            "created"
+            if observed_prior == ABSENT_LOCAL_CONTAINER_FINGERPRINT
+            else "replaced"
+        )
+        outcomes, container = _final_transaction_evidence(
+            root_fd,
+            writes,
+            "durable",
+            success_disposition,
+            observed_prior,
+            desired_container_fingerprint,
+            transaction_owner,
+            stage_name,
+        )
+        if not hmac.compare_digest(
+            container.observed_fingerprint,
+            desired_container_fingerprint,
+        ):
+            outcomes, container = _restate_transaction_evidence(
+                outcomes,
+                container,
+                "commit_failed",
+                "commit_failed",
+            )
+            error = ValueError("active local container differs after atomic switch")
+            raise LocalTransactionError(
+                str(error),
+                operation=failed_write.operation if failed_write else writes[0].operation,
+                cause=error,
+                outcomes=outcomes,
+                container=container,
+            ) from error
         return LocalTransactionResult(
             outcomes,
-            _container_outcome(
-                "created"
-                if observed_prior == ABSENT_LOCAL_CONTAINER_FINGERPRINT
-                else "replaced",
-                observed_prior,
-                desired_container_fingerprint,
-                active,
-                transaction_owner,
-            ),
+            container,
         )
     except LocalTransactionError:
         raise
@@ -1014,33 +1097,23 @@ def apply_local_write(
         if stage_fd is not None:
             os.close(stage_fd)
             stage_fd = None
-        cleanup_failed = False
-        if stage_name is not None and not switched:
-            try:
-                remove_tree_at(root_fd, stage_name)
-                stage_name = None
-            except BaseException:
-                cleanup_failed = True
-        observed = _observed_container_fingerprint(root_fd)
-        disposition = (
-            "commit_failed"
-            if switched
-            else "cleanup_failed"
-            if cleanup_failed
-            else "not_applied"
+        disposition = "commit_failed" if switched else "not_applied"
+        outcomes, container = _final_transaction_evidence(
+            root_fd,
+            writes,
+            disposition,
+            disposition,
+            expected_container_fingerprint,
+            desired_container_fingerprint,
+            transaction_owner,
+            stage_name,
         )
         raise LocalTransactionError(
             str(error) or type(error).__name__,
             operation=failed_write.operation if failed_write is not None else None,
             cause=error,
-            outcomes=_local_outcomes(root_fd, writes, disposition),
-            container=_container_outcome(
-                disposition,
-                expected_container_fingerprint,
-                desired_container_fingerprint,
-                observed,
-                transaction_owner,
-            ),
+            outcomes=outcomes,
+            container=container,
         ) from error
     finally:
         if stage_fd is not None:
