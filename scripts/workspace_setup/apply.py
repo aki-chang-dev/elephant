@@ -108,6 +108,7 @@ _ADAPTER_OPERATION_KINDS = frozenset(
     {
         OperationKind.REUSE,
         OperationKind.CREATE,
+        OperationKind.MANUAL,
         OperationKind.VERIFY,
         OperationKind.ROUND_TRIP,
     }
@@ -306,6 +307,34 @@ def _manual_handoff(operation: SetupOperation) -> ApplyEvidence:
         external_id="",
         observed_fingerprint=operation.desired_fingerprint,
         disposition="manual_handoff",
+    )
+
+
+def _apply_manual_operation(
+    operation: SetupOperation,
+    adapter: SetupAdapter,
+) -> ApplyEvidence:
+    records = _find_records(adapter, operation, operation.target_key)
+    if not records:
+        return _manual_handoff(operation)
+    _require_semantic_match(
+        operation,
+        operation.target_key,
+        records[0],
+        context="manual completion",
+    )
+    record = _read_back(
+        adapter,
+        operation,
+        operation.target_key,
+        records[0].external_id,
+    )
+    return ApplyEvidence(
+        operation_id=operation.operation_id,
+        target_key=operation.target_key,
+        external_id=record.external_id,
+        observed_fingerprint=record.fingerprint,
+        disposition="manual_completed",
     )
 
 
@@ -568,15 +597,23 @@ def apply_setup(
         except Exception as error:
             raise _contextual_error(error, operation, ()) from error
 
-    manual_handoffs: list[ApplyEvidence] = []
     for operation in operations:
         if operation.kind is OperationKind.WRITE_LOCAL:
             continue
         try:
             if operation.kind is OperationKind.MANUAL:
-                handoff = _manual_handoff(operation)
-                evidence.append(handoff)
-                manual_handoffs.append(handoff)
+                manual_evidence = _apply_manual_operation(
+                    operation,
+                    adapters[operation.provider],
+                )
+                evidence.append(manual_evidence)
+                if manual_evidence.disposition == "manual_handoff":
+                    return ApplyResult(
+                        ready=False,
+                        evidence=tuple(evidence),
+                        manual_handoffs=(manual_evidence,),
+                        local_writes=(),
+                    )
                 continue
             if operation.kind is OperationKind.ROUND_TRIP:
                 evidence.append(
@@ -593,14 +630,6 @@ def apply_setup(
             )
         except Exception as error:
             raise _contextual_error(error, operation, tuple(evidence)) from error
-
-    if manual_handoffs:
-        return ApplyResult(
-            ready=False,
-            evidence=tuple(evidence),
-            manual_handoffs=tuple(manual_handoffs),
-            local_writes=(),
-        )
 
     try:
         transaction = write_local(

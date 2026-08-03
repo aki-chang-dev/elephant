@@ -449,6 +449,35 @@ class SetupApplyAuthorityTests(unittest.TestCase):
         self.assertEqual(linear.calls, [])
         self.assertEqual(writer.calls, [])
 
+    def test_manual_adapter_is_resolved_before_prior_external_work(self):
+        value = approved(manifest(
+            operation(
+                OperationKind.REUSE,
+                provider="linear",
+                target_key="team.delivery",
+                desired_fingerprint="team-v1",
+            ),
+            operation(
+                OperationKind.MANUAL,
+                provider="notion",
+                target_key="view.sample",
+                desired_fingerprint="view-v1",
+                payload=(
+                    ("diagnostic_code", "platform_unsupported"),
+                    ("read_back_required", True),
+                ),
+            ),
+        ))
+        linear = RecordingAdapter(
+            "linear",
+            records=(ExternalRecord("team.delivery", "linear-1", "team-v1"),),
+        )
+
+        with self.assertRaisesRegex(SetupApplyError, "adapter.*notion|notion.*adapter"):
+            run_apply(value, {"linear": linear}, RecordingWriter())
+
+        self.assertEqual(linear.calls, [])
+
     def test_all_adapter_protocols_are_validated_before_first_mutation(self):
         class IncompleteAdapter:
             provider = "notion"
@@ -625,17 +654,19 @@ class SetupApplyMutationTests(unittest.TestCase):
                 self.assertEqual(writer.calls, [])
                 self.assertNotIn("delete_disposable", adapter.call_kinds)
 
-    def test_manual_handoff_is_not_ready_and_never_writes_local_state(self):
-        value = approved(manifest(
-            operation(
-                OperationKind.MANUAL,
-                provider="notion",
-                target_key="view.sample",
-                payload=(
-                    ("diagnostic_code", "platform_unsupported"),
-                    ("read_back_required", True),
-                ),
+    def test_manual_handoff_continues_with_same_approval_after_verified_completion(self):
+        manual = operation(
+            OperationKind.MANUAL,
+            provider="notion",
+            target_key="view.sample",
+            desired_fingerprint="view-v1",
+            payload=(
+                ("diagnostic_code", "platform_unsupported"),
+                ("read_back_required", True),
             ),
+        )
+        value = approved(manifest(
+            manual,
             operation(
                 OperationKind.WRITE_LOCAL,
                 provider="local",
@@ -643,14 +674,127 @@ class SetupApplyMutationTests(unittest.TestCase):
                 payload=(("document", ()),),
             ),
         ))
+        adapter = RecordingAdapter("notion")
         writer = RecordingWriter()
 
-        result = run_apply(value, {}, writer)
+        first = run_apply(
+            value,
+            {"notion": adapter},
+            writer,
+            execution_id="manual-continuation",
+        )
 
-        self.assertFalse(result.ready)
-        self.assertEqual(len(result.manual_handoffs), 1)
-        self.assertEqual(result.manual_handoffs[0].disposition, "manual_handoff")
+        self.assertFalse(first.ready)
+        self.assertEqual(len(first.manual_handoffs), 1)
+        self.assertEqual(first.manual_handoffs[0].disposition, "manual_handoff")
+        self.assertEqual(adapter.call_kinds, ("find",))
         self.assertEqual(writer.calls, [])
+
+        completed = ExternalRecord("view.sample", "notion-view-1", "view-v1")
+        adapter.records_by_key[completed.stable_key] = [completed]
+        adapter.records_by_id[completed.external_id] = completed
+        continued_writer = RecordingWriter()
+
+        second = run_apply(
+            value,
+            {"notion": adapter},
+            continued_writer,
+            execution_id="manual-continuation",
+        )
+
+        self.assertTrue(second.ready)
+        self.assertEqual(second.manual_handoffs, ())
+        self.assertEqual(second.evidence[0].operation_id, manual.operation_id)
+        self.assertEqual(second.evidence[0].disposition, "manual_completed")
+        self.assertEqual(second.evidence[0].external_id, completed.external_id)
+        self.assertEqual(second.evidence[0].observed_fingerprint, "view-v1")
+        self.assertEqual(adapter.call_kinds, ("find", "find", "read"))
+        self.assertEqual(len(continued_writer.calls), 1)
+
+    def test_invalid_manual_completion_stops_with_contextual_partial_evidence(self):
+        prior = ExternalRecord("team.delivery", "linear-team-1", "team-v1")
+        manual = operation(
+            OperationKind.MANUAL,
+            provider="notion",
+            target_key="view.sample",
+            desired_fingerprint="view-v1",
+            payload=(
+                ("diagnostic_code", "platform_unsupported"),
+                ("read_back_required", True),
+            ),
+        )
+        value = approved(manifest(
+            operation(
+                OperationKind.REUSE,
+                provider="linear",
+                target_key="team.delivery",
+                desired_fingerprint="team-v1",
+            ),
+            manual,
+            operation(
+                OperationKind.WRITE_LOCAL,
+                provider="local",
+                target_key=".agents/elephant/workspace.yaml",
+                payload=(("document", ()),),
+            ),
+        ))
+        cases = (
+            (
+                "duplicate",
+                RecordingAdapter(
+                    "notion",
+                    records=(
+                        ExternalRecord("view.sample", "notion-view-1", "view-v1"),
+                        ExternalRecord("view.sample", "notion-view-2", "view-v1"),
+                    ),
+                ),
+                "duplicate",
+            ),
+            (
+                "mismatch",
+                RecordingAdapter(
+                    "notion",
+                    records=(
+                        ExternalRecord("view.sample", "notion-view-1", "view-old"),
+                    ),
+                ),
+                "fingerprint",
+            ),
+            (
+                "read failure",
+                RecordingAdapter(
+                    "notion",
+                    records=(
+                        ExternalRecord("view.sample", "notion-view-1", "view-v1"),
+                    ),
+                ),
+                "read-back",
+            ),
+        )
+        cases[2][1].records_by_id.clear()
+
+        for name, notion, message in cases:
+            with self.subTest(name=name):
+                writer = RecordingWriter()
+                linear = RecordingAdapter("linear", records=(prior,))
+
+                with self.assertRaisesRegex(SetupApplyError, message) as raised:
+                    run_apply(
+                        value,
+                        {"linear": linear, "notion": notion},
+                        writer,
+                        execution_id="manual-invalid",
+                    )
+
+                self.assertEqual(raised.exception.operation, manual)
+                self.assertEqual(raised.exception.provider, "notion")
+                self.assertEqual(raised.exception.target_key, "view.sample")
+                self.assertEqual(len(raised.exception.partial_evidence), 1)
+                self.assertEqual(
+                    raised.exception.partial_evidence[0].disposition,
+                    "reused",
+                )
+                self.assertEqual(writer.calls, [])
 
     def test_local_writes_receive_exact_documents_after_external_read_back(self):
         events: list[str] = []
@@ -1089,6 +1233,86 @@ def commit_integrated_local(root: Path, value: ApprovedManifest) -> None:
 
 
 class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
+    def test_same_approved_manual_completion_replaces_local_and_retains_recovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            events: list[str] = []
+            adapters = integrated_adapters(events)
+            original, original_documents = approved_integrated_manifest(
+                root, adapters, repository_id="repo-sample"
+            )
+            commit_integrated_local(root, original)
+            changed, changed_documents = approved_integrated_manifest(
+                root, adapters, repository_id="repo-updated"
+            )
+            manual = operation(
+                OperationKind.MANUAL,
+                provider="notion",
+                target_key="view.sample",
+                desired_fingerprint="view-v1",
+                payload=(
+                    ("diagnostic_code", "platform_unsupported"),
+                    ("read_back_required", True),
+                ),
+            )
+            value = approved(replace(
+                changed.manifest,
+                operations=(manual,) + changed.manifest.operations,
+            ))
+            owner = "integrated-manual-continuation"
+
+            first = run_apply(
+                value,
+                adapters,
+                AtomicLocalWriter(root, events),
+                execution_id=owner,
+            )
+
+            self.assertFalse(first.ready)
+            self.assertEqual(first.manual_handoffs[0].disposition, "manual_handoff")
+            self.assertEqual(
+                {
+                    path: (root / path).read_text(encoding="utf-8")
+                    for path in original_documents
+                },
+                original_documents,
+            )
+            completed = ExternalRecord("view.sample", "notion-view-1", "view-v1")
+            adapters["notion"].records_by_key[completed.stable_key] = [completed]
+            adapters["notion"].records_by_id[completed.external_id] = completed
+
+            second = run_apply(
+                value,
+                adapters,
+                AtomicLocalWriter(root, events),
+                execution_id=owner,
+            )
+
+            recovery = next(
+                evidence
+                for evidence in second.local_writes
+                if evidence.operation_id == "local.container.recovery"
+            )
+            active = next(
+                evidence
+                for evidence in second.local_writes
+                if evidence.operation_id == "local.container"
+            )
+            self.assertTrue(second.ready)
+            self.assertEqual(second.evidence[0].disposition, "manual_completed")
+            self.assertEqual(recovery.disposition, "cleanup_pending")
+            self.assertTrue(recovery.target_key.startswith(".agents.setup-stage-"))
+            self.assertTrue((root / recovery.target_key).is_dir())
+            self.assertEqual(active.target_key, ".agents")
+            self.assertEqual(active.disposition, "replaced")
+            self.assertEqual(
+                {
+                    path: (root / path).read_text(encoding="utf-8")
+                    for path in changed_documents
+                },
+                changed_documents,
+            )
+
     def test_verified_external_apply_writes_schema_valid_local_documents_last(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -32,6 +32,12 @@ any operation regenerates the manifest and requires approval of its newly
 displayed fingerprint. An earlier proposal, partial display, mapping document,
 or checklist grants no write authority.
 
+An administrative handoff is a pause within that same authority, not a manifest
+change. Resume it by passing the exact same `ApprovedManifest` and execution ID
+to `apply_setup()` after the human completes the named operation. Do not rebuild
+the completed manual operation as `REUSE`/`VERIFY`, transfer the old approval to
+a second manifest, or ask for a second routine approval.
+
 ## Protocol
 
 ### 1. Discover without writes
@@ -95,6 +101,15 @@ the observed fingerprint with the approved desired fingerprint. Duplicate
 keys, mismatches, and semantic drift stop execution; setup does not rename,
 move, merge, or delete user-owned external structures.
 
+When a `MANUAL` operation is absent, return its approved handoff immediately
+with `ready: false` and no local batch. On a later call using the exact same
+approval and execution ID, query that stable key again. Exactly one record must
+match the operation's approved desired fingerprint and pass read-back. Emit
+`manual_completed` evidence and continue the remaining approved operations.
+Absence emits the same handoff again. Duplicate records, semantic mismatch, or
+read failure stop with the manual operation context and all prior verified
+evidence. No adapter mutation completes a `MANUAL` operation.
+
 ### 5. Classify diagnostics and manual work exactly
 
 For each missing capability, emit the first missing layer in this exact order:
@@ -110,13 +125,15 @@ A missing administrative setup operation may become a one-time `manual`
 operation with exact instructions and mandatory read-back. A capability needed
 by routine runtime operation is blocking, regardless of whether a human could
 perform it manually. Never fall back to Git or another unselected provider.
+The manual completion check above is the continuation of the sole approved
+manifest; it is not a recurring runtime handoff.
 
 ### 6. Read back every result
 
-After each supported or manual mutation, retrieve the target by its stable key
-and verify persisted identity, relationships, and fingerprint. Read-back
-failure stops the run and preserves the evidence accumulated so far. It does
-not authorize local output.
+After each supported mutation or manually completed operation, retrieve the
+target by its stable key and verify persisted identity, relationships, and
+fingerprint. Read-back failure stops the run and preserves the evidence
+accumulated so far. It does not authorize local output.
 
 ### 7. Prove disposable round trips leave no record
 
@@ -129,11 +146,22 @@ failed deletion or absence check blocks readiness and all local writes.
 ### 8. Write local configuration last
 
 Only after external read-back and disposable cleanup succeed may setup apply
-the approved `write_local` operations. Write only
+the approved `write_local` operations. The only authoritative configuration
+targets are
 `.agents/elephant/workspace.yaml` and direct
 `.agents/elephant/profiles/*.yaml` children. Preserve unrelated local content,
 verify the approved prior state, use the atomic local transaction, then load
 and revalidate every written registry/profile against the canonical schemas.
+
+A successful replacement may retain the displaced prior `.agents` container as
+an identity-attested sibling named `.agents.setup-stage-*`. The active `.agents`
+container remains the sole workspace authority. The retained stage is
+non-authoritative recovery evidence reported as `local.container.recovery` with
+`cleanup_pending`; that disposition is nonblocking and does not make a verified
+setup unready. Its attested fingerprint plus device/inode and path identity are
+evidence, but neither its name nor its presence grants deletion authority.
+Never auto-delete it, treat it as a second configuration source, or synthesize a
+cleanup operation outside separately approved future authority.
 
 ### 9. Rerun as a no-write diff
 
@@ -146,8 +174,10 @@ or other semantic change returns to the owner decision session.
 ### 10. Declare readiness across all selected providers
 
 Readiness requires all selected logical providers to pass their complete
-runtime capability contracts and all setup evidence to pass read-back,
+runtime capability contracts and all blocking setup evidence to pass read-back,
 round-trip cleanup, absence verification, local write, and local schema
 validation. Administrative handoffs can complete setup prerequisites; they
-cannot substitute for runtime capabilities. If any condition fails, report the
-exact diagnostic and evidence and leave readiness false.
+cannot substitute for runtime capabilities. Identity-attested
+`cleanup_pending` recovery evidence is explicitly nonblocking because active
+`.agents` is the verified authority. If any blocking condition fails, report
+the exact diagnostic and evidence and leave readiness false.
