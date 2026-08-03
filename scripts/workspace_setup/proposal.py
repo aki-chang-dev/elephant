@@ -127,6 +127,11 @@ def _unique_keys(values: tuple[object, ...], field_name: str) -> set[str]:
     return set(keys)
 
 
+def _reject_duplicate_links(values: tuple[str, ...], field_name: str) -> None:
+    if len(values) != len(set(values)):
+        raise ValueError(f"duplicate {field_name} key")
+
+
 def confirm_topology(
     proposal: TopologyProposal,
     products: tuple[ConfirmedProduct, ...],
@@ -138,6 +143,10 @@ def confirm_topology(
     confirmed_domains = _require_confirmed_values(domains, ConfirmedDomain, "domains")
     product_keys = _unique_keys(confirmed_products, "product")
     domain_keys = _unique_keys(confirmed_domains, "domain")
+    for product in confirmed_products:
+        _reject_duplicate_links(product.domain_keys, "domain")
+    for domain in confirmed_domains:
+        _reject_duplicate_links(domain.product_keys, "product")
     candidate_products = {candidate.key for candidate in proposal.product_candidates}
     candidate_domains = {candidate.key for candidate in proposal.domain_candidates}
     unknown_products = product_keys - candidate_products

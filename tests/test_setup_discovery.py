@@ -60,6 +60,48 @@ class RepositoryDiscoveryTests(unittest.TestCase):
         self.assertEqual(result.workspace_units, ())
         self.assertTrue(any("manifest must be a JSON object" in problem for problem in result.problems))
 
+    def test_root_manifest_symlink_is_reported_without_reading_its_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repository"
+            root.mkdir()
+            outside_manifest = Path(temporary) / "outside-package.json"
+            outside_manifest.write_text('{"repository":{"id":"outside"}}', encoding="utf-8")
+            (root / "package.json").symlink_to(outside_manifest)
+            result = discover_repository(root)
+        self.assertEqual(result.repository_candidate.key, "repository")
+        self.assertEqual(result.repository_candidate.confidence.value, "low")
+        self.assertTrue(any("root package.json must not be a symlink" in problem for problem in result.problems))
+
+    def test_invalid_workspace_patterns_are_reported(self):
+        patterns = ("../outside", "/outside", "apps/**x")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "package.json").write_text(
+                '{"workspaces":' + repr(list(patterns)).replace("'", '"') + '}',
+                encoding="utf-8",
+            )
+            result = discover_repository(root)
+        self.assertEqual(result.workspace_units, ())
+        for pattern in patterns:
+            with self.subTest(pattern=pattern):
+                self.assertTrue(any(pattern in problem for problem in result.problems))
+
+    def test_duplicate_workspace_package_names_are_reported_and_not_linked(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, manifest in {
+                "a": '{"name":"duplicate"}',
+                "b": '{"name":"duplicate"}',
+                "consumer": '{"name":"consumer","dependencies":{"duplicate":"1"}}',
+            }.items():
+                directory = root / "apps" / name
+                directory.mkdir(parents=True)
+                (directory / "package.json").write_text(manifest, encoding="utf-8")
+            (root / "package.json").write_text('{"name":"root"}', encoding="utf-8")
+            result = discover_repository(root)
+        self.assertTrue(any("duplicate workspace package name: duplicate" in problem for problem in result.problems))
+        self.assertEqual(result.dependencies, ())
+
 
 class TopologyProposalTests(unittest.TestCase):
     def test_applications_and_packages_never_become_products_by_themselves(self):
@@ -151,6 +193,28 @@ class TopologyProposalTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "reciprocal"):
             confirm_topology(proposal, (ConfirmedProduct("product", "Product", ()),), (domain,))
+
+    def test_confirmation_rejects_duplicate_nested_product_and_domain_links(self):
+        proposal = propose_topology(
+            discover_repository(FIXTURES / "multi-product"),
+            normalize_external_discovery((
+                {"provider": "linear", "kind": "product", "key": "product", "display_name": "Product", "external_id": "p"},
+            )),
+        )
+        product = ConfirmedProduct("product", "Product", ("alpha",))
+        domain = ConfirmedDomain("alpha", "Alpha", ("product",), ("apps/alpha",), (), ())
+        with self.assertRaisesRegex(ValueError, "duplicate domain key"):
+            confirm_topology(
+                proposal,
+                (ConfirmedProduct("product", "Product", ("alpha", "alpha")),),
+                (domain,),
+            )
+        with self.assertRaisesRegex(ValueError, "duplicate product key"):
+            confirm_topology(
+                proposal,
+                (product,),
+                (ConfirmedDomain("alpha", "Alpha", ("product", "product"), ("apps/alpha",), (), ()),),
+            )
 
     def test_external_records_require_mapping_and_stable_identifiers(self):
         for record in ({"provider": "linear"}, {"provider": "linear", "kind": "product", "key": "x", "display_name": "X", "external_id": ""}):

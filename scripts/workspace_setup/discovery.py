@@ -84,19 +84,23 @@ def _workspace_patterns(manifest: object, problems: list[str]) -> tuple[str, ...
     return tuple(workspaces)
 
 
-def _safe_workspace_matches(root: Path, pattern: str) -> tuple[Path, ...]:
+def _safe_workspace_matches(root: Path, pattern: str, problems: list[str]) -> tuple[Path, ...]:
     candidate_pattern = Path(pattern)
-    if candidate_pattern.is_absolute() or ".." in candidate_pattern.parts:
+    if candidate_pattern.is_absolute():
+        problems.append(f"package.json: invalid workspace pattern {pattern!r}: absolute paths are not allowed")
         return ()
-    try:
-        matches = root.glob(pattern)
-    except ValueError:
+    if ".." in candidate_pattern.parts:
+        problems.append(f"package.json: invalid workspace pattern {pattern!r}: parent traversal is not allowed")
         return ()
     directories: set[Path] = set()
-    for match in matches:
-        directory = match.parent if match.name == "package.json" else match
-        if directory.is_dir() and _is_allowed_directory(root, directory):
-            directories.add(directory)
+    try:
+        for match in root.glob(pattern):
+            directory = match.parent if match.name == "package.json" else match
+            if directory.is_dir() and _is_allowed_directory(root, directory):
+                directories.add(directory)
+    except ValueError as error:
+        problems.append(f"package.json: invalid workspace pattern {pattern!r}: {error}")
+        return ()
     return tuple(sorted(directories, key=lambda item: _relative(root, item)))
 
 
@@ -145,9 +149,14 @@ def discover_repository(root: Path | str) -> RepositoryDiscovery:
     resolved_root = Path(root).resolve()
     problems: list[str] = []
     root_manifest_path = resolved_root / "package.json"
-    root_manifest = _read_json(root_manifest_path, problems) if root_manifest_path.is_file() else {}
-    if not root_manifest_path.is_file():
+    if root_manifest_path.is_symlink():
+        problems.append(f"{root_manifest_path}: root package.json must not be a symlink")
+        root_manifest = {}
+    elif root_manifest_path.is_file():
+        root_manifest = _read_json(root_manifest_path, problems)
+    else:
         problems.append(f"{root_manifest_path}: missing package.json")
+        root_manifest = {}
     if root_manifest is None:
         root_manifest = {}
     if not isinstance(root_manifest, Mapping):
@@ -156,7 +165,7 @@ def discover_repository(root: Path | str) -> RepositoryDiscovery:
 
     package_directories: set[Path] = set()
     for pattern in _workspace_patterns(root_manifest, problems):
-        package_directories.update(_safe_workspace_matches(resolved_root, pattern))
+        package_directories.update(_safe_workspace_matches(resolved_root, pattern, problems))
     for parent_name in ("apps", "packages"):
         parent = resolved_root / parent_name
         if parent.is_dir() and not parent.is_symlink():
@@ -199,7 +208,15 @@ def discover_repository(root: Path | str) -> RepositoryDiscovery:
             manifest,
         ))
 
-    package_paths = {unit.package_name: unit.path for unit, _ in unit_data}
+    package_paths_by_name: dict[str, list[str]] = {}
+    for unit, _ in unit_data:
+        package_paths_by_name.setdefault(unit.package_name, []).append(unit.path)
+    package_paths: dict[str, str] = {}
+    for package_name, paths in sorted(package_paths_by_name.items()):
+        if len(paths) == 1:
+            package_paths[package_name] = paths[0]
+        else:
+            problems.append(f"duplicate workspace package name: {package_name}")
     edge_evidence: dict[tuple[str, str], list[Evidence]] = {}
     for unit, manifest in unit_data:
         for section in _DEPENDENCY_SECTIONS:
