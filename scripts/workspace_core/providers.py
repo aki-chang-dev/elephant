@@ -59,8 +59,22 @@ _CAPABILITIES_BY_PROVIDER = {
 }
 
 
+def _coerce_provider(provider: ProviderKind | str) -> ProviderKind:
+    try:
+        return ProviderKind(provider)
+    except (TypeError, ValueError):
+        choices = ", ".join(sorted(kind.value for kind in ProviderKind))
+        raise ValueError(f"provider: expected one of {choices}") from None
+
+
+def _require_capability_set(name: str, value: object) -> Set[str]:
+    if not isinstance(value, Set):
+        raise TypeError(f"{name}: expected set-like capability collection")
+    return value
+
+
 def preflight_provider(
-    provider: ProviderKind,
+    provider: ProviderKind | str,
     *,
     exposed: Set[str],
     permitted: Set[str],
@@ -68,14 +82,22 @@ def preflight_provider(
     platform_supported: Set[str],
 ) -> ProviderPreflight:
     """Report the first unavailable layer for every required capability."""
+    provider_kind = _coerce_provider(provider)
+    layers = tuple(
+        (
+            _require_capability_set(name, available),
+            code,
+        )
+        for name, available, code in (
+            ("platform_supported", platform_supported, DiagnosticCode.PLATFORM_UNSUPPORTED),
+            ("exposed", exposed, DiagnosticCode.CONNECTOR_CAPABILITY_MISSING),
+            ("permitted", permitted, DiagnosticCode.PERMISSION_MISSING),
+            ("configured", configured, DiagnosticCode.CONFIGURATION_MISSING),
+        )
+    )
     diagnostics: list[CapabilityDiagnostic] = []
-    for capability in sorted(_CAPABILITIES_BY_PROVIDER[provider]):
-        for available, code in (
-            (platform_supported, DiagnosticCode.PLATFORM_UNSUPPORTED),
-            (exposed, DiagnosticCode.CONNECTOR_CAPABILITY_MISSING),
-            (permitted, DiagnosticCode.PERMISSION_MISSING),
-            (configured, DiagnosticCode.CONFIGURATION_MISSING),
-        ):
+    for capability in sorted(_CAPABILITIES_BY_PROVIDER[provider_kind]):
+        for available, code in layers:
             if capability not in available:
                 diagnostics.append(CapabilityDiagnostic(capability, code))
                 break

@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import re
+import sys
 
 
 PLUGIN = Path("plugins/elephant")
@@ -44,6 +46,142 @@ REQUIRED_V3_CORE_ASSETS = (
     "workspace/provider-contracts.md",
     "workspace/story-state-model.md",
 )
+
+REQUIRED_V3_CORE_EXPORTS = frozenset({
+    "CONTRACT_RUNTIME_CAPABILITIES",
+    "DELIVERY_RUNTIME_CAPABILITIES",
+    "KNOWLEDGE_RUNTIME_CAPABILITIES",
+    "STORY_RUNTIME_CAPABILITIES",
+    "CapabilityDiagnostic",
+    "CheckpointPhase",
+    "DiagnosticCode",
+    "DriftKind",
+    "HumanStatus",
+    "ProductDisposition",
+    "ProviderKind",
+    "ProviderPreflight",
+    "RepairAction",
+    "WorkspaceRouteError",
+    "can_transition_human_status",
+    "preflight_provider",
+    "repair_action",
+    "resolve_profile",
+    "terminal_status_for_disposition",
+    "validate_profile",
+    "validate_workspace",
+})
+
+V3_CORE_ENUM_VALUES = {
+    "ProviderKind": (
+        "story",
+        "product_knowledge",
+        "product_contract",
+        "delivery_workspace",
+    ),
+    "DiagnosticCode": (
+        "platform_unsupported",
+        "connector_capability_missing",
+        "permission_missing",
+        "configuration_missing",
+    ),
+    "HumanStatus": ("Backlog", "Shaping", "Ready", "In Progress", "Done", "Canceled"),
+    "ProductDisposition": ("approved", "split", "deferred", "rejected"),
+    "CheckpointPhase": (
+        "contract_pending",
+        "shaping",
+        "ready",
+        "technical",
+        "implementing",
+        "conformance",
+        "closeout",
+        "done",
+        "needs_product_decision",
+    ),
+    "DriftKind": (
+        "stale_recap",
+        "missing_reciprocal_link",
+        "verified_checkpoint_lag",
+        "timed_out_write",
+        "approved_contract_changed",
+        "product_assignment_changed",
+        "human_status_advanced",
+        "duplicate_authority",
+    ),
+    "RepairAction": ("auto_repair", "stop"),
+}
+
+V3_CORE_CAPABILITY_SETS = {
+    "STORY_RUNTIME_CAPABILITIES": frozenset({
+        "create_story",
+        "read_story",
+        "update_story_status",
+        "write_product_recap",
+        "create_child_story",
+        "link_story_relation",
+        "bind_product_contract",
+        "read_checkpoint",
+        "write_checkpoint",
+        "attach_delivery_evidence",
+    }),
+    "KNOWLEDGE_RUNTIME_CAPABILITIES": frozenset({
+        "read_knowledge",
+        "query_knowledge",
+        "create_knowledge",
+        "update_knowledge",
+        "supersede_knowledge",
+        "link_knowledge_relation",
+    }),
+    "CONTRACT_RUNTIME_CAPABILITIES": frozenset({
+        "create_contract_draft",
+        "read_contract",
+        "update_contract_draft",
+        "approve_contract",
+        "create_contract_successor",
+        "resolve_active_contract",
+        "verify_contract_fingerprint",
+        "verify_story_binding",
+    }),
+    "DELIVERY_RUNTIME_CAPABILITIES": frozenset({
+        "persist_technical_contract",
+        "persist_plan",
+        "bind_delivery_branch",
+        "record_conformance",
+        "promote_knowledge",
+        "remove_transient_artifacts",
+    }),
+}
+
+V3_CORE_HUMAN_TRANSITIONS = frozenset({
+    ("Backlog", "Shaping"),
+    ("Shaping", "Ready"),
+    ("Shaping", "Backlog"),
+    ("Shaping", "Canceled"),
+    ("Ready", "In Progress"),
+    ("Ready", "Shaping"),
+    ("Ready", "Backlog"),
+    ("Ready", "Canceled"),
+    ("In Progress", "Shaping"),
+    ("In Progress", "Done"),
+    ("In Progress", "Canceled"),
+})
+
+V3_CORE_DISPOSITION_STATUSES = {
+    "approved": "Ready",
+    "split": "Canceled",
+    "deferred": "Backlog",
+    "rejected": "Canceled",
+}
+
+V3_CORE_REPAIR_ACTIONS = {
+    "stale_recap": "auto_repair",
+    "missing_reciprocal_link": "auto_repair",
+    "verified_checkpoint_lag": "auto_repair",
+    "timed_out_write": "auto_repair",
+    "approved_contract_changed": "stop",
+    "product_assignment_changed": "stop",
+    "human_status_advanced": "stop",
+    "duplicate_authority": "stop",
+}
 
 
 def _load_json(path: Path, label: str, errors: list[str]) -> dict | None:
@@ -156,6 +294,139 @@ def _validate_v3_core_assets(root: Path, errors: list[str]) -> None:
             errors.append(f"missing v3 workspace core asset: {path.relative_to(root)}")
 
 
+def _load_v3_core_oracle(root: Path, errors: list[str]):
+    package_path = root / "scripts/workspace_core/__init__.py"
+    if not package_path.is_file():
+        errors.append(
+            "missing v3 workspace core oracle: scripts/workspace_core/__init__.py"
+        )
+        return None
+
+    package_name = f"_elephant_workspace_core_{abs(hash(root.resolve()))}"
+    spec = importlib.util.spec_from_file_location(
+        package_name,
+        package_path,
+        submodule_search_locations=[str(package_path.parent)],
+    )
+    if spec is None or spec.loader is None:
+        errors.append("invalid v3 workspace core oracle: package cannot be loaded")
+        return None
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[package_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        errors.append(
+            "invalid v3 workspace core oracle: import failed: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return None
+    finally:
+        for name in tuple(sys.modules):
+            if name == package_name or name.startswith(f"{package_name}."):
+                del sys.modules[name]
+    return module
+
+
+def _validate_v3_core_oracle(root: Path, errors: list[str]) -> None:
+    core = _load_v3_core_oracle(root, errors)
+    if core is None:
+        return
+
+    try:
+        exports = frozenset(core.__all__)
+    except (AttributeError, TypeError):
+        exports = frozenset()
+    if exports != REQUIRED_V3_CORE_EXPORTS:
+        errors.append("invalid v3 workspace core oracle: public exports differ")
+
+    for name, expected in V3_CORE_ENUM_VALUES.items():
+        try:
+            actual = tuple(member.value for member in getattr(core, name))
+        except (AttributeError, TypeError):
+            actual = None
+        if actual != expected:
+            errors.append(f"invalid v3 workspace core oracle: {name} values differ")
+
+    for name, expected in V3_CORE_CAPABILITY_SETS.items():
+        try:
+            actual = frozenset(getattr(core, name))
+        except (AttributeError, TypeError):
+            actual = None
+        if actual != expected:
+            errors.append(f"invalid v3 workspace core oracle: {name} differs")
+
+    try:
+        actual_transitions = frozenset(
+            (current.value, target.value)
+            for current in core.HumanStatus
+            for target in core.HumanStatus
+            if core.can_transition_human_status(current, target)
+        )
+    except (AttributeError, KeyError, TypeError, ValueError):
+        actual_transitions = None
+    if actual_transitions != V3_CORE_HUMAN_TRANSITIONS:
+        errors.append("invalid v3 workspace core oracle: human transition matrix differs")
+
+    try:
+        actual_dispositions = {
+            disposition.value: core.terminal_status_for_disposition(disposition).value
+            for disposition in core.ProductDisposition
+        }
+    except (AttributeError, KeyError, TypeError, ValueError):
+        actual_dispositions = None
+    if actual_dispositions != V3_CORE_DISPOSITION_STATUSES:
+        errors.append("invalid v3 workspace core oracle: disposition mapping differs")
+
+    try:
+        actual_repairs = {
+            drift_kind.value: core.repair_action(drift_kind).value
+            for drift_kind in core.DriftKind
+        }
+    except (AttributeError, KeyError, TypeError, ValueError):
+        actual_repairs = None
+    if actual_repairs != V3_CORE_REPAIR_ACTIONS:
+        errors.append("invalid v3 workspace core oracle: repair mapping differs")
+
+    provider_capabilities = (
+        ("story", "STORY_RUNTIME_CAPABILITIES"),
+        ("product_knowledge", "KNOWLEDGE_RUNTIME_CAPABILITIES"),
+        ("product_contract", "CONTRACT_RUNTIME_CAPABILITIES"),
+        ("delivery_workspace", "DELIVERY_RUNTIME_CAPABILITIES"),
+    )
+    diagnostic_layers = (
+        ("platform_supported", "platform_unsupported"),
+        ("exposed", "connector_capability_missing"),
+        ("permitted", "permission_missing"),
+        ("configured", "configuration_missing"),
+    )
+    try:
+        precedence_matches = True
+        for provider_value, capabilities_name in provider_capabilities:
+            required = getattr(core, capabilities_name)
+            capability = min(required)
+            for missing_layer, expected_code in diagnostic_layers:
+                available = {
+                    "platform_supported": required,
+                    "exposed": required,
+                    "permitted": required,
+                    "configured": required,
+                }
+                available[missing_layer] = required - {capability}
+                result = core.preflight_provider(provider_value, **available)
+                observed = tuple(
+                    (diagnostic.capability, diagnostic.code.value)
+                    for diagnostic in result.diagnostics
+                )
+                if result.ready or observed != ((capability, expected_code),):
+                    precedence_matches = False
+    except (AttributeError, KeyError, TypeError, ValueError):
+        precedence_matches = False
+    if not precedence_matches:
+        errors.append("invalid v3 workspace core oracle: diagnostic precedence differs")
+
+
 def validate_repository(root: Path) -> list[str]:
     """Return every compatibility error found below *root*."""
     errors: list[str] = []
@@ -164,6 +435,7 @@ def validate_repository(root: Path) -> list[str]:
     _validate_skills(root, errors)
     _validate_v2_assets(root, errors)
     _validate_v3_core_assets(root, errors)
+    _validate_v3_core_oracle(root, errors)
     return errors
 
 

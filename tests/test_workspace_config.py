@@ -57,6 +57,59 @@ class WorkspaceValidationTests(unittest.TestCase):
         problems = validate_workspace(value)
         self.assertIn("bindings.notion: required by selected provider", problems)
 
+    def test_required_registry_sections_are_mappings(self):
+        cases = (
+            ("repository", None, "repository: required mapping"),
+            ("providers", None, "providers: required mapping"),
+            ("bindings", None, "bindings: required mapping"),
+            ("products", [], "products: required mapping"),
+            ("domains", [], "domains: required mapping"),
+        )
+        for key, malformed, expected in cases:
+            with self.subTest(key=key, malformed=malformed):
+                value = deepcopy(VALID_WORKSPACE)
+                value[key] = malformed
+                self.assertIn(expected, validate_workspace(value))
+
+    def test_repository_requires_nonblank_stable_id(self):
+        for repository in ({}, {"id": None}, {"id": ""}, {"id": "   "}):
+            with self.subTest(repository=repository):
+                value = deepcopy(VALID_WORKSPACE)
+                value["repository"] = repository
+                self.assertIn(
+                    "repository.id: expected nonblank string",
+                    validate_workspace(value),
+                )
+
+    def test_selected_external_bindings_require_mappings(self):
+        for provider in ("linear", "notion"):
+            with self.subTest(provider=provider):
+                value = deepcopy(VALID_WORKSPACE)
+                value["bindings"][provider] = None
+                self.assertIn(
+                    f"bindings.{provider}: required mapping",
+                    validate_workspace(value),
+                )
+
+    def test_selected_external_bindings_require_every_opaque_id(self):
+        cases = (
+            ("linear", "workspace_id"),
+            ("linear", "team_id"),
+            ("notion", "workspace_id"),
+            ("notion", "products_database_id"),
+            ("notion", "knowledge_database_id"),
+            ("notion", "contracts_database_id"),
+        )
+        for provider, field in cases:
+            for malformed in (None, "", "   "):
+                with self.subTest(provider=provider, field=field, malformed=malformed):
+                    value = deepcopy(VALID_WORKSPACE)
+                    value["bindings"][provider][field] = malformed
+                    self.assertIn(
+                        f"bindings.{provider}.{field}: expected nonblank string",
+                        validate_workspace(value),
+                    )
+
     def test_rejects_story_level_registry_content(self):
         value = deepcopy(VALID_WORKSPACE)
         value["stories"] = {"CF-1": {"status": "Ready"}}
@@ -86,14 +139,152 @@ class WorkspaceValidationTests(unittest.TestCase):
             validate_workspace(value),
         )
 
+    def test_profiles_use_the_canonical_profile_directory_and_yaml_extension(self):
+        for path in (
+            "README.md",
+            "profiles/clickfalcon.yaml",
+            ".agents/elephant/clickfalcon.yaml",
+            ".agents/elephant/profiles/nested/clickfalcon.yaml",
+            ".agents/elephant/profiles/clickfalcon.yml",
+            ".agents/elephant/profiles/clickfalcon.json",
+            ".agents/elephant/profiles/.yaml",
+        ):
+            with self.subTest(path=path):
+                product_workspace = deepcopy(VALID_WORKSPACE)
+                product_workspace["products"]["clickfalcon"]["profile"] = path
+                self.assertIn(
+                    "products.clickfalcon.profile: expected "
+                    ".agents/elephant/profiles/*.yaml",
+                    validate_workspace(product_workspace),
+                )
+
+                engineering_workspace = deepcopy(VALID_WORKSPACE)
+                engineering_workspace["engineering_profile"] = path
+                self.assertIn(
+                    "engineering_profile: expected .agents/elephant/profiles/*.yaml",
+                    validate_workspace(engineering_workspace),
+                )
+
+    def test_engineering_profile_rejects_unsafe_repository_paths(self):
+        for path in (
+            "../engineering.yaml",
+            "/tmp/engineering.yaml",
+            ".agents/elephant/profiles\\engineering.yaml",
+            ".agents/./elephant/profiles/engineering.yaml",
+            ".agents//elephant/profiles/engineering.yaml",
+        ):
+            with self.subTest(path=path):
+                value = deepcopy(VALID_WORKSPACE)
+                value["engineering_profile"] = path
+                self.assertIn(
+                    "engineering_profile: expected repository-relative POSIX path",
+                    validate_workspace(value),
+                )
+
     def test_rejects_unsafe_and_noncanonical_scope_paths(self):
-        for path in ("../outside", "apps/./tracker-web", "apps//tracker-web"):
+        for path in (
+            "../outside",
+            "/tmp/outside",
+            "apps\\tracker-web",
+            "apps/./tracker-web",
+            "apps//tracker-web",
+        ):
             with self.subTest(path=path):
                 value = deepcopy(VALID_WORKSPACE)
                 value["domains"]["clickfalcon"]["scopes"] = [path]
                 self.assertIn(
                     "domains.clickfalcon.scopes[0]: "
                     "expected repository-relative POSIX path",
+                    validate_workspace(value),
+                )
+
+    def test_instruction_paths_are_repository_relative_posix_paths(self):
+        for path in (
+            "../outside/AGENTS.md",
+            "/tmp/AGENTS.md",
+            "apps\\AGENTS.md",
+            "apps/./AGENTS.md",
+            "apps//AGENTS.md",
+        ):
+            with self.subTest(path=path):
+                value = deepcopy(VALID_WORKSPACE)
+                value["domains"]["clickfalcon"]["instruction_paths"] = [path]
+                self.assertIn(
+                    "domains.clickfalcon.instruction_paths[0]: "
+                    "expected repository-relative POSIX path",
+                    validate_workspace(value),
+                )
+
+    def test_product_and_domain_records_are_mappings(self):
+        value = deepcopy(VALID_WORKSPACE)
+        value["products"]["clickfalcon"] = None
+        self.assertIn(
+            "products.clickfalcon: required mapping",
+            validate_workspace(value),
+        )
+
+        value = deepcopy(VALID_WORKSPACE)
+        value["domains"]["clickfalcon"] = None
+        self.assertIn(
+            "domains.clickfalcon: required mapping",
+            validate_workspace(value),
+        )
+
+    def test_product_records_require_provider_references_and_domain_list(self):
+        for field in ("story_ref", "knowledge_ref"):
+            for malformed in (None, "", "   "):
+                with self.subTest(field=field, malformed=malformed):
+                    value = deepcopy(VALID_WORKSPACE)
+                    value["products"]["clickfalcon"][field] = malformed
+                    self.assertIn(
+                        f"products.clickfalcon.{field}: expected nonblank string",
+                        validate_workspace(value),
+                    )
+
+        value = deepcopy(VALID_WORKSPACE)
+        del value["products"]["clickfalcon"]["primary_domains"]
+        self.assertIn(
+            "products.clickfalcon.primary_domains: expected list",
+            validate_workspace(value),
+        )
+
+    def test_domain_records_require_all_documented_lists(self):
+        for field in ("scopes", "instruction_paths", "verification", "products"):
+            with self.subTest(field=field):
+                value = deepcopy(VALID_WORKSPACE)
+                del value["domains"]["clickfalcon"][field]
+                self.assertIn(
+                    f"domains.clickfalcon.{field}: expected list",
+                    validate_workspace(value),
+                )
+
+    def test_domain_verification_commands_are_nonblank_strings(self):
+        for malformed in (None, "", "   "):
+            with self.subTest(malformed=malformed):
+                value = deepcopy(VALID_WORKSPACE)
+                value["domains"]["clickfalcon"]["verification"] = [malformed]
+                self.assertIn(
+                    "domains.clickfalcon.verification[0]: expected nonblank string",
+                    validate_workspace(value),
+                )
+
+    def test_instruction_paths_must_be_a_list(self):
+        for instruction_paths in (None, "AGENTS.md", {"AGENTS.md": True}):
+            with self.subTest(instruction_paths=instruction_paths):
+                value = deepcopy(VALID_WORKSPACE)
+                value["domains"]["clickfalcon"]["instruction_paths"] = instruction_paths
+                self.assertIn(
+                    "domains.clickfalcon.instruction_paths: expected list",
+                    validate_workspace(value),
+                )
+
+    def test_verification_commands_must_be_a_list(self):
+        for verification in (None, "bun run type-check", {"bun run type-check": True}):
+            with self.subTest(verification=verification):
+                value = deepcopy(VALID_WORKSPACE)
+                value["domains"]["clickfalcon"]["verification"] = verification
+                self.assertIn(
+                    "domains.clickfalcon.verification: expected list",
                     validate_workspace(value),
                 )
 

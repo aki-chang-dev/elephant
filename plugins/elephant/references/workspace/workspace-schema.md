@@ -64,14 +64,14 @@ engineering_profile: .agents/elephant/profiles/engineering.yaml
 - `bindings.notion.workspace_id`, `products_database_id`,
   `knowledge_database_id`, and `contracts_database_id` identify the Notion
   workspace and its databases.
-- `products` is keyed by product identifier. Each product has a repository-relative
-  POSIX `profile` path, its story and knowledge references, and
+- `products` is keyed by product identifier. Each product has a `profile` path matching
+  `.agents/elephant/profiles/*.yaml`, nonblank story and knowledge references, and
   `primary_domains`, whose entries must name existing domains.
 - `domains` is keyed by domain identifier. Each domain declares repository-relative
   POSIX `scopes`, `instruction_paths`, verification commands, and `products`,
   whose entries must name existing products.
-- `engineering_profile` is the repository-relative POSIX path to the engineering
-  profile.
+- `engineering_profile` matches `.agents/elephant/profiles/*.yaml` and identifies the
+  engineering profile.
 
 Repository-relative POSIX paths are non-empty, use `/` rather than `\`, do not
 start with `/`, and do not include `.` or `..` path segments. This applies to

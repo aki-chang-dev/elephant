@@ -154,9 +154,14 @@ Agent-assisted design is reserved as a future extension and is not silently sele
 
 ## Workspace v3 development
 
-The approved workspace design and phase-1 core references are present. The active shipping runtime
-remains v2 until the coordinated Maio cutover; phase 1 neither dual-writes nor translates
-artifacts. Future phases will consume the new workspace references.
+The [approved workspace design](docs/superpowers/specs/2026-08-03-external-workspace-orchestration-design.md)
+and [Phase 1 implementation plan](docs/superpowers/plans/2026-08-03-workspace-core.md) are present,
+along with the canonical [workspace registry](plugins/elephant/references/workspace/workspace-schema.md),
+[profile](plugins/elephant/references/workspace/profile-schema.md),
+[provider](plugins/elephant/references/workspace/provider-contracts.md), and
+[story-state](plugins/elephant/references/workspace/story-state-model.md) references. The active
+shipping runtime remains v2 until the coordinated Maio cutover; v3 is not yet usable, and Phase 1
+neither dual-writes nor translates artifacts. Future phases will consume these contracts.
 
 ## Development Validation
 

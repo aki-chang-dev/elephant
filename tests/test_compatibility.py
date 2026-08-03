@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 
@@ -777,6 +778,56 @@ class WorkspaceCorePackagingTests(unittest.TestCase):
         root = ROOT / "plugins/elephant/references"
         for relative in self.ASSETS:
             self.assertTrue((root / relative).is_file(), relative)
+
+    def test_workspace_core_public_exports_are_exact(self):
+        from scripts import workspace_core
+
+        expected = frozenset({
+            "CONTRACT_RUNTIME_CAPABILITIES",
+            "DELIVERY_RUNTIME_CAPABILITIES",
+            "KNOWLEDGE_RUNTIME_CAPABILITIES",
+            "STORY_RUNTIME_CAPABILITIES",
+            "CapabilityDiagnostic",
+            "CheckpointPhase",
+            "DiagnosticCode",
+            "DriftKind",
+            "HumanStatus",
+            "ProductDisposition",
+            "ProviderKind",
+            "ProviderPreflight",
+            "RepairAction",
+            "WorkspaceRouteError",
+            "can_transition_human_status",
+            "preflight_provider",
+            "repair_action",
+            "resolve_profile",
+            "terminal_status_for_disposition",
+            "validate_profile",
+            "validate_workspace",
+        })
+        self.assertEqual(frozenset(workspace_core.__all__), expected)
+        for name in expected:
+            self.assertTrue(hasattr(workspace_core, name), name)
+
+    def test_changed_workspace_core_vocabulary_is_reported(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT / "scripts/workspace_core", root / "scripts/workspace_core")
+            providers = root / "scripts/workspace_core/providers.py"
+            providers.write_text(
+                providers.read_text(encoding="utf-8").replace(
+                    '"approve_contract"',
+                    '"approve_contract_v2"',
+                ),
+                encoding="utf-8",
+            )
+            errors = validator.validate_repository(root)
+            self.assertIn(
+                "invalid v3 workspace core oracle: "
+                "CONTRACT_RUNTIME_CAPABILITIES differs",
+                errors,
+            )
 
     def test_missing_workspace_core_asset_is_reported(self):
         validator = load_validator()
