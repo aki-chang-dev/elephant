@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -47,6 +48,11 @@ REQUIRED_V3_CORE_ASSETS = (
     "workspace/story-state-model.md",
 )
 
+REQUIRED_V3_SETUP_ASSETS = (
+    "skills/setup-workspace/SKILL.md",
+    "references/workspace/setup-workspace.md",
+)
+
 REQUIRED_V3_CORE_EXPORTS = frozenset({
     "CONTRACT_RUNTIME_CAPABILITIES",
     "DELIVERY_RUNTIME_CAPABILITIES",
@@ -70,6 +76,35 @@ REQUIRED_V3_CORE_EXPORTS = frozenset({
     "validate_profile",
     "validate_workspace",
 })
+
+REQUIRED_V3_SETUP_EXPORTS = frozenset({
+    "ApplyEvidence", "ApplyResult", "ApprovedManifest", "Candidate",
+    "CapabilityLayers", "Confidence", "ConfirmedDomain", "ConfirmedProduct",
+    "ConfirmedTopology", "DeletionReceipt", "DependencyEdge", "DesiredStructure",
+    "Evidence", "ExternalDiscovery", "ExternalObject", "ExternalRecord",
+    "LocalWrite", "MutationReceipt", "OperationKind", "OwnerQuestion",
+    "RepositoryDiscovery", "SETUP_MANIFEST_SCHEMA", "SetupAdapter",
+    "SetupApplyError", "SetupDiagnostic", "SetupManifest", "SetupOperation",
+    "TopologyConflict", "TopologyProposal", "WORKSPACE_PATH", "WorkspaceUnit",
+    "apply_local_write", "apply_setup", "approve_manifest", "build_local_documents",
+    "build_setup_manifest", "confirm_topology", "discover_repository",
+    "load_rendered_yaml", "manifest_fingerprint", "normalize_external_discovery",
+    "plan_local_writes", "propose_topology", "render_yaml",
+})
+
+V3_SETUP_ENUM_VALUES = {
+    "Confidence": ("confirmed", "high", "medium", "low"),
+    "OperationKind": (
+        "reuse",
+        "create",
+        "manual",
+        "verify",
+        "round_trip",
+        "write_local",
+    ),
+}
+
+V3_SETUP_MANIFEST_SCHEMA = "elephant.setup-manifest/v1"
 
 V3_CORE_ENUM_VALUES = {
     "ProviderKind": (
@@ -294,6 +329,14 @@ def _validate_v3_core_assets(root: Path, errors: list[str]) -> None:
             errors.append(f"missing v3 workspace core asset: {path.relative_to(root)}")
 
 
+def _validate_v3_setup_assets(root: Path, errors: list[str]) -> None:
+    plugin_root = root / PLUGIN
+    for relative in REQUIRED_V3_SETUP_ASSETS:
+        path = plugin_root / relative
+        if not path.is_file():
+            errors.append(f"missing v3 setup asset: {path.relative_to(root)}")
+
+
 def _load_v3_core_oracle(root: Path, errors: list[str]):
     package_path = root / "scripts/workspace_core/__init__.py"
     if not package_path.is_file():
@@ -476,6 +519,146 @@ def _validate_v3_core_oracle(root: Path, errors: list[str]) -> None:
         errors.append("invalid v3 workspace core oracle: diagnostic precedence differs")
 
 
+def _load_v3_setup_oracle(root: Path, errors: list[str]):
+    package_path = root / "scripts/workspace_setup/__init__.py"
+    if not package_path.is_file():
+        errors.append("missing v3 setup oracle: scripts/workspace_setup/__init__.py")
+        return None
+
+    package_name = f"_elephant_workspace_setup_{abs(hash(root.resolve()))}"
+    spec = importlib.util.spec_from_file_location(
+        package_name,
+        package_path,
+        submodule_search_locations=[str(package_path.parent)],
+    )
+    if spec is None or spec.loader is None:
+        errors.append("invalid v3 setup oracle: package cannot be loaded")
+        return None
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[package_name] = module
+    root_string = str(root)
+    inserted_root = root_string not in sys.path
+    if inserted_root:
+        sys.path.insert(0, root_string)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        errors.append(
+            "invalid v3 setup oracle: import failed: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return None
+    finally:
+        for name in tuple(sys.modules):
+            if name == package_name or name.startswith(f"{package_name}."):
+                del sys.modules[name]
+        if inserted_root:
+            sys.path.remove(root_string)
+    return module
+
+
+def _setup_fingerprint_fixture(setup):
+    return setup.SetupManifest(
+        schema=V3_SETUP_MANIFEST_SCHEMA,
+        repository_id="repo-compatibility",
+        provider_selection=(
+            ("delivery_workspace", "git"),
+            ("product_contract_store", "git"),
+            ("product_knowledge_store", "git"),
+            ("story_store", "git"),
+        ),
+        products=(),
+        domains=(),
+        operations=(),
+        diagnostics=(),
+        conflicts=(),
+        questions=(),
+        expected_local_container_fingerprint="0" * 64,
+        registry=(("schema", "elephant.workspace/v3"),),
+        profiles=(),
+    )
+
+
+def _expected_setup_fingerprint() -> str:
+    payload = {
+        "conflicts": [],
+        "diagnostics": [],
+        "domains": [],
+        "expected_local_container_fingerprint": "0" * 64,
+        "operations": [],
+        "products": [],
+        "profiles": [],
+        "provider_selection": {
+            "delivery_workspace": "git",
+            "product_contract_store": "git",
+            "product_knowledge_store": "git",
+            "story_store": "git",
+        },
+        "questions": [],
+        "registry": {"schema": "elephant.workspace/v3"},
+        "repository_id": "repo-compatibility",
+        "schema": V3_SETUP_MANIFEST_SCHEMA,
+    }
+    canonical_json = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+def _validate_v3_setup_oracle(root: Path, errors: list[str]) -> None:
+    setup = _load_v3_setup_oracle(root, errors)
+    if setup is None:
+        return
+
+    try:
+        exports = frozenset(setup.__all__)
+    except (AttributeError, TypeError):
+        exports = frozenset()
+    if exports != REQUIRED_V3_SETUP_EXPORTS:
+        errors.append("invalid v3 setup oracle: public exports differ")
+
+    for name, expected in V3_SETUP_ENUM_VALUES.items():
+        try:
+            actual = tuple(member.value for member in getattr(setup, name))
+        except (AttributeError, TypeError):
+            actual = None
+        if actual != expected:
+            errors.append(f"invalid v3 setup oracle: {name} values differ")
+
+    if getattr(setup, "SETUP_MANIFEST_SCHEMA", None) != V3_SETUP_MANIFEST_SCHEMA:
+        errors.append("invalid v3 setup oracle: manifest schema differs")
+
+    fingerprint_matches = False
+    try:
+        manifest = _setup_fingerprint_fixture(setup)
+        expected_fingerprint = _expected_setup_fingerprint()
+        observed_fingerprint = setup.manifest_fingerprint(manifest)
+        approved = setup.approve_manifest(manifest, expected_fingerprint)
+        try:
+            setup.approve_manifest(manifest, "f" * 64)
+        except ValueError:
+            stale_rejected = True
+        else:
+            stale_rejected = False
+        fingerprint_matches = (
+            observed_fingerprint == expected_fingerprint
+            and approved.manifest is manifest
+            and approved.fingerprint == expected_fingerprint
+            and stale_rejected
+        )
+    except (AttributeError, TypeError, ValueError):
+        pass
+    if not fingerprint_matches:
+        errors.append(
+            "invalid v3 setup oracle: approval fingerprint behavior differs"
+        )
+
+
 def validate_repository(root: Path) -> list[str]:
     """Return every compatibility error found below *root*."""
     errors: list[str] = []
@@ -485,6 +668,8 @@ def validate_repository(root: Path) -> list[str]:
     _validate_v2_assets(root, errors)
     _validate_v3_core_assets(root, errors)
     _validate_v3_core_oracle(root, errors)
+    _validate_v3_setup_assets(root, errors)
+    _validate_v3_setup_oracle(root, errors)
     return errors
 
 

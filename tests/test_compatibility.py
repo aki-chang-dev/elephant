@@ -9,6 +9,21 @@ import unittest
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "validate-compatibility.py"
 
+EXACT_SETUP_PUBLIC_EXPORTS = (
+    "ApplyEvidence", "ApplyResult", "ApprovedManifest", "Candidate",
+    "CapabilityLayers", "Confidence", "ConfirmedDomain", "ConfirmedProduct",
+    "ConfirmedTopology", "DeletionReceipt", "DependencyEdge", "DesiredStructure",
+    "Evidence", "ExternalDiscovery", "ExternalObject", "ExternalRecord",
+    "LocalWrite", "MutationReceipt", "OperationKind", "OwnerQuestion",
+    "RepositoryDiscovery", "SETUP_MANIFEST_SCHEMA", "SetupAdapter",
+    "SetupApplyError", "SetupDiagnostic", "SetupManifest", "SetupOperation",
+    "TopologyConflict", "TopologyProposal", "WORKSPACE_PATH", "WorkspaceUnit",
+    "apply_local_write", "apply_setup", "approve_manifest", "build_local_documents",
+    "build_setup_manifest", "confirm_topology", "discover_repository",
+    "load_rendered_yaml", "manifest_fingerprint", "normalize_external_discovery",
+    "plan_local_writes", "propose_topology", "render_yaml",
+)
+
 
 def load_validator():
     spec = importlib.util.spec_from_file_location("compatibility_validator", SCRIPT)
@@ -868,6 +883,88 @@ class WorkspaceCorePackagingTests(unittest.TestCase):
                 "missing v3 workspace core asset: "
                 "plugins/elephant/references/workspace/story-state-model.md",
                 errors,
+            )
+
+
+class SetupWorkspacePackagingTests(unittest.TestCase):
+    def copy_fixture(self, root: Path) -> None:
+        shutil.copytree(
+            ROOT / "scripts/workspace_core",
+            root / "scripts/workspace_core",
+        )
+        shutil.copytree(
+            ROOT / "scripts/workspace_setup",
+            root / "scripts/workspace_setup",
+        )
+        shutil.copytree(
+            ROOT / "plugins/elephant",
+            root / "plugins/elephant",
+        )
+
+    def validate_copy(self, root: Path) -> list[str]:
+        return load_validator().validate_repository(root)
+
+    def test_setup_workspace_assets_are_packaged(self):
+        required = (
+            ROOT / "plugins/elephant/skills/setup-workspace/SKILL.md",
+            ROOT / "plugins/elephant/references/workspace/setup-workspace.md",
+        )
+        self.assertEqual([path for path in required if not path.is_file()], [])
+
+    def test_setup_public_exports_are_exact(self):
+        from scripts import workspace_setup
+
+        expected = frozenset(EXACT_SETUP_PUBLIC_EXPORTS)
+        self.assertEqual(frozenset(workspace_setup.__all__), expected)
+        for name in expected:
+            self.assertTrue(hasattr(workspace_setup, name), name)
+
+    def test_missing_setup_asset_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_fixture(root)
+            (root / "plugins/elephant/skills/setup-workspace/SKILL.md").unlink(
+                missing_ok=True
+            )
+            self.assertIn(
+                "missing v3 setup asset: "
+                "plugins/elephant/skills/setup-workspace/SKILL.md",
+                self.validate_copy(root),
+            )
+
+    def test_changed_setup_enum_value_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_fixture(root)
+            models = root / "scripts/workspace_setup/models.py"
+            source = models.read_text(encoding="utf-8")
+            mutated = source.replace('ROUND_TRIP = "round_trip"', 'ROUND_TRIP = "roundtrip"')
+            self.assertNotEqual(mutated, source, "enum mutation fixture did not apply")
+            models.write_text(mutated, encoding="utf-8")
+            self.assertIn(
+                "invalid v3 setup oracle: OperationKind values differ",
+                self.validate_copy(root),
+            )
+
+    def test_changed_approval_fingerprint_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_fixture(root)
+            models = root / "scripts/workspace_setup/models.py"
+            source = models.read_text(encoding="utf-8")
+            mutated = source.replace(
+                'hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()',
+                'hashlib.sha256(b"mutated").hexdigest()',
+            )
+            self.assertNotEqual(
+                mutated,
+                source,
+                "fingerprint mutation fixture did not apply",
+            )
+            models.write_text(mutated, encoding="utf-8")
+            self.assertIn(
+                "invalid v3 setup oracle: approval fingerprint behavior differs",
+                self.validate_copy(root),
             )
 
 

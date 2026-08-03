@@ -155,13 +155,18 @@ Agent-assisted design is reserved as a future extension and is not silently sele
 ## Workspace v3 development
 
 The [approved workspace design](docs/superpowers/specs/2026-08-03-external-workspace-orchestration-design.md)
-and [Phase 1 implementation plan](docs/superpowers/plans/2026-08-03-workspace-core.md) are present,
-along with the canonical [workspace registry](plugins/elephant/references/workspace/workspace-schema.md),
+and the Phase 1/2 implementation plans are present. Phase 2 packages the development-only
+[`elephant:setup-workspace`](plugins/elephant/skills/setup-workspace/SKILL.md) skill and its
+canonical [setup protocol](plugins/elephant/references/workspace/setup-workspace.md). Its
+provider-neutral orchestration is fixture-certified with fake adapters; concrete Linear and
+Notion adapters are not certified yet. The workspace contracts include the canonical
+[workspace registry](plugins/elephant/references/workspace/workspace-schema.md),
 [profile](plugins/elephant/references/workspace/profile-schema.md),
 [provider](plugins/elephant/references/workspace/provider-contracts.md), and
 [story-state](plugins/elephant/references/workspace/story-state-model.md) references. The active
-shipping runtime remains v2 until the coordinated Maio cutover; v3 is not yet usable, and Phase 1
-neither dual-writes nor translates artifacts. Future phases will consume these contracts.
+shipping runtime remains v2 until concrete providers, v3 delivery, the Maio migration, and the
+coordinated cutover pass. v3 is not yet an active shipping runtime; these phases neither dual-write
+nor translate v2 artifacts.
 
 ## Development Validation
 

@@ -16,13 +16,18 @@ from .models import (
     SetupDiagnostic,
     SetupManifest,
     SetupOperation,
+    SETUP_MANIFEST_SCHEMA,
     TopologyConflict,
     TopologyProposal,
     WorkspaceUnit,
     approve_manifest,
     manifest_fingerprint,
 )
-from .discovery import discover_repository, normalize_external_discovery
+from .discovery import (
+    RepositoryDiscovery,
+    discover_repository,
+    normalize_external_discovery,
+)
 from .proposal import confirm_topology, propose_topology
 from .dry_run import CapabilityLayers, DesiredStructure, build_setup_manifest
 from .apply import (
@@ -38,7 +43,6 @@ from .files import (
     WORKSPACE_PATH,
     apply_local_write,
     build_local_documents,
-    fingerprint_local_container,
     load_rendered_yaml,
     plan_local_writes,
     render_yaml,
@@ -65,6 +69,8 @@ __all__ = [
     "MutationReceipt",
     "OperationKind",
     "OwnerQuestion",
+    "RepositoryDiscovery",
+    "SETUP_MANIFEST_SCHEMA",
     "SetupDiagnostic",
     "SetupAdapter",
     "SetupApplyError",
@@ -81,7 +87,6 @@ __all__ = [
     "build_setup_manifest",
     "confirm_topology",
     "discover_repository",
-    "fingerprint_local_container",
     "load_rendered_yaml",
     "manifest_fingerprint",
     "normalize_external_discovery",
