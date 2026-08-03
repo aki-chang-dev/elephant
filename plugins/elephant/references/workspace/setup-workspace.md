@@ -33,10 +33,13 @@ displayed fingerprint. An earlier proposal, partial display, mapping document,
 or checklist grants no write authority.
 
 An administrative handoff is a pause within that same authority, not a manifest
-change. Resume it by passing the exact same `ApprovedManifest` and execution ID
-to `apply_setup()` after the human completes the named operation. Do not rebuild
-the completed manual operation as `REUSE`/`VERIFY`, transfer the old approval to
-a second manifest, or ask for a second routine approval.
+change. Resume it by passing the exact same `ApprovedManifest` and fingerprint
+to `apply_setup()` after the human completes the named operation. Each call has
+a nonblank `execution_id` that scopes that attempt's disposable stable keys and
+local transaction ownership. It may differ on resume; changing it neither
+changes nor transfers owner approval. Do not rebuild the completed manual
+operation as `REUSE`/`VERIFY`, transfer the old approval to a second manifest,
+or ask for a second routine approval.
 
 ## Protocol
 
@@ -103,12 +106,15 @@ move, merge, or delete user-owned external structures.
 
 When a `MANUAL` operation is absent, return its approved handoff immediately
 with `ready: false` and no local batch. On a later call using the exact same
-approval and execution ID, query that stable key again. Exactly one record must
-match the operation's approved desired fingerprint and pass read-back. Emit
+approval and fingerprint, query that stable key again. The resumed call may use
+a new nonblank execution ID. Exactly one record must match the operation's
+approved desired fingerprint and pass read-back; then re-query with the same
+unique ownership guard used for create and require the final unique record to
+retain that external ID and approved fingerprint. Only then emit
 `manual_completed` evidence and continue the remaining approved operations.
-Absence emits the same handoff again. Duplicate records, semantic mismatch, or
-read failure stop with the manual operation context and all prior verified
-evidence. No adapter mutation completes a `MANUAL` operation.
+Absence emits the same handoff again. Duplicate records, external-ID or semantic
+mismatch, or read failure stop with the manual operation context and all prior
+verified evidence. No adapter mutation completes a `MANUAL` operation.
 
 ### 5. Classify diagnostics and manual work exactly
 

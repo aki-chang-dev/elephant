@@ -253,6 +253,26 @@ class InterleavingCreateAdapter(RecordingAdapter):
         return MutationReceipt(record.external_id)
 
 
+class DuplicateDuringReadAdapter(RecordingAdapter):
+    """Inserts a competing stable-key record after returning read-back."""
+
+    def read(self, external_id: str) -> ExternalRecord | None:
+        record = super().read(external_id)
+        if record is not None and len(self.records_by_key[record.stable_key]) == 1:
+            duplicate = replace(record, external_id=f"{external_id}-duplicate")
+            self.records_by_key[record.stable_key].append(duplicate)
+            self.records_by_id[duplicate.external_id] = duplicate
+        return record
+
+
+class WrongExternalIdReadAdapter(RecordingAdapter):
+    def read(self, external_id: str) -> ExternalRecord | None:
+        record = super().read(external_id)
+        if record is None:
+            return None
+        return replace(record, external_id=f"{external_id}-different")
+
+
 class RecordingWriter:
     def __init__(self, events: list[str] | None = None) -> None:
         self.calls: list[tuple[str, object]] = []
@@ -654,7 +674,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                 self.assertEqual(writer.calls, [])
                 self.assertNotIn("delete_disposable", adapter.call_kinds)
 
-    def test_manual_handoff_continues_with_same_approval_after_verified_completion(self):
+    def test_manual_handoff_resumes_with_same_approval_and_new_execution_id(self):
         manual = operation(
             OperationKind.MANUAL,
             provider="notion",
@@ -681,7 +701,7 @@ class SetupApplyMutationTests(unittest.TestCase):
             value,
             {"notion": adapter},
             writer,
-            execution_id="manual-continuation",
+            execution_id="manual-first-attempt",
         )
 
         self.assertFalse(first.ready)
@@ -699,7 +719,7 @@ class SetupApplyMutationTests(unittest.TestCase):
             value,
             {"notion": adapter},
             continued_writer,
-            execution_id="manual-continuation",
+            execution_id="manual-resumed-attempt",
         )
 
         self.assertTrue(second.ready)
@@ -708,8 +728,59 @@ class SetupApplyMutationTests(unittest.TestCase):
         self.assertEqual(second.evidence[0].disposition, "manual_completed")
         self.assertEqual(second.evidence[0].external_id, completed.external_id)
         self.assertEqual(second.evidence[0].observed_fingerprint, "view-v1")
-        self.assertEqual(adapter.call_kinds, ("find", "find", "read"))
+        self.assertEqual(adapter.call_kinds, ("find", "find", "read", "find"))
         self.assertEqual(len(continued_writer.calls), 1)
+        self.assertEqual(continued_writer.owner_ids, ["manual-resumed-attempt"])
+
+    def test_manual_completion_duplicate_inserted_during_read_stops_before_local_write(self):
+        prior = ExternalRecord("team.delivery", "linear-team-1", "team-v1")
+        completed = ExternalRecord("view.sample", "notion-view-1", "view-v1")
+        manual = operation(
+            OperationKind.MANUAL,
+            provider="notion",
+            target_key="view.sample",
+            desired_fingerprint="view-v1",
+            payload=(("diagnostic_code", "platform_unsupported"),),
+        )
+        value = approved(manifest(
+            operation(
+                OperationKind.REUSE,
+                provider="linear",
+                target_key="team.delivery",
+                desired_fingerprint="team-v1",
+            ),
+            manual,
+            operation(
+                OperationKind.WRITE_LOCAL,
+                provider="local",
+                target_key=".agents/elephant/workspace.yaml",
+                payload=(("document", ()),),
+            ),
+        ))
+        notion = DuplicateDuringReadAdapter("notion", records=(completed,))
+        writer = RecordingWriter()
+
+        with self.assertRaisesRegex(SetupApplyError, "duplicate") as raised:
+            run_apply(
+                value,
+                {
+                    "linear": RecordingAdapter("linear", records=(prior,)),
+                    "notion": notion,
+                },
+                writer,
+                execution_id="manual-race",
+            )
+
+        self.assertEqual(raised.exception.operation, manual)
+        self.assertEqual(raised.exception.provider, "notion")
+        self.assertEqual(raised.exception.target_key, "view.sample")
+        self.assertEqual(len(raised.exception.partial_evidence), 1)
+        self.assertEqual(
+            raised.exception.partial_evidence[0].disposition,
+            "reused",
+        )
+        self.assertEqual(notion.call_kinds, ("find", "read", "find"))
+        self.assertEqual(writer.calls, [])
 
     def test_invalid_manual_completion_stops_with_contextual_partial_evidence(self):
         prior = ExternalRecord("team.delivery", "linear-team-1", "team-v1")
@@ -761,6 +832,27 @@ class SetupApplyMutationTests(unittest.TestCase):
                 "fingerprint",
             ),
             (
+                "read-back fingerprint mismatch",
+                RecordingAdapter(
+                    "notion",
+                    records=(
+                        ExternalRecord("view.sample", "notion-view-1", "view-v1"),
+                    ),
+                    corrupt_read_back=True,
+                ),
+                "read-back.*fingerprint",
+            ),
+            (
+                "read-back external ID mismatch",
+                WrongExternalIdReadAdapter(
+                    "notion",
+                    records=(
+                        ExternalRecord("view.sample", "notion-view-1", "view-v1"),
+                    ),
+                ),
+                "external ID",
+            ),
+            (
                 "read failure",
                 RecordingAdapter(
                     "notion",
@@ -771,7 +863,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                 "read-back",
             ),
         )
-        cases[2][1].records_by_id.clear()
+        cases[-1][1].records_by_id.clear()
 
         for name, notion, message in cases:
             with self.subTest(name=name):
@@ -1259,13 +1351,14 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 changed.manifest,
                 operations=(manual,) + changed.manifest.operations,
             ))
-            owner = "integrated-manual-continuation"
+            first_execution_id = "integrated-manual-handoff"
+            resumed_execution_id = "integrated-manual-resume"
 
             first = run_apply(
                 value,
                 adapters,
                 AtomicLocalWriter(root, events),
-                execution_id=owner,
+                execution_id=first_execution_id,
             )
 
             self.assertFalse(first.ready)
@@ -1285,7 +1378,7 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 value,
                 adapters,
                 AtomicLocalWriter(root, events),
-                execution_id=owner,
+                execution_id=resumed_execution_id,
             )
 
             recovery = next(
@@ -1305,6 +1398,7 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
             self.assertTrue((root / recovery.target_key).is_dir())
             self.assertEqual(active.target_key, ".agents")
             self.assertEqual(active.disposition, "replaced")
+            self.assertEqual(active.external_id, resumed_execution_id)
             self.assertEqual(
                 {
                     path: (root / path).read_text(encoding="utf-8")

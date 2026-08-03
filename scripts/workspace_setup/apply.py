@@ -329,6 +329,12 @@ def _apply_manual_operation(
         operation.target_key,
         records[0].external_id,
     )
+    _verify_unique_read_back(
+        adapter,
+        operation,
+        operation.target_key,
+        record,
+    )
     return ApplyEvidence(
         operation_id=operation.operation_id,
         target_key=operation.target_key,
@@ -576,9 +582,9 @@ def apply_setup(
 ) -> ApplyResult:
     """Apply one approval under an execution-owned mutation authority.
 
-    Callers must reuse ``execution_id`` when retrying the same logical apply and
-    must choose a distinct value for every independently concurrent execution.
-    The token becomes part of disposable stable keys and deletion ownership.
+    ``execution_id`` identifies this apply attempt. It scopes disposable stable
+    keys and local transaction ownership, but it is not durable approval
+    authority and does not need to match an earlier manual-handoff attempt.
     """
     if not isinstance(execution_id, str) or not execution_id.strip():
         raise SetupApplyError("execution_id must be a nonblank string")
