@@ -73,18 +73,27 @@ class RepositoryDiscoveryTests(unittest.TestCase):
         self.assertTrue(any("root package.json must not be a symlink" in problem for problem in result.problems))
 
     def test_invalid_workspace_patterns_are_reported(self):
-        patterns = ("../outside", "/outside", "apps/**x")
+        expected_problems = {
+            "../outside": "parent traversal",
+            "/outside": "absolute paths",
+            "apps/**x": "complete path segment",
+        }
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "package.json").write_text(
-                '{"workspaces":' + repr(list(patterns)).replace("'", '"') + '}',
+                '{"workspaces":' + repr(list(expected_problems)).replace("'", '"') + '}',
                 encoding="utf-8",
             )
             result = discover_repository(root)
         self.assertEqual(result.workspace_units, ())
-        for pattern in patterns:
+        for pattern, expected_problem in expected_problems.items():
             with self.subTest(pattern=pattern):
-                self.assertTrue(any(pattern in problem for problem in result.problems))
+                self.assertTrue(
+                    any(
+                        pattern in problem and expected_problem in problem
+                        for problem in result.problems
+                    )
+                )
 
     def test_duplicate_workspace_package_names_are_reported_and_not_linked(self):
         with tempfile.TemporaryDirectory() as temporary:

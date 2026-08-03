@@ -92,6 +92,12 @@ def _safe_workspace_matches(root: Path, pattern: str, problems: list[str]) -> tu
     if ".." in candidate_pattern.parts:
         problems.append(f"package.json: invalid workspace pattern {pattern!r}: parent traversal is not allowed")
         return ()
+    if any("**" in part and part != "**" for part in candidate_pattern.parts):
+        problems.append(
+            f"package.json: invalid workspace pattern {pattern!r}: "
+            "recursive wildcard must occupy a complete path segment"
+        )
+        return ()
     directories: set[Path] = set()
     try:
         for match in root.glob(pattern):
