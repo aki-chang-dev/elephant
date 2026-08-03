@@ -162,6 +162,24 @@ class ProfileAndRoutingTests(unittest.TestCase):
             validate_profile(value),
         )
 
+    def test_engineering_profile_requires_null_product(self):
+        value = deepcopy(ENGINEERING_PROFILE)
+        value["product"] = "clickfalcon"
+        self.assertIn(
+            "product: engineering profile requires null",
+            validate_profile(value),
+        )
+
+    def test_product_profile_requires_non_blank_product_key(self):
+        for product_key in (None, "", "   "):
+            with self.subTest(product_key=product_key):
+                value = deepcopy(PRODUCT_PROFILE)
+                value["product"] = product_key
+                self.assertIn(
+                    "product: product profile requires a product key",
+                    validate_profile(value),
+                )
+
     def test_product_story_resolves_product_profile(self):
         self.assertEqual(
             resolve_profile(VALID_WORKSPACE, story_kind="product-facing", product_key="clickfalcon"),

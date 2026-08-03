@@ -97,10 +97,14 @@ def validate_profile(document: Mapping[str, object]) -> tuple[str, ...]:
     kind = document.get("kind")
     if kind not in PROFILE_KINDS:
         problems.append(f"kind: expected one of {sorted(PROFILE_KINDS)}")
-    if kind == "product" and not isinstance(document.get("product"), str):
+    product = document.get("product")
+    if kind == "product" and (not isinstance(product, str) or not product.strip()):
         problems.append("product: product profile requires a product key")
-    if kind == "engineering" and document.get("behavior_preservation_required") is not True:
-        problems.append("behavior_preservation_required: engineering profile requires true")
+    if kind == "engineering":
+        if product is not None:
+            problems.append("product: engineering profile requires null")
+        if document.get("behavior_preservation_required") is not True:
+            problems.append("behavior_preservation_required: engineering profile requires true")
     for section in (
         "context",
         "design_gate",
