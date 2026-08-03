@@ -10,6 +10,16 @@ from .providers import (
     ProviderPreflight,
     preflight_provider,
 )
+from .states import (
+    CheckpointPhase,
+    DriftKind,
+    HumanStatus,
+    ProductDisposition,
+    RepairAction,
+    can_transition_human_status,
+    repair_action,
+    terminal_status_for_disposition,
+)
 
 __all__ = [
     "CONTRACT_RUNTIME_CAPABILITIES",
@@ -17,12 +27,20 @@ __all__ = [
     "KNOWLEDGE_RUNTIME_CAPABILITIES",
     "STORY_RUNTIME_CAPABILITIES",
     "CapabilityDiagnostic",
+    "CheckpointPhase",
     "DiagnosticCode",
+    "DriftKind",
+    "HumanStatus",
+    "ProductDisposition",
     "ProviderKind",
     "ProviderPreflight",
+    "RepairAction",
     "WorkspaceRouteError",
+    "can_transition_human_status",
     "preflight_provider",
+    "repair_action",
     "resolve_profile",
+    "terminal_status_for_disposition",
     "validate_profile",
     "validate_workspace",
 ]
