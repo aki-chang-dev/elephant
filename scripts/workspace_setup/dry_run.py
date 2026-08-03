@@ -169,38 +169,33 @@ def _payload_fingerprint(value: object) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
-def _administrative_diagnostic(
+_CAPABILITY_LAYER_PRECEDENCE = (
+    ("platform_supported", DiagnosticCode.PLATFORM_UNSUPPORTED),
+    ("exposed", DiagnosticCode.CONNECTOR_CAPABILITY_MISSING),
+    ("permitted", DiagnosticCode.PERMISSION_MISSING),
+    ("configured", DiagnosticCode.CONFIGURATION_MISSING),
+)
+_DIAGNOSTIC_PRIORITY = {
+    code: index for index, (_, code) in enumerate(_CAPABILITY_LAYER_PRECEDENCE)
+}
+
+
+def _missing_capability_layers(
     provider: str,
-    preflights: dict[str, object],
-    selection: dict[str, str],
-) -> DiagnosticCode | None:
-    codes = []
-    for logical, _ in _LOGICAL_PROVIDERS:
-        if selection[logical] != provider:
-            continue
-        preflight = preflights[logical]
-        codes.extend(diagnostic.code for diagnostic in preflight.diagnostics)
-    return min(codes, key=lambda code: (
-        DiagnosticCode.PLATFORM_UNSUPPORTED,
-        DiagnosticCode.CONNECTOR_CAPABILITY_MISSING,
-        DiagnosticCode.PERMISSION_MISSING,
-        DiagnosticCode.CONFIGURATION_MISSING,
-    ).index(code), default=None)
-
-
-def _runtime_is_available(
-    desired: DesiredStructure,
+    capability: str,
     layers: dict[str, CapabilityLayers],
     selection: dict[str, str],
-) -> bool:
-    selected_layers = [layers[logical] for logical, _ in _LOGICAL_PROVIDERS if selection[logical] == desired.provider]
-    return bool(selected_layers) and all(
-        desired.capability in layer.platform_supported
-        and desired.capability in layer.exposed
-        and desired.capability in layer.permitted
-        and desired.capability in layer.configured
-        for layer in selected_layers
-    )
+) -> tuple[tuple[ProviderKind, DiagnosticCode], ...]:
+    missing: list[tuple[ProviderKind, DiagnosticCode]] = []
+    for logical, provider_kind in _LOGICAL_PROVIDERS:
+        if selection[logical] != provider:
+            continue
+        layer = layers[logical]
+        for field_name, code in _CAPABILITY_LAYER_PRECEDENCE:
+            if capability not in getattr(layer, field_name):
+                missing.append((provider_kind, code))
+                break
+    return tuple(missing)
 
 
 def build_setup_manifest(
@@ -224,7 +219,6 @@ def build_setup_manifest(
     _pair_mapping(registry, "registry")
     _pair_mapping(profiles, "profiles")
 
-    preflights = {}
     diagnostics: list[SetupDiagnostic] = []
     for logical, provider_kind in _LOGICAL_PROVIDERS:
         layer = layers[logical]
@@ -235,7 +229,6 @@ def build_setup_manifest(
             permitted=layer.permitted,
             configured=layer.configured,
         )
-        preflights[logical] = preflight
         diagnostics.extend(
             SetupDiagnostic(
                 logical_provider=provider_kind,
@@ -289,15 +282,31 @@ def build_setup_manifest(
             ))
             continue
 
-        if desired.runtime_required and not _runtime_is_available(desired, layers, selection):
-            continue
-        administrative_code = _administrative_diagnostic(provider, preflights, selection) if desired.administrative else None
+        missing_layers = _missing_capability_layers(provider, desired.capability, layers, selection)
+        if desired.runtime_required:
+            diagnostics.extend(
+                SetupDiagnostic(
+                    logical_provider=logical_provider,
+                    physical_provider=provider,
+                    capability=desired.capability,
+                    code=code,
+                    blocking=True,
+                )
+                for logical_provider, code in missing_layers
+            )
+        administrative_code = min(
+            (code for _, code in missing_layers if code is not DiagnosticCode.CONFIGURATION_MISSING),
+            key=_DIAGNOSTIC_PRIORITY.__getitem__,
+            default=None,
+        ) if desired.administrative else None
         if administrative_code is not None:
             operations.append(_operation(
                 provider, desired.capability, logical_key, desired.desired_fingerprint,
                 OperationKind.MANUAL, desired.runtime_required,
                 (("diagnostic_code", administrative_code.value), ("read_back_required", True)),
             ))
+            continue
+        if desired.runtime_required and missing_layers:
             continue
         if not matches:
             operations.append(_operation(
@@ -328,7 +337,10 @@ def build_setup_manifest(
         ))
 
     operations.sort(key=lambda item: (_PHASE_ORDER[item.kind], item.provider, item.capability, item.target_key))
-    diagnostics.sort(key=lambda item: (item.logical_provider.value, item.physical_provider, item.capability, item.code.value))
+    diagnostics = sorted(
+        set(diagnostics),
+        key=lambda item: (item.logical_provider.value, item.physical_provider, item.capability, item.code.value),
+    )
     conflicts.sort(key=lambda item: (item.key, item.subject, item.alternatives))
     return SetupManifest(
         schema=SETUP_MANIFEST_SCHEMA,
