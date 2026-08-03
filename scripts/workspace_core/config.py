@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import PurePosixPath
 
 
 WORKSPACE_SCHEMA = "elephant.workspace/v3"
@@ -25,7 +24,7 @@ def _mapping(value: object) -> Mapping[str, object]:
 def _is_repo_relative_posix_path(value: object) -> bool:
     if not isinstance(value, str) or not value or "\\" in value or value.startswith("/"):
         return False
-    parts = PurePosixPath(value).parts
+    parts = value.split("/")
     return bool(parts) and all(part not in {"", ".", ".."} for part in parts)
 
 
@@ -54,15 +53,33 @@ def validate_workspace(document: Mapping[str, object]) -> tuple[str, ...]:
             problems.append(
                 f"products.{product_key}.profile: expected repository-relative POSIX path"
             )
-        for index, domain in enumerate(product.get("primary_domains", [])):
-            if domain not in domains:
+        primary_domains = product.get("primary_domains", [])
+        if not isinstance(primary_domains, list):
+            problems.append(f"products.{product_key}.primary_domains: expected list")
+            continue
+        for index, domain in enumerate(primary_domains):
+            if not isinstance(domain, str) or domain not in domains:
                 problems.append(
                     f"products.{product_key}.primary_domains[{index}]: unknown domain {domain}"
                 )
     for domain_key, raw_domain in domains.items():
         domain = _mapping(raw_domain)
-        for index, product in enumerate(domain.get("products", [])):
-            if product not in products:
+        scopes = domain.get("scopes", [])
+        if not isinstance(scopes, list):
+            problems.append(f"domains.{domain_key}.scopes: expected list")
+        else:
+            for index, scope in enumerate(scopes):
+                if not _is_repo_relative_posix_path(scope):
+                    problems.append(
+                        f"domains.{domain_key}.scopes[{index}]: "
+                        "expected repository-relative POSIX path"
+                    )
+        domain_products = domain.get("products", [])
+        if not isinstance(domain_products, list):
+            problems.append(f"domains.{domain_key}.products: expected list")
+            continue
+        for index, product in enumerate(domain_products):
+            if not isinstance(product, str) or product not in products:
                 problems.append(
                     f"domains.{domain_key}.products[{index}]: unknown product {product}"
                 )

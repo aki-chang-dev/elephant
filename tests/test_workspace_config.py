@@ -86,6 +86,37 @@ class WorkspaceValidationTests(unittest.TestCase):
             validate_workspace(value),
         )
 
+    def test_rejects_unsafe_and_noncanonical_scope_paths(self):
+        for path in ("../outside", "apps/./tracker-web", "apps//tracker-web"):
+            with self.subTest(path=path):
+                value = deepcopy(VALID_WORKSPACE)
+                value["domains"]["clickfalcon"]["scopes"] = [path]
+                self.assertIn(
+                    "domains.clickfalcon.scopes[0]: "
+                    "expected repository-relative POSIX path",
+                    validate_workspace(value),
+                )
+
+    def test_rejects_non_list_product_domains(self):
+        for primary_domains in (None, "clickfalcon", {"clickfalcon": True}):
+            with self.subTest(primary_domains=primary_domains):
+                value = deepcopy(VALID_WORKSPACE)
+                value["products"]["clickfalcon"]["primary_domains"] = primary_domains
+                self.assertIn(
+                    "products.clickfalcon.primary_domains: expected list",
+                    validate_workspace(value),
+                )
+
+    def test_rejects_non_list_domain_products(self):
+        for products in (None, "clickfalcon", {"clickfalcon": True}):
+            with self.subTest(products=products):
+                value = deepcopy(VALID_WORKSPACE)
+                value["domains"]["clickfalcon"]["products"] = products
+                self.assertIn(
+                    "domains.clickfalcon.products: expected list",
+                    validate_workspace(value),
+                )
+
     def test_all_git_workspace_needs_no_external_binding(self):
         value = deepcopy(VALID_WORKSPACE)
         value["providers"] = {
