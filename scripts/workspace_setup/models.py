@@ -47,6 +47,17 @@ def _validate_expected_prior_fingerprint(
         raise ValueError("expected_prior_fingerprint: allowed only for write_local")
 
 
+def _validate_local_container_fingerprint(value: object) -> None:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ValueError(
+            "expected_local_container_fingerprint: expected lowercase SHA-256"
+        )
+
+
 def _require_tuple(value: object, field_name: str) -> None:
     if not isinstance(value, tuple):
         raise TypeError(f"{field_name}: expected tuple")
@@ -225,6 +236,7 @@ class SetupManifest:
     diagnostics: tuple[SetupDiagnostic, ...]
     conflicts: tuple[TopologyConflict, ...]
     questions: tuple[OwnerQuestion, ...]
+    expected_local_container_fingerprint: str
     registry: tuple[tuple[str, object], ...]
     profiles: tuple[tuple[str, object], ...]
 
@@ -242,6 +254,9 @@ class SetupManifest:
             _require_tuple(getattr(self, field_name), field_name)
         for field_name in ("provider_selection", "registry", "profiles"):
             _require_tuple_key_value_pairs(getattr(self, field_name), field_name)
+        _validate_local_container_fingerprint(
+            self.expected_local_container_fingerprint
+        )
         _validate_immutable_value(self)
 
 
@@ -386,6 +401,9 @@ def _validate_manifest(manifest: SetupManifest) -> None:
     _require_tuple_key_value_pairs(manifest.provider_selection, "provider_selection")
     _require_tuple_key_value_pairs(manifest.registry, "registry")
     _require_tuple_key_value_pairs(manifest.profiles, "profiles")
+    _validate_local_container_fingerprint(
+        manifest.expected_local_container_fingerprint
+    )
     for field_name, item_type in (
         ("products", ConfirmedProduct),
         ("domains", ConfirmedDomain),

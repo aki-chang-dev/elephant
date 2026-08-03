@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import fcntl
 import os
 from pathlib import Path
 import stat
 import tempfile
 import unittest
 from unittest import mock
+
+import scripts.workspace_setup.files as setup_files
 
 from scripts.workspace_core import validate_profile, validate_workspace
 from scripts.workspace_core.config import FORBIDDEN_STORY_KEYS
@@ -19,15 +22,23 @@ from scripts.workspace_setup import (
     SetupOperation,
 )
 from scripts.workspace_setup.files import (
+    ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+    LocalContainerOutcome,
     LocalTransactionError,
     LocalTransactionResult,
     LocalWrite,
     WORKSPACE_PATH,
     apply_local_write,
     build_local_documents,
+    fingerprint_local_container,
     load_rendered_yaml,
     plan_local_writes,
     render_yaml,
+)
+from scripts.workspace_setup.atomic_switch import (
+    AtomicRenameUnavailable,
+    atomic_exchange,
+    atomic_noreplace,
 )
 
 
@@ -324,6 +335,17 @@ def local_operations(
     )
 
 
+def plan_current(
+    root: Path,
+    operations: tuple[SetupOperation, ...],
+):
+    return plan_local_writes(
+        root,
+        operations,
+        fingerprint_local_container(root),
+    )
+
+
 class LocalWriteSafetyTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root_context = tempfile.TemporaryDirectory()
@@ -335,6 +357,340 @@ class LocalWriteSafetyTests(unittest.TestCase):
         self.root_context.cleanup()
         self.outside_context.cleanup()
 
+    def _commit_documents(self, root: Path, documents: dict[str, str]) -> None:
+        writes = plan_current(root, local_operations(documents))
+        apply_local_write(root, writes)
+
+    def _replacement_fixture(
+        self,
+        root: Path,
+    ) -> tuple[dict[str, str], dict[str, str], tuple[LocalWrite, ...]]:
+        original = build_documents()
+        self._commit_documents(root, original)
+        changed = dict(original)
+        changed[WORKSPACE_PATH] = changed[WORKSPACE_PATH].replace(
+            "repo-sample", "repo-replacement"
+        )
+        sample_path = ".agents/elephant/profiles/sample.yaml"
+        changed[sample_path] = changed[sample_path].replace(
+            '"docs": "en"', '"docs": "fr"'
+        )
+        expected = {
+            path: body_fingerprint(original[path])
+            for path in changed
+            if changed[path] != original[path]
+        }
+        writes = plan_current(
+            root,
+            local_operations(
+                changed,
+                expected_prior_fingerprints=expected,
+            ),
+        )
+        return original, changed, writes
+
+    def test_complete_container_fingerprint_covers_absence_and_unrelated_content(self):
+        self.assertEqual(
+            fingerprint_local_container(self.root),
+            ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+        )
+        unrelated = self.root / ".agents/unrelated/note.txt"
+        unrelated.parent.mkdir(parents=True)
+        unrelated.write_text("first", encoding="utf-8")
+        first = fingerprint_local_container(self.root)
+
+        unrelated.write_text("second", encoding="utf-8")
+
+        self.assertNotEqual(first, fingerprint_local_container(self.root))
+
+    def test_container_fingerprint_rejects_symlinks_and_special_files(self):
+        agents = self.root / ".agents"
+        agents.mkdir()
+        (agents / "escape").symlink_to(self.outside, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "unsupported|symlink"):
+            fingerprint_local_container(self.root)
+
+        (agents / "escape").unlink()
+        os.mkfifo(agents / "pipe")
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            fingerprint_local_container(self.root)
+
+    def test_container_fingerprint_rejects_hard_linked_files(self):
+        agents = self.root / ".agents"
+        agents.mkdir()
+        (agents / "first").write_text("shared", encoding="utf-8")
+        os.link(agents / "first", agents / "second")
+
+        with self.assertRaisesRegex(ValueError, "hard link|unsupported"):
+            fingerprint_local_container(self.root)
+
+    def test_platform_atomic_switch_exchanges_or_creates_one_root_child(self):
+        (self.root / "old").mkdir()
+        (self.root / "old/value").write_text("old", encoding="utf-8")
+        (self.root / "stage").mkdir()
+        (self.root / "stage/value").write_text("new", encoding="utf-8")
+        root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            atomic_exchange(root_fd, "old", "stage")
+            self.assertEqual((self.root / "old/value").read_text(), "new")
+            self.assertEqual((self.root / "stage/value").read_text(), "old")
+
+            (self.root / "created-stage").mkdir()
+            atomic_noreplace(root_fd, "created-stage", "created")
+            self.assertTrue((self.root / "created").is_dir())
+            (self.root / "blocked-stage").mkdir()
+            with self.assertRaises(FileExistsError):
+                atomic_noreplace(root_fd, "blocked-stage", "created")
+        finally:
+            os.close(root_fd)
+
+    def test_platform_atomic_switch_fails_closed_without_native_primitive(self):
+        (self.root / "old").mkdir()
+        (self.root / "stage").mkdir()
+        root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            with mock.patch(
+                "scripts.workspace_setup.atomic_switch._renameatx_np", None
+            ), mock.patch("scripts.workspace_setup.atomic_switch._renameat2", None):
+                with self.assertRaises(AtomicRenameUnavailable):
+                    atomic_exchange(root_fd, "old", "stage")
+        finally:
+            os.close(root_fd)
+        self.assertTrue((self.root / "old").is_dir())
+        self.assertTrue((self.root / "stage").is_dir())
+
+    def test_container_commit_preserves_unrelated_tree_and_switches_once(self):
+        unrelated = self.root / ".agents/unrelated/nested.txt"
+        unrelated.parent.mkdir(parents=True)
+        unrelated.write_bytes(b"unrelated\x00content")
+        os.chmod(unrelated, 0o640)
+        prior = fingerprint_local_container(self.root)
+        documents = build_documents()
+        writes = plan_local_writes(
+            self.root,
+            local_operations(documents),
+            prior,
+        )
+
+        result = apply_local_write(self.root, writes)
+
+        self.assertIsInstance(result.container, LocalContainerOutcome)
+        self.assertEqual(result.container.disposition, "replaced")
+        self.assertEqual(result.container.prior_fingerprint, prior)
+        self.assertEqual(
+            result.container.observed_fingerprint,
+            fingerprint_local_container(self.root),
+        )
+        self.assertEqual(unrelated.read_bytes(), b"unrelated\x00content")
+        self.assertEqual(stat.S_IMODE(unrelated.stat().st_mode), 0o640)
+        self.assertEqual(
+            {path: (self.root / path).read_text(encoding="utf-8") for path in documents},
+            documents,
+        )
+
+    def test_repository_root_lock_excludes_an_independent_setup_owner(self):
+        root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            prior = fingerprint_local_container(self.root)
+            writes = plan_local_writes(
+                self.root,
+                local_operations(build_documents()),
+                prior,
+            )
+            with self.assertRaisesRegex(LocalTransactionError, "setup lock"):
+                apply_local_write(self.root, writes)
+        finally:
+            os.close(root_fd)
+        self.assertFalse((self.root / ".agents").exists())
+
+    def test_explicit_transaction_owner_must_be_nonblank(self):
+        writes = plan_current(
+            self.root,
+            local_operations(build_documents()),
+        )
+        with self.assertRaisesRegex(ValueError, "owner_id"):
+            apply_local_write(self.root, writes, owner_id="")
+        self.assertFalse((self.root / ".agents").exists())
+
+    def test_process_death_before_or_after_switch_exposes_only_complete_tree(self):
+        for timing in ("before", "after"):
+            with self.subTest(timing=timing):
+                root = self.root / timing
+                root.mkdir()
+                original, changed, writes = self._replacement_fixture(root)
+                native_exchange = setup_files.atomic_exchange
+                child = os.fork()
+                if child == 0:
+                    def die_at_switch(parent_fd, first, second):
+                        if timing == "before":
+                            os._exit(71)
+                        native_exchange(parent_fd, first, second)
+                        os._exit(72)
+
+                    with mock.patch(
+                        "scripts.workspace_setup.files.atomic_exchange",
+                        side_effect=die_at_switch,
+                    ):
+                        apply_local_write(root, writes)
+                    os._exit(70)
+                _, status = os.waitpid(child, 0)
+                self.assertEqual(os.WEXITSTATUS(status), 71 if timing == "before" else 72)
+                visible = {
+                    path: (root / path).read_text(encoding="utf-8")
+                    for path in original
+                }
+                self.assertEqual(visible, original if timing == "before" else changed)
+
+    def test_concurrent_prior_mutation_is_captured_and_restored_without_clobber(self):
+        self._commit_documents(self.root, build_documents())
+        unrelated = self.root / ".agents/unrelated.txt"
+        unrelated.write_text("approved", encoding="utf-8")
+        original, changed, writes = self._replacement_fixture(self.root)
+        native_exchange = setup_files.atomic_exchange
+        calls = 0
+
+        def mutate_before_exchange(parent_fd, first, second):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                unrelated.write_text("concurrent-owner", encoding="utf-8")
+            return native_exchange(parent_fd, first, second)
+
+        with mock.patch(
+            "scripts.workspace_setup.files.atomic_exchange",
+            side_effect=mutate_before_exchange,
+        ):
+            with self.assertRaises(LocalTransactionError) as raised:
+                apply_local_write(self.root, writes)
+
+        self.assertEqual(raised.exception.container.disposition, "rolled_back")
+        self.assertEqual(unrelated.read_text(encoding="utf-8"), "concurrent-owner")
+        self.assertEqual(
+            (self.root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+            original[WORKSPACE_PATH],
+        )
+        self.assertNotEqual(original[WORKSPACE_PATH], changed[WORKSPACE_PATH])
+
+    def test_descendant_move_and_symlink_during_switch_never_writes_outside_root(self):
+        original, changed, writes = self._replacement_fixture(self.root)
+        native_exchange = setup_files.atomic_exchange
+        moved_elephant = self.outside / "moved-elephant"
+        attacked = False
+
+        def attack_descendant_then_exchange(parent_fd, first, second):
+            nonlocal attacked
+            if not attacked:
+                (self.root / ".agents/elephant").rename(moved_elephant)
+                (self.root / ".agents/elephant").symlink_to(
+                    moved_elephant,
+                    target_is_directory=True,
+                )
+                attacked = True
+            return native_exchange(parent_fd, first, second)
+
+        with mock.patch(
+            "scripts.workspace_setup.files.atomic_exchange",
+            side_effect=attack_descendant_then_exchange,
+        ):
+            with self.assertRaises(LocalTransactionError) as raised:
+                apply_local_write(self.root, writes)
+
+        self.assertTrue(attacked)
+        self.assertEqual(raised.exception.container.disposition, "rolled_back")
+        self.assertEqual(
+            (moved_elephant / "workspace.yaml").read_text(encoding="utf-8"),
+            original[WORKSPACE_PATH],
+        )
+        self.assertNotEqual(
+            (moved_elephant / "workspace.yaml").read_text(encoding="utf-8"),
+            changed[WORKSPACE_PATH],
+        )
+
+    def test_concurrent_active_mutation_during_rollback_is_preserved(self):
+        original, _, writes = self._replacement_fixture(self.root)
+        unrelated = self.root / ".agents/unrelated.txt"
+        unrelated.write_text("approved", encoding="utf-8")
+        writes = plan_current(
+            self.root,
+            tuple(write.operation for write in writes),
+        )
+        native_exchange = setup_files.atomic_exchange
+        calls = 0
+
+        def mutate_commit_and_rollback(parent_fd, first, second):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                unrelated.write_text("prior-race", encoding="utf-8")
+            elif calls == 2:
+                (self.root / WORKSPACE_PATH).write_text(
+                    "concurrent-active-owner", encoding="utf-8"
+                )
+            return native_exchange(parent_fd, first, second)
+
+        with mock.patch(
+            "scripts.workspace_setup.files.atomic_exchange",
+            side_effect=mutate_commit_and_rollback,
+        ):
+            with self.assertRaises(LocalTransactionError) as raised:
+                apply_local_write(self.root, writes)
+
+        self.assertEqual(raised.exception.container.disposition, "rollback_failed")
+        self.assertEqual(
+            (self.root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+            "concurrent-active-owner",
+        )
+        self.assertEqual(
+            raised.exception.container.observed_fingerprint,
+            fingerprint_local_container(self.root),
+        )
+        self.assertNotEqual(
+            (self.root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+            original[WORKSPACE_PATH],
+        )
+
+    def test_absent_container_noreplace_preserves_concurrent_owner(self):
+        writes = plan_current(
+            self.root,
+            local_operations(build_documents()),
+        )
+        native_noreplace = setup_files.atomic_noreplace
+
+        def create_owner_before_commit(parent_fd, source, target):
+            agents = self.root / ".agents"
+            agents.mkdir()
+            (agents / "owner.txt").write_text("concurrent", encoding="utf-8")
+            return native_noreplace(parent_fd, source, target)
+
+        with mock.patch(
+            "scripts.workspace_setup.files.atomic_noreplace",
+            side_effect=create_owner_before_commit,
+        ):
+            with self.assertRaises(LocalTransactionError) as raised:
+                apply_local_write(self.root, writes)
+
+        self.assertEqual(raised.exception.container.disposition, "not_applied")
+        self.assertEqual(
+            (self.root / ".agents/owner.txt").read_text(encoding="utf-8"),
+            "concurrent",
+        )
+
+    def test_apply_fails_closed_when_atomic_exchange_is_unsupported(self):
+        original, _, writes = self._replacement_fixture(self.root)
+        with mock.patch(
+            "scripts.workspace_setup.files.atomic_exchange",
+            side_effect=AtomicRenameUnavailable("unsupported"),
+        ):
+            with self.assertRaises(LocalTransactionError) as raised:
+                apply_local_write(self.root, writes)
+
+        self.assertEqual(raised.exception.container.disposition, "not_applied")
+        self.assertEqual(
+            (self.root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+            original[WORKSPACE_PATH],
+        )
+
     def test_only_workspace_and_direct_profile_paths_are_allowed(self):
         for path in (
             "README.md",
@@ -344,31 +700,34 @@ class LocalWriteSafetyTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 with self.assertRaisesRegex(ValueError, "setup output path"):
-                    plan_local_writes(self.root, (local_operation(path, "body"),))
+                    plan_current(self.root, (local_operation(path, "body"),))
 
     def test_symlinked_parent_or_target_cannot_escape_repository(self):
         (self.root / ".agents").symlink_to(self.outside, target_is_directory=True)
-        with self.assertRaisesRegex(ValueError, "repository containment"):
+        with self.assertRaisesRegex(ValueError, "unsupported|containment"):
             plan_local_writes(
                 self.root,
                 (local_operation(WORKSPACE_PATH, build_documents()[WORKSPACE_PATH]),),
+                ABSENT_LOCAL_CONTAINER_FINGERPRINT,
             )
 
         (self.root / ".agents").unlink()
         target = self.root / WORKSPACE_PATH
         target.parent.mkdir(parents=True)
+        expected_container = fingerprint_local_container(self.root)
         outside_target = self.outside / "workspace.yaml"
         outside_target.write_text("outside", encoding="utf-8")
         target.symlink_to(outside_target)
-        with self.assertRaisesRegex(ValueError, "repository containment"):
+        with self.assertRaisesRegex(ValueError, "unsupported|containment"):
             plan_local_writes(
                 self.root,
                 (local_operation(WORKSPACE_PATH, build_documents()[WORKSPACE_PATH]),),
+                expected_container,
             )
 
     def test_create_unchanged_and_replace_are_classified_without_unrelated_deletes(self):
         documents = build_documents()
-        creates = plan_local_writes(self.root, local_operations(documents))
+        creates = plan_current(self.root, local_operations(documents))
         self.assertEqual({write.disposition for write in creates}, {"create"})
         created = apply_local_write(self.root, creates)
         self.assertIsInstance(created, LocalTransactionResult)
@@ -378,7 +737,7 @@ class LocalWriteSafetyTests(unittest.TestCase):
         unrelated.write_text("keep", encoding="utf-8")
         workspace = self.root / WORKSPACE_PATH
         inode = workspace.stat().st_ino
-        unchanged = plan_local_writes(self.root, local_operations(documents))
+        unchanged = plan_current(self.root, local_operations(documents))
         self.assertEqual({write.disposition for write in unchanged}, {"unchanged"})
         apply_local_write(self.root, unchanged)
         self.assertEqual(workspace.stat().st_ino, inode)
@@ -395,6 +754,7 @@ class LocalWriteSafetyTests(unittest.TestCase):
                     expected_prior_fingerprint=body_fingerprint(old_body),
                 ),
             ),
+            fingerprint_local_container(self.root),
         )
         self.assertEqual(replacements[0].disposition, "replace")
         apply_local_write(self.root, replacements)
@@ -419,53 +779,18 @@ class LocalWriteSafetyTests(unittest.TestCase):
                                 expected_prior_fingerprint=expected,
                             ),
                         ),
+                        fingerprint_local_container(self.root),
                     )
         with self.assertRaises(TypeError):
             plan_local_writes(
                 self.root,
                 (local_operation(WORKSPACE_PATH, changed),),
+                fingerprint_local_container(self.root),
                 expected_fingerprints={WORKSPACE_PATH: body_fingerprint(changed)},
             )
 
-    def test_replace_rechecks_prior_fingerprint_immediately_before_mutation(self):
-        target = self.root / WORKSPACE_PATH
-        target.parent.mkdir(parents=True)
-        old_body = build_documents()[WORKSPACE_PATH]
-        target.write_text(old_body, encoding="utf-8")
-        changed = old_body.replace("repo-sample", "repo-new")
-        write = plan_local_writes(
-            self.root,
-            (
-                local_operation(
-                    WORKSPACE_PATH,
-                    changed,
-                    expected_prior_fingerprint=body_fingerprint(old_body),
-                ),
-            ),
-        )
-
-        target.write_text("concurrent change", encoding="utf-8")
-
-        with self.assertRaisesRegex(LocalTransactionError, "semantic overwrite"):
-            apply_local_write(self.root, write)
-        self.assertEqual(target.read_text(encoding="utf-8"), "concurrent change")
-
-    def test_create_rechecks_absence_and_local_write_cannot_move_between_roots(self):
-        write = plan_local_writes(
-            self.root,
-            (local_operation(WORKSPACE_PATH, build_documents()[WORKSPACE_PATH]),),
-        )
-        target = self.root / WORKSPACE_PATH
-        target.parent.mkdir(parents=True)
-        target.write_text("appeared", encoding="utf-8")
-
-        with self.assertRaisesRegex(LocalTransactionError, "semantic overwrite"):
-            apply_local_write(self.root, write)
-        with self.assertRaisesRegex(ValueError, "planned repository root"):
-            apply_local_write(self.outside, write)
-
     def test_apply_rejects_a_write_body_changed_after_planning(self):
-        write = plan_local_writes(
+        write = plan_current(
             self.root,
             (local_operation(WORKSPACE_PATH, build_documents()[WORKSPACE_PATH]),),
         )
@@ -476,7 +801,7 @@ class LocalWriteSafetyTests(unittest.TestCase):
         self.assertFalse((self.root / WORKSPACE_PATH).exists())
 
     def test_local_write_is_an_immutable_planned_value(self):
-        write = plan_local_writes(
+        write = plan_current(
             self.root,
             (local_operation(WORKSPACE_PATH, build_documents()[WORKSPACE_PATH]),),
         )[0]
@@ -484,153 +809,6 @@ class LocalWriteSafetyTests(unittest.TestCase):
         self.assertIsInstance(write, LocalWrite)
         with self.assertRaises((AttributeError, TypeError)):
             write.disposition = "replace"
-
-    def test_parent_swap_during_temp_creation_cannot_redirect_outside_root(self):
-        operation = local_operation(WORKSPACE_PATH, build_documents()[WORKSPACE_PATH])
-        writes = plan_local_writes(self.root, (operation,))
-        original_open = os.open
-        swapped = False
-
-        def swapping_open(path, flags, mode=0o777, *, dir_fd=None):
-            nonlocal swapped
-            if not swapped and flags & os.O_CREAT:
-                elephant = self.root / ".agents/elephant"
-                moved = self.root / ".agents/checked-elephant"
-                elephant.rename(moved)
-                elephant.symlink_to(self.outside, target_is_directory=True)
-                swapped = True
-            return original_open(path, flags, mode, dir_fd=dir_fd)
-
-        with mock.patch("scripts.workspace_setup.files.os.open", side_effect=swapping_open):
-            with self.assertRaisesRegex(LocalTransactionError, "containment"):
-                apply_local_write(self.root, writes)
-
-        self.assertTrue(swapped)
-        self.assertFalse((self.outside / "workspace.yaml").exists())
-
-    def test_failure_on_later_commit_rolls_back_every_earlier_output(self):
-        writes = plan_local_writes(self.root, local_operations(build_documents()))
-        original_replace = os.replace
-        replacements = 0
-
-        def failing_replace(source, destination, **kwargs):
-            nonlocal replacements
-            replacements += 1
-            if replacements == 2:
-                raise OSError("second commit failed")
-            return original_replace(source, destination, **kwargs)
-
-        with mock.patch("scripts.workspace_setup.files.os.replace", side_effect=failing_replace):
-            with self.assertRaises(LocalTransactionError) as raised:
-                apply_local_write(self.root, writes)
-
-        self.assertTrue(any("rolled_back" in outcome.states for outcome in raised.exception.outcomes))
-        self.assertEqual(list((self.root / ".agents").rglob("*.yaml")), [])
-        self.assertFalse((self.root / ".agents/elephant").exists())
-
-    def test_post_replace_fsync_failure_is_rolled_back_and_audited(self):
-        writes = plan_local_writes(self.root, local_operations(build_documents()))
-        original_fsync = os.fsync
-        failed = False
-
-        def failing_directory_fsync(descriptor):
-            nonlocal failed
-            if stat.S_ISDIR(os.fstat(descriptor).st_mode) and not failed:
-                failed = True
-                raise OSError("directory fsync failed")
-            return original_fsync(descriptor)
-
-        with mock.patch("scripts.workspace_setup.files.os.fsync", side_effect=failing_directory_fsync):
-            with self.assertRaises(LocalTransactionError) as raised:
-                apply_local_write(self.root, writes)
-
-        self.assertTrue(failed)
-        self.assertTrue(all(outcome.states[-1] == "rolled_back" for outcome in raised.exception.outcomes))
-        self.assertFalse((self.root / ".agents/elephant").exists())
-
-    def test_rollback_failure_is_explicit_and_matches_remaining_disk_state(self):
-        documents = build_documents()
-        first_path = ".agents/elephant/profiles/engineering.yaml"
-        first_target = self.root / first_path
-        first_target.parent.mkdir(parents=True)
-        prior_body = documents[first_path]
-        first_target.write_text(prior_body, encoding="utf-8")
-        changed_body = prior_body.replace('"docs": "en"', '"docs": "fr"')
-        operations = (
-            local_operation(
-                first_path,
-                changed_body,
-                expected_prior_fingerprint=body_fingerprint(prior_body),
-            ),
-            local_operation(
-                ".agents/elephant/profiles/sample.yaml",
-                documents[".agents/elephant/profiles/sample.yaml"],
-            ),
-        )
-        writes = plan_local_writes(self.root, operations)
-        original_replace = os.replace
-        replacements = 0
-
-        def failing_commit_and_rollback(source, destination, **kwargs):
-            nonlocal replacements
-            replacements += 1
-            if replacements in {2, 3}:
-                raise OSError("commit or rollback failed")
-            return original_replace(source, destination, **kwargs)
-
-        with mock.patch(
-            "scripts.workspace_setup.files.os.replace",
-            side_effect=failing_commit_and_rollback,
-        ):
-            with self.assertRaises(LocalTransactionError) as raised:
-                apply_local_write(self.root, writes)
-
-        first = next(outcome for outcome in raised.exception.outcomes if outcome.path == first_path)
-        self.assertEqual(first.states[-1], "rollback_failed")
-        self.assertEqual(first_target.read_text(encoding="utf-8"), changed_body)
-
-    def test_raced_directory_created_by_another_actor_is_not_removed_on_failure(self):
-        writes = plan_local_writes(
-            self.root,
-            (local_operation(WORKSPACE_PATH, build_documents()[WORKSPACE_PATH]),),
-        )
-        original_mkdir = os.mkdir
-        raced = False
-
-        def racing_mkdir(path, mode=0o777, *, dir_fd=None):
-            nonlocal raced
-            if path == ".agents" and not raced:
-                original_mkdir(path, mode, dir_fd=dir_fd)
-                raced = True
-                raise FileExistsError(path)
-            return original_mkdir(path, mode, dir_fd=dir_fd)
-
-        with mock.patch("scripts.workspace_setup.files.os.mkdir", side_effect=racing_mkdir), mock.patch(
-            "scripts.workspace_setup.files._revalidate_parent",
-            side_effect=OSError("pre-stage failure"),
-        ):
-            with self.assertRaises(LocalTransactionError):
-                apply_local_write(self.root, writes)
-
-        self.assertTrue(raced)
-        self.assertTrue((self.root / ".agents").is_dir())
-        self.assertFalse((self.root / ".agents/elephant").exists())
-
-    def test_stage_fsync_failure_removes_temporary_files_and_created_directories(self):
-        writes = plan_local_writes(
-            self.root,
-            (local_operation(WORKSPACE_PATH, build_documents()[WORKSPACE_PATH]),),
-        )
-
-        with mock.patch(
-            "scripts.workspace_setup.files.os.fsync",
-            side_effect=OSError("stage fsync failed"),
-        ):
-            with self.assertRaises(LocalTransactionError):
-                apply_local_write(self.root, writes)
-
-        self.assertFalse((self.root / ".agents/elephant").exists())
-        self.assertEqual(list(self.root.rglob("*.tmp")), [])
 
 
 if __name__ == "__main__":

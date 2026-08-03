@@ -210,6 +210,7 @@ def build_setup_manifest(
     registry: tuple[tuple[str, object], ...],
     profiles: tuple[tuple[str, object], ...],
     *,
+    expected_local_container_fingerprint: str,
     expected_prior_fingerprints: tuple[tuple[str, str], ...] = (),
     rendered_local_documents: tuple[tuple[str, str], ...] = (),
 ) -> SetupManifest:
@@ -385,6 +386,7 @@ def build_setup_manifest(
         diagnostics=tuple(diagnostics),
         conflicts=tuple(conflicts),
         questions=(),
+        expected_local_container_fingerprint=expected_local_container_fingerprint,
         registry=tuple(sorted(registry)),
         profiles=tuple(sorted(profiles)),
     )

@@ -75,6 +75,7 @@ def build_manifest_with(
     external_objects=(),
     registry=(("schema", "elephant.workspace/v3"),),
     profiles=(("sample", (("schema", "elephant.profile/v3"), ("kind", "product"))),),
+    expected_local_container_fingerprint="a" * 64,
     expected_prior_fingerprints=(),
     rendered_local_documents=(),
 ):
@@ -96,6 +97,7 @@ def build_manifest_with(
         ),
         registry,
         profiles,
+        expected_local_container_fingerprint=expected_local_container_fingerprint,
         expected_prior_fingerprints=expected_prior_fingerprints,
         rendered_local_documents=rendered_local_documents,
     )
@@ -133,6 +135,7 @@ class DryRunDiagnosticTests(unittest.TestCase):
                 topology(),
                 (("story_store", "linear"), ("product_knowledge_store", "notion"), ("product_contract_store", "notion"), ("delivery_workspace", "git")),
                 (), ExternalDiscovery(objects=()), layers, (), (),
+                expected_local_container_fingerprint="a" * 64,
             )
 
     def test_phase_one_provider_selection_rejects_an_unavailable_logical_provider_binding(self):
@@ -343,6 +346,12 @@ class DryRunDiffTests(unittest.TestCase):
 
 
 class DryRunFixtureTests(unittest.TestCase):
+    def test_local_container_cas_authority_is_exact_and_approved(self):
+        value = build_manifest_with(expected_local_container_fingerprint="b" * 64)
+
+        self.assertEqual(value.expected_local_container_fingerprint, "b" * 64)
+        self.assertNotEqual(value, build_manifest_with())
+
     def test_local_expected_prior_fingerprints_are_carried_by_exact_operations(self):
         prior = "a" * 64
 
@@ -424,6 +433,7 @@ class DryRunFixtureTests(unittest.TestCase):
             (), ExternalDiscovery(objects=()),
             (("story_store", complete_layers(STORY_RUNTIME_CAPABILITIES)), ("product_knowledge_store", complete_layers(KNOWLEDGE_RUNTIME_CAPABILITIES)), ("product_contract_store", complete_layers(CONTRACT_RUNTIME_CAPABILITIES)), ("delivery_workspace", complete_layers(DELIVERY_RUNTIME_CAPABILITIES))),
             (("schema", "elephant.workspace/v3"),), (),
+            expected_local_container_fingerprint="a" * 64,
         )
         self.assertEqual(tuple(product.key for product in value.products), ("commerce", "identity"))
         self.assertEqual(tuple(domain.key for domain in value.domains), ("alpha", "beta"))

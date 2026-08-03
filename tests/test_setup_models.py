@@ -95,6 +95,7 @@ def manifest() -> SetupManifest:
                 confidence=Confidence.MEDIUM,
             ),
         ),
+        expected_local_container_fingerprint="a" * 64,
         registry=(("schema", "elephant.workspace/v3"),),
         profiles=(("sample", (("kind", "product"),)),),
     )
@@ -120,6 +121,9 @@ class SetupManifestTests(unittest.TestCase):
             "question": replace(first, questions=()),
             "conflict": replace(first, conflicts=()),
             "diagnostic": replace(first, diagnostics=()),
+            "local container": replace(
+                first, expected_local_container_fingerprint="b" * 64
+            ),
             "registry": replace(first, registry=(("schema", "elephant.workspace/v4"),)),
             "profile": replace(first, profiles=(("sample", (("kind", "engineering"),)),)),
         }
@@ -169,6 +173,17 @@ class SetupManifestTests(unittest.TestCase):
         object.__setattr__(bypassed, "expected_prior_fingerprint", "a" * 64)
         with self.assertRaisesRegex(ValueError, "expected_prior_fingerprint"):
             manifest_fingerprint(replace(manifest(), operations=(bypassed,)))
+
+    def test_local_container_fingerprint_requires_approved_lowercase_sha256(self):
+        for invalid in ("", "A" * 64, "not-a-sha256", None):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(
+                    (TypeError, ValueError), "expected_local_container_fingerprint"
+                ):
+                    replace(
+                        manifest(),
+                        expected_local_container_fingerprint=invalid,
+                    )
 
     def test_unsupported_values_are_rejected(self):
         with self.assertRaisesRegex(TypeError, "immutable value: unsupported object"):
@@ -301,6 +316,7 @@ class SetupValueContractTests(unittest.TestCase):
                 "build_setup_manifest",
                 "confirm_topology",
                 "discover_repository",
+                "fingerprint_local_container",
                 "load_rendered_yaml",
                 "manifest_fingerprint",
                 "normalize_external_discovery",

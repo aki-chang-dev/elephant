@@ -12,7 +12,12 @@ from .models import (
     SetupOperation,
     manifest_fingerprint,
 )
-from .files import LocalTransactionError, LocalTransactionResult, LocalWriteOutcome
+from .files import (
+    LocalContainerOutcome,
+    LocalTransactionError,
+    LocalTransactionResult,
+    LocalWriteOutcome,
+)
 
 
 @dataclass(frozen=True)
@@ -71,6 +76,8 @@ class _LocalWriter(Protocol):
     def __call__(
         self,
         operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
     ) -> LocalTransactionResult:
         raise NotImplementedError
 
@@ -435,6 +442,35 @@ def _local_evidence(
     return tuple(evidence)
 
 
+def _container_evidence(
+    container: LocalContainerOutcome,
+    *,
+    expected_owner: str,
+    expected_prior: str,
+    require_committed: bool,
+) -> ApplyEvidence:
+    if not isinstance(container, LocalContainerOutcome):
+        raise SetupApplyError("local transaction returned invalid container outcome")
+    if container.owner_id != expected_owner:
+        raise SetupApplyError("local container owner does not match this execution")
+    if not hmac.compare_digest(container.prior_fingerprint, expected_prior):
+        raise SetupApplyError("local container prior evidence does not match approval")
+    if require_committed and (
+        len(container.desired_fingerprint) != 64
+        or not hmac.compare_digest(
+            container.desired_fingerprint, container.observed_fingerprint
+        )
+    ):
+        raise SetupApplyError("local container committed evidence is inconsistent")
+    return ApplyEvidence(
+        operation_id="local.container",
+        target_key=".agents",
+        external_id=container.owner_id,
+        observed_fingerprint=container.observed_fingerprint,
+        disposition=container.disposition,
+    )
+
+
 def apply_setup(
     approved: ApprovedManifest,
     adapters: Mapping[str, SetupAdapter],
@@ -500,7 +536,11 @@ def apply_setup(
         )
 
     try:
-        transaction = write_local(local_operations)
+        transaction = write_local(
+            local_operations,
+            authority.manifest.expected_local_container_fingerprint,
+            execution_token,
+        )
         if not isinstance(transaction, LocalTransactionResult):
             raise SetupApplyError("local writer returned invalid transaction result")
         local_writes = _local_evidence(
@@ -508,12 +548,26 @@ def apply_setup(
             transaction.outcomes,
             require_durable=True,
         )
+        container_evidence = _container_evidence(
+            transaction.container,
+            expected_owner=execution_token,
+            expected_prior=authority.manifest.expected_local_container_fingerprint,
+            require_committed=True,
+        )
+        if container_evidence.disposition not in {"created", "replaced", "unchanged"}:
+            raise SetupApplyError("local container did not commit successfully")
     except LocalTransactionError as error:
         try:
             local_outcomes = _local_evidence(
                 local_operations,
                 error.outcomes,
                 require_durable=False,
+            )
+            container_evidence = _container_evidence(
+                error.container,
+                expected_owner=execution_token,
+                expected_prior=authority.manifest.expected_local_container_fingerprint,
+                require_committed=False,
             )
         except SetupApplyError as invalid_outcomes:
             raise _contextual_error(
@@ -525,13 +579,14 @@ def apply_setup(
             error.detail,
             operation=error.operation or local_operations[0],
             cause=error.cause,
-            partial_evidence=tuple(evidence) + local_outcomes,
+            partial_evidence=tuple(evidence) + local_outcomes + (container_evidence,),
         ) from error
     except Exception as error:
         operation = local_operations[0] if local_operations else None
         if operation is None:
             raise SetupApplyError(str(error) or type(error).__name__, cause=error) from error
         raise _contextual_error(error, operation, tuple(evidence)) from error
+    local_writes = local_writes + (container_evidence,)
     evidence.extend(local_writes)
     return ApplyResult(
         ready=True,

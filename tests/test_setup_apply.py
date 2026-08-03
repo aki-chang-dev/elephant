@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import replace
 import os
 from pathlib import Path
-import stat
 import tempfile
 import threading
 import unittest
 from unittest import mock
+
+import scripts.workspace_setup.files as setup_files
+from scripts.workspace_setup.atomic_switch import AtomicRenameUnavailable
 
 from scripts.workspace_core import (
     CONTRACT_RUNTIME_CAPABILITIES,
@@ -56,7 +58,13 @@ from tests.test_setup_files import (
     external_provider_selection,
     product_settings,
 )
-from scripts.workspace_setup.files import LocalTransactionResult, LocalWriteOutcome
+from scripts.workspace_setup.files import (
+    ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+    LocalContainerOutcome,
+    LocalTransactionResult,
+    LocalWriteOutcome,
+    fingerprint_local_container,
+)
 
 
 def operation(
@@ -95,6 +103,7 @@ def manifest(*operations: SetupOperation) -> SetupManifest:
         diagnostics=(),
         conflicts=(),
         questions=(),
+        expected_local_container_fingerprint=ABSENT_LOCAL_CONTAINER_FINGERPRINT,
         registry=(),
         profiles=(),
     )
@@ -247,21 +256,39 @@ class InterleavingCreateAdapter(RecordingAdapter):
 class RecordingWriter:
     def __init__(self, events: list[str] | None = None) -> None:
         self.calls: list[tuple[str, object]] = []
+        self.container_authorities: list[str] = []
+        self.owner_ids: list[str] = []
         self.events = events
 
-    def __call__(self, operations: tuple[SetupOperation, ...]) -> LocalTransactionResult:
+    def __call__(
+        self,
+        operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
+    ) -> LocalTransactionResult:
         self.calls.append(operations)
+        self.container_authorities.append(expected_container_fingerprint)
+        self.owner_ids.append(owner_id)
         if self.events is not None:
             self.events.append("local:batch")
-        return LocalTransactionResult(tuple(
-            LocalWriteOutcome(
-                operation.operation_id,
-                operation.target_key,
-                ("durable",),
-                operation.desired_fingerprint,
-            )
-            for operation in operations
-        ))
+        return LocalTransactionResult(
+            tuple(
+                LocalWriteOutcome(
+                    operation.operation_id,
+                    operation.target_key,
+                    ("durable",),
+                    operation.desired_fingerprint,
+                )
+                for operation in operations
+            ),
+            LocalContainerOutcome(
+                "unchanged",
+                expected_container_fingerprint,
+                expected_container_fingerprint,
+                expected_container_fingerprint,
+                owner_id,
+            ),
+        )
 
 
 class FailingFindAdapter(RecordingAdapter):
@@ -279,9 +306,32 @@ class FailingWriter(RecordingWriter):
         super().__init__()
         self.failure = failure
 
-    def __call__(self, operations: tuple[SetupOperation, ...]) -> LocalTransactionResult:
-        super().__call__(operations)
+    def __call__(
+        self,
+        operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
+    ) -> LocalTransactionResult:
+        super().__call__(operations, expected_container_fingerprint, owner_id)
         raise self.failure
+
+
+class WrongOwnerWriter(RecordingWriter):
+    def __call__(
+        self,
+        operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
+    ) -> LocalTransactionResult:
+        result = super().__call__(
+            operations,
+            expected_container_fingerprint,
+            owner_id,
+        )
+        return replace(
+            result,
+            container=replace(result.container, owner_id="different-execution"),
+        )
 
 
 class SetupApplyAuthorityTests(unittest.TestCase):
@@ -329,6 +379,16 @@ class SetupApplyAuthorityTests(unittest.TestCase):
                     )
                 self.assertEqual(adapter.calls, [])
                 self.assertEqual(writer.calls, [])
+
+    def test_local_container_evidence_must_belong_to_the_execution_owner(self):
+        adapter = RecordingAdapter("linear")
+        with self.assertRaisesRegex(SetupApplyError, "container.*owner"):
+            run_apply(
+                approved_create_manifest(),
+                {"linear": adapter},
+                WrongOwnerWriter(),
+                execution_id="execution-primary",
+            )
 
     def test_conflicts_or_questions_cannot_mutate_any_authority(self):
         cases = (
@@ -601,10 +661,18 @@ class SetupApplyMutationTests(unittest.TestCase):
 
         local_operation = approved_create_manifest().manifest.operations[-1]
         self.assertEqual(writer.calls, [(local_operation,)])
+        self.assertEqual(
+            writer.container_authorities,
+            [ABSENT_LOCAL_CONTAINER_FINGERPRINT],
+        )
+        self.assertEqual(writer.owner_ids, ["execution-primary"])
         self.assertEqual(events[-1], "local:batch")
         self.assertLess(events.index("adapter:read"), events.index("local:batch"))
         self.assertEqual(result.local_writes[0].target_key, ".agents/elephant/workspace.yaml")
         self.assertEqual(result.local_writes[0].disposition, "durable")
+        self.assertEqual(result.local_writes[-1].target_key, ".agents")
+        self.assertEqual(result.local_writes[-1].disposition, "unchanged")
+        self.assertEqual(result.local_writes[-1].external_id, "execution-primary")
 
 
 def approved_round_trip_manifest() -> ApprovedManifest:
@@ -852,10 +920,16 @@ class AtomicLocalWriter:
     def __call__(
         self,
         operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
     ) -> LocalTransactionResult:
         self.events.append("local:batch")
-        writes = plan_local_writes(self.root, operations)
-        return apply_local_write(self.root, writes)
+        writes = plan_local_writes(
+            self.root,
+            operations,
+            expected_container_fingerprint,
+        )
+        return apply_local_write(self.root, writes, owner_id=owner_id)
 
 
 def complete_layers(capabilities: frozenset[str]) -> CapabilityLayers:
@@ -994,10 +1068,24 @@ def approved_integrated_manifest(
             for path, document in sorted(normalized.items())
             if path != WORKSPACE_PATH
         ),
+        expected_local_container_fingerprint=fingerprint_local_container(root),
         expected_prior_fingerprints=expected_priors,
         rendered_local_documents=tuple(sorted(documents.items())),
     )
     return approved(setup_manifest), documents
+
+
+def commit_integrated_local(root: Path, value: ApprovedManifest) -> None:
+    operations = tuple(
+        operation
+        for operation in value.manifest.operations
+        if operation.kind is OperationKind.WRITE_LOCAL
+    )
+    AtomicLocalWriter(root, [])(
+        operations,
+        value.manifest.expected_local_container_fingerprint,
+        "integration-bootstrap",
+    )
 
 
 class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
@@ -1009,11 +1097,7 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
             original, _ = approved_integrated_manifest(
                 root, adapters, repository_id="repo-sample"
             )
-            AtomicLocalWriter(root, [])(tuple(
-                operation
-                for operation in original.manifest.operations
-                if operation.kind is OperationKind.WRITE_LOCAL
-            ))
+            commit_integrated_local(root, original)
             value, documents = approved_integrated_manifest(
                 root, adapters, repository_id="repo-updated"
             )
@@ -1071,34 +1155,21 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
 
             self.assertFalse((root / ".agents/elephant").exists())
 
-    def test_local_batch_failure_restores_prior_config_and_reports_rollback(self):
+    def test_unsupported_atomic_primitive_reports_not_applied_and_preserves_prior(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             adapters = integrated_adapters([])
             original, original_documents = approved_integrated_manifest(
                 root, adapters, repository_id="repo-sample"
             )
-            AtomicLocalWriter(root, [])(tuple(
-                operation
-                for operation in original.manifest.operations
-                if operation.kind is OperationKind.WRITE_LOCAL
-            ))
+            commit_integrated_local(root, original)
             value, _ = approved_integrated_manifest(
                 root, adapters, repository_id="repo-updated"
             )
-            original_replace = os.replace
-            replacements = 0
-
-            def fail_second_replace(source, destination, **kwargs):
-                nonlocal replacements
-                replacements += 1
-                if replacements == 2:
-                    raise OSError("second local commit failed")
-                return original_replace(source, destination, **kwargs)
 
             with mock.patch(
-                "scripts.workspace_setup.files.os.replace",
-                side_effect=fail_second_replace,
+                "scripts.workspace_setup.files.atomic_exchange",
+                side_effect=AtomicRenameUnavailable("unsupported"),
             ):
                 with self.assertRaises(SetupApplyError) as raised:
                     run_apply(
@@ -1114,7 +1185,8 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 if evidence.operation_id.startswith("local.")
             )
             self.assertTrue(local_evidence)
-            self.assertTrue(all(item.disposition in {"durable", "rolled_back"} for item in local_evidence))
+            self.assertEqual(local_evidence[-1].target_key, ".agents")
+            self.assertEqual(local_evidence[-1].disposition, "not_applied")
             self.assertEqual(
                 {
                     path: (root / path).read_text(encoding="utf-8")
@@ -1123,34 +1195,21 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 original_documents,
             )
 
-    def test_post_replace_fsync_failure_partial_evidence_matches_rolled_back_disk(self):
+    def test_committed_container_cleanup_failure_reports_new_active_tree(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             adapters = integrated_adapters([])
             original, original_documents = approved_integrated_manifest(
                 root, adapters, repository_id="repo-sample"
             )
-            AtomicLocalWriter(root, [])(tuple(
-                operation
-                for operation in original.manifest.operations
-                if operation.kind is OperationKind.WRITE_LOCAL
-            ))
-            value, _ = approved_integrated_manifest(
+            commit_integrated_local(root, original)
+            value, changed_documents = approved_integrated_manifest(
                 root, adapters, repository_id="repo-updated"
             )
-            original_fsync = os.fsync
-            failed = False
-
-            def fail_first_directory_fsync(descriptor):
-                nonlocal failed
-                if stat.S_ISDIR(os.fstat(descriptor).st_mode) and not failed:
-                    failed = True
-                    raise OSError("post-replace fsync failed")
-                return original_fsync(descriptor)
 
             with mock.patch(
-                "scripts.workspace_setup.files.os.fsync",
-                side_effect=fail_first_directory_fsync,
+                "scripts.workspace_setup.files.remove_tree_at",
+                side_effect=OSError("old container cleanup failed"),
             ):
                 with self.assertRaises(SetupApplyError) as raised:
                     run_apply(
@@ -1165,44 +1224,45 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 for evidence in raised.exception.partial_evidence
                 if evidence.operation_id.startswith("local.")
             )
-            self.assertTrue(failed)
             self.assertEqual(
                 {item.disposition for item in local_evidence},
-                {"durable", "rolled_back"},
+                {"durable", "cleanup_failed"},
             )
             self.assertEqual(
-                {path: (root / path).read_text(encoding="utf-8") for path in original_documents},
-                original_documents,
+                {path: (root / path).read_text(encoding="utf-8") for path in changed_documents},
+                changed_documents,
             )
 
-    def test_rollback_failure_evidence_reports_the_changed_file_fingerprint(self):
+    def test_concurrent_rollback_owner_is_preserved_in_container_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             adapters = integrated_adapters([])
             original, _ = approved_integrated_manifest(
                 root, adapters, repository_id="repo-sample"
             )
-            AtomicLocalWriter(root, [])(tuple(
-                operation
-                for operation in original.manifest.operations
-                if operation.kind is OperationKind.WRITE_LOCAL
-            ))
-            value, changed_documents = approved_integrated_manifest(
+            commit_integrated_local(root, original)
+            unrelated = root / ".agents/unrelated.txt"
+            unrelated.write_text("approved", encoding="utf-8")
+            value, _ = approved_integrated_manifest(
                 root, adapters, repository_id="repo-updated"
             )
-            original_replace = os.replace
-            replacements = 0
+            native_exchange = setup_files.atomic_exchange
+            exchanges = 0
 
-            def fail_second_commit_and_rollback(source, destination, **kwargs):
-                nonlocal replacements
-                replacements += 1
-                if replacements in {2, 3}:
-                    raise OSError("commit or rollback failed")
-                return original_replace(source, destination, **kwargs)
+            def mutate_commit_and_rollback(parent_fd, first, second):
+                nonlocal exchanges
+                exchanges += 1
+                if exchanges == 1:
+                    unrelated.write_text("prior-race", encoding="utf-8")
+                elif exchanges == 2:
+                    (root / WORKSPACE_PATH).write_text(
+                        "concurrent-active-owner", encoding="utf-8"
+                    )
+                return native_exchange(parent_fd, first, second)
 
             with mock.patch(
-                "scripts.workspace_setup.files.os.replace",
-                side_effect=fail_second_commit_and_rollback,
+                "scripts.workspace_setup.files.atomic_exchange",
+                side_effect=mutate_commit_and_rollback,
             ):
                 with self.assertRaises(SetupApplyError) as raised:
                     run_apply(
@@ -1215,15 +1275,16 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
             failed_evidence = next(
                 evidence
                 for evidence in raised.exception.partial_evidence
-                if evidence.disposition == "rollback_failed"
+                if evidence.target_key == ".agents"
             )
+            self.assertEqual(failed_evidence.disposition, "rollback_failed")
             self.assertEqual(
                 failed_evidence.observed_fingerprint,
-                body_fingerprint(changed_documents[failed_evidence.target_key]),
+                fingerprint_local_container(root),
             )
             self.assertEqual(
-                (root / failed_evidence.target_key).read_text(encoding="utf-8"),
-                changed_documents[failed_evidence.target_key],
+                (root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+                "concurrent-active-owner",
             )
 
 

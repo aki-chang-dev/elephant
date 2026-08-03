@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 import errno
+import fcntl
 import hashlib
 import hmac
 import json
@@ -23,6 +24,14 @@ from scripts.workspace_core.config import (
 )
 
 from .models import ConfirmedTopology, OperationKind, SetupOperation
+from .container import (
+    ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+    clone_directory,
+    fingerprint_container_at,
+    fingerprint_local_container,
+    remove_tree_at,
+)
+from .atomic_switch import atomic_exchange, atomic_noreplace
 
 
 WORKSPACE_PATH = ".agents/elephant/workspace.yaml"
@@ -341,6 +350,7 @@ class LocalWrite:
     expected_prior_fingerprint: str | None
     desired_fingerprint: str
     body_fingerprint: str
+    expected_container_fingerprint: str
 
 
 @dataclass(frozen=True)
@@ -352,8 +362,18 @@ class LocalWriteOutcome:
 
 
 @dataclass(frozen=True)
+class LocalContainerOutcome:
+    disposition: str
+    prior_fingerprint: str
+    desired_fingerprint: str
+    observed_fingerprint: str
+    owner_id: str
+
+
+@dataclass(frozen=True)
 class LocalTransactionResult:
     outcomes: tuple[LocalWriteOutcome, ...]
+    container: LocalContainerOutcome
 
 
 class LocalTransactionError(RuntimeError):
@@ -364,11 +384,13 @@ class LocalTransactionError(RuntimeError):
         operation: SetupOperation | None,
         cause: BaseException,
         outcomes: tuple[LocalWriteOutcome, ...],
+        container: LocalContainerOutcome,
     ) -> None:
         self.detail = message
         self.operation = operation
         self.cause = cause
         self.outcomes = outcomes
+        self.container = container
         super().__init__(message)
 
 
@@ -424,7 +446,6 @@ def _validate_local_body(path: str, body: object) -> str:
 
 _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _FILE_READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW
-_FILE_CREATE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
 
 
 def _same_inode(first: os.stat_result, second: os.stat_result) -> bool:
@@ -576,6 +597,7 @@ def _classify_write(
 def plan_local_writes(
     root: object,
     operations: tuple[SetupOperation, ...],
+    expected_container_fingerprint: str,
 ) -> tuple[LocalWrite, ...]:
     """Preflight every approved local operation without local mutation."""
     repository_root = _resolved_root(root)
@@ -585,6 +607,15 @@ def plan_local_writes(
         raise TypeError("operations: expected SetupOperation tuple")
     if not all(operation.kind is OperationKind.WRITE_LOCAL for operation in operations):
         raise ValueError("operations: expected only write_local operations")
+    if (
+        not isinstance(expected_container_fingerprint, str)
+        or len(expected_container_fingerprint) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in expected_container_fingerprint
+        )
+    ):
+        raise ValueError("expected container fingerprint must be a lowercase SHA-256")
     paths = [operation.target_key for operation in operations]
     if len(paths) != len(set(paths)):
         raise ValueError("operations: duplicate setup output path")
@@ -595,6 +626,11 @@ def plan_local_writes(
     root_stat = os.fstat(root_fd)
     writes: list[LocalWrite] = []
     try:
+        observed_container_fingerprint = fingerprint_container_at(root_fd)
+        if not hmac.compare_digest(
+            observed_container_fingerprint, expected_container_fingerprint
+        ):
+            raise ValueError("approved local container fingerprint is stale")
         for operation in ordered:
             _output_parts(operation.target_key)
             body = _operation_body(operation)
@@ -617,74 +653,12 @@ def plan_local_writes(
                     expected_prior_fingerprint=prior,
                     desired_fingerprint=operation.desired_fingerprint,
                     body_fingerprint=_document_fingerprint(body),
+                    expected_container_fingerprint=expected_container_fingerprint,
                 )
             )
     finally:
         os.close(root_fd)
     return tuple(writes)
-
-
-@dataclass
-class _PreparedWrite:
-    write: LocalWrite
-    parent_fd: int
-    parent_parts: tuple[str, ...]
-    parent_identity: tuple[int, int]
-    prior_body: bytes | None
-    temporary_name: str | None = None
-
-
-def _ensure_parent(
-    root_fd: int,
-    path: str,
-    created: list[tuple[int, str, tuple[int, int]]],
-) -> int:
-    current = os.dup(root_fd)
-    try:
-        for name in _output_parts(path)[:-1]:
-            try:
-                child = _open_child_directory(current, name, path)
-            except FileNotFoundError:
-                made_directory = False
-                try:
-                    os.mkdir(name, 0o755, dir_fd=current)
-                    made_directory = True
-                except FileExistsError:
-                    pass
-                child = _open_child_directory(current, name, path)
-                if made_directory:
-                    child_stat = os.fstat(child)
-                    created.append(
-                        (os.dup(current), name, (child_stat.st_dev, child_stat.st_ino))
-                    )
-            os.close(current)
-            current = child
-        return current
-    except BaseException:
-        try:
-            os.close(current)
-        except OSError:
-            pass
-        raise
-
-
-def _revalidate_parent(root_fd: int, prepared: _PreparedWrite) -> None:
-    current = os.dup(root_fd)
-    try:
-        for name in prepared.parent_parts:
-            child = _open_child_directory(current, name, prepared.write.path)
-            os.close(current)
-            current = child
-        observed = os.fstat(current)
-        if (observed.st_dev, observed.st_ino) != prepared.parent_identity:
-            raise ValueError(
-                f"repository containment parent changed for {prepared.write.path}"
-            )
-    finally:
-        try:
-            os.close(current)
-        except OSError:
-            pass
 
 
 def _write_bytes(descriptor: int, body: bytes) -> None:
@@ -696,147 +670,179 @@ def _write_bytes(descriptor: int, body: bytes) -> None:
         offset += written
 
 
-def _create_temporary(parent_fd: int, target_name: str, body: bytes, label: str) -> str:
+def _new_stage_directory(root_fd: int, owner_id: str) -> tuple[str, int]:
+    owner_tag = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:16]
     for _ in range(32):
-        name = f".{target_name}.{label}-{secrets.token_hex(8)}.tmp"
+        name = f".agents.setup-stage-{owner_tag}-{secrets.token_hex(8)}"
         try:
-            descriptor = os.open(
-                name,
-                _FILE_CREATE_FLAGS,
-                0o600,
-                dir_fd=parent_fd,
-            )
+            os.mkdir(name, 0o700, dir_fd=root_fd)
         except FileExistsError:
             continue
-        try:
-            _write_bytes(descriptor, body)
-            os.fsync(descriptor)
-        except BaseException:
-            os.close(descriptor)
+        os.fsync(root_fd)
+        descriptor = os.open(name, _DIRECTORY_FLAGS, dir_fd=root_fd)
+        return name, descriptor
+    raise OSError("could not allocate local container stage")
+
+
+def _stage_write(stage_fd: int, write: LocalWrite) -> None:
+    parts = _output_parts(write.path)
+    if parts[0] != ".agents":
+        raise ValueError("local write is outside the staged container")
+    current = os.dup(stage_fd)
+    try:
+        for name in parts[1:-1]:
             try:
-                os.unlink(name, dir_fd=parent_fd)
+                child = _open_child_directory(current, name, write.path)
             except FileNotFoundError:
-                pass
-            raise
+                os.mkdir(name, 0o755, dir_fd=current)
+                os.fsync(current)
+                child = _open_child_directory(current, name, write.path)
+            os.close(current)
+            current = child
+        target = parts[-1]
+        mode = 0o600
+        try:
+            observed = os.stat(target, dir_fd=current, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            if not stat.S_ISREG(observed.st_mode):
+                raise ValueError(
+                    f"local container has unsupported target {write.path}"
+                )
+            mode = stat.S_IMODE(observed.st_mode)
+        descriptor = os.open(
+            target,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+            mode,
+            dir_fd=current,
+        )
+        try:
+            _write_bytes(descriptor, write.body.encode("utf-8"))
+            os.fchmod(descriptor, mode)
+            os.fsync(descriptor)
         finally:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-        return name
-    raise OSError("could not allocate sibling local temporary file")
+            os.close(descriptor)
+        os.fsync(current)
+    finally:
+        os.close(current)
 
 
-def _unlink_temporary(parent_fd: int, name: str | None) -> None:
-    if name is None:
-        return
+def _active_file_fingerprint(root_fd: int, path: str) -> str:
     try:
-        os.unlink(name, dir_fd=parent_fd)
-    except FileNotFoundError:
-        pass
-
-
-def _recheck_prepared(prepared: _PreparedWrite) -> None:
-    current = _read_target(prepared.parent_fd, prepared.write.path)
-    observed = hashlib.sha256(current).hexdigest() if current is not None else None
-    if prepared.write.disposition == "create":
-        valid = observed is None
-    else:
-        expected = prepared.write.expected_prior_fingerprint
-        valid = (
-            observed is not None
-            and expected is not None
-            and hmac.compare_digest(observed, expected)
-        )
-    if not valid:
-        raise ValueError(
-            f"semantic overwrite guard changed before applying {prepared.write.path}"
-        )
-
-
-def _outcome(
-    prepared: _PreparedWrite,
-    states: tuple[str, ...],
-) -> LocalWriteOutcome:
-    try:
-        current = _read_target(prepared.parent_fd, prepared.write.path)
-        fingerprint = hashlib.sha256(current).hexdigest() if current is not None else ""
+        parent_fd = _open_existing_parent(root_fd, path)
+        try:
+            body = _read_target(parent_fd, path)
+        finally:
+            if parent_fd is not None:
+                os.close(parent_fd)
     except BaseException:
-        fingerprint = ""
-    return LocalWriteOutcome(
-        operation_id=prepared.write.operation.operation_id,
-        path=prepared.write.path,
-        states=states,
-        observed_fingerprint=fingerprint,
+        return ""
+    return hashlib.sha256(body).hexdigest() if body is not None else ""
+
+
+def _local_outcomes(
+    root_fd: int,
+    writes: tuple[LocalWrite, ...],
+    state: str,
+) -> tuple[LocalWriteOutcome, ...]:
+    return tuple(
+        LocalWriteOutcome(
+            operation_id=write.operation.operation_id,
+            path=write.path,
+            states=(state,),
+            observed_fingerprint=_active_file_fingerprint(root_fd, write.path),
+        )
+        for write in writes
     )
 
 
-def _cleanup_created_directories(
-    created: list[tuple[int, str, tuple[int, int]]],
+def _observed_container_fingerprint(root_fd: int) -> str:
+    try:
+        return fingerprint_container_at(root_fd)
+    except BaseException:
+        return ""
+
+
+def _container_outcome(
+    disposition: str,
+    prior: str,
+    desired: str,
+    observed: str,
+    owner_id: str,
+) -> LocalContainerOutcome:
+    return LocalContainerOutcome(disposition, prior, desired, observed, owner_id)
+
+
+def _cleanup_owned_stage(
+    root_fd: int,
+    stage_name: str,
+    expected_fingerprint: str,
 ) -> None:
-    for parent_fd, name, identity in reversed(created):
-        try:
-            observed = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-            if (
-                stat.S_ISDIR(observed.st_mode)
-                and (observed.st_dev, observed.st_ino) == identity
-            ):
-                os.rmdir(name, dir_fd=parent_fd)
-        except (FileNotFoundError, OSError):
-            pass
-        finally:
-            os.close(parent_fd)
+    observed = fingerprint_container_at(root_fd, stage_name)
+    if not hmac.compare_digest(observed, expected_fingerprint):
+        raise ValueError("transaction-owned cleanup tree changed")
+    remove_tree_at(root_fd, stage_name)
 
 
-def _rollback_transaction(
-    prepared: tuple[_PreparedWrite, ...],
-    applied: list[_PreparedWrite],
-    states: dict[str, list[str]],
-) -> tuple[LocalWriteOutcome, ...]:
-    applied_paths = {item.write.path for item in applied}
-    for item in reversed(applied):
+def _rollback_container_exchange(
+    root_fd: int,
+    stage_name: str,
+    desired_fingerprint: str,
+) -> tuple[str, str]:
+    active = _observed_container_fingerprint(root_fd)
+    if not hmac.compare_digest(active, desired_fingerprint):
+        return "rollback_failed", active
+    try:
+        atomic_exchange(root_fd, ".agents", stage_name)
+        os.fsync(root_fd)
+    except BaseException:
+        return "rollback_failed", _observed_container_fingerprint(root_fd)
+    displaced = _observed_container_fingerprint(root_fd)
+    try:
+        staged_active = fingerprint_container_at(root_fd, stage_name)
+    except BaseException:
+        staged_active = ""
+    if not hmac.compare_digest(staged_active, desired_fingerprint):
         try:
-            target_name = _output_parts(item.write.path)[-1]
-            if item.prior_body is None:
-                os.unlink(target_name, dir_fd=item.parent_fd)
-            else:
-                rollback_name = _create_temporary(
-                    item.parent_fd, target_name, item.prior_body, "rollback"
-                )
-                try:
-                    os.replace(
-                        rollback_name,
-                        target_name,
-                        src_dir_fd=item.parent_fd,
-                        dst_dir_fd=item.parent_fd,
-                    )
-                finally:
-                    _unlink_temporary(item.parent_fd, rollback_name)
-            os.fsync(item.parent_fd)
-            states[item.write.path].append("rolled_back")
+            atomic_exchange(root_fd, ".agents", stage_name)
+            os.fsync(root_fd)
         except BaseException:
-            states[item.write.path].append("rollback_failed")
-    for item in prepared:
-        if item.write.path not in applied_paths:
-            if item.write.disposition == "unchanged":
-                states[item.write.path].append("durable")
-            else:
-                states[item.write.path].append("rolled_back")
-    return tuple(_outcome(item, tuple(states[item.write.path])) for item in prepared)
+            pass
+        return "rollback_failed", _observed_container_fingerprint(root_fd)
+    try:
+        _cleanup_owned_stage(root_fd, stage_name, desired_fingerprint)
+    except BaseException:
+        return "cleanup_failed", displaced
+    return "rolled_back", displaced
 
 
 def apply_local_write(
     root: object,
     writes: tuple[LocalWrite, ...],
+    *,
+    owner_id: str | None = None,
 ) -> LocalTransactionResult:
-    """Apply the complete local document set as one confined transaction."""
+    """Commit one complete staged ``.agents`` tree with one atomic switch."""
     if not isinstance(writes, tuple) or not all(
         isinstance(write, LocalWrite) for write in writes
     ):
         raise TypeError("writes: expected LocalWrite tuple")
-    if not writes:
-        return LocalTransactionResult(())
     repository_root = _resolved_root(root)
+    transaction_owner = (
+        f"local-{secrets.token_hex(12)}" if owner_id is None else owner_id
+    )
+    if not isinstance(transaction_owner, str) or not transaction_owner.strip():
+        raise ValueError("local transaction owner_id must be nonblank")
+    transaction_owner = transaction_owner.strip()
+    if not writes:
+        observed = fingerprint_local_container(repository_root)
+        return LocalTransactionResult(
+            (),
+            _container_outcome(
+                "unchanged", observed, observed, observed, transaction_owner
+            ),
+        )
     expected_root = (
         writes[0].repository_device,
         writes[0].repository_inode,
@@ -847,6 +853,12 @@ def apply_local_write(
         for write in writes
     ):
         raise ValueError("local write does not belong to the planned repository root")
+    expected_container_fingerprint = writes[0].expected_container_fingerprint
+    if any(
+        write.expected_container_fingerprint != expected_container_fingerprint
+        for write in writes
+    ):
+        raise ValueError("local writes disagree on approved container authority")
     for write in writes:
         _validate_local_body(write.path, write.body)
         if not hmac.compare_digest(
@@ -855,104 +867,182 @@ def apply_local_write(
             raise ValueError("local write body does not match planned document fingerprint")
 
     root_fd = _open_root(repository_root, expected_root)
-    prepared: list[_PreparedWrite] = []
-    created: list[tuple[int, str, tuple[int, int]]] = []
-    applied: list[_PreparedWrite] = []
-    states = {write.path: [] for write in writes}
+    stage_name: str | None = None
+    stage_fd: int | None = None
+    desired_container_fingerprint = ""
+    switched = False
     failed_write: LocalWrite | None = None
     try:
-        # Re-preflight the full set before creating a directory or temporary.
-        prior_bodies: dict[str, bytes | None] = {}
-        for write in writes:
-            failed_write = write
-            parent_fd = _open_existing_parent(root_fd, write.path)
+        try:
+            fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            observed = _observed_container_fingerprint(root_fd)
+            raise LocalTransactionError(
+                "repository setup lock is held by another owner",
+                operation=writes[0].operation,
+                cause=error,
+                outcomes=_local_outcomes(root_fd, writes, "not_applied"),
+                container=_container_outcome(
+                    "not_applied",
+                    expected_container_fingerprint,
+                    "",
+                    observed,
+                    transaction_owner,
+                ),
+            ) from error
+
+        observed_prior = fingerprint_container_at(root_fd)
+        if not hmac.compare_digest(
+            observed_prior, expected_container_fingerprint
+        ):
+            raise ValueError("approved local container fingerprint is stale")
+
+        stage_name, stage_fd = _new_stage_directory(root_fd, transaction_owner)
+        if observed_prior == ABSENT_LOCAL_CONTAINER_FINGERPRINT:
+            os.fchmod(stage_fd, 0o755)
+            os.fsync(stage_fd)
+        else:
+            source_fd = _open_child_directory(root_fd, ".agents", ".agents")
             try:
-                prior_bodies[write.path] = _read_target(parent_fd, write.path)
+                clone_directory(source_fd, stage_fd)
             finally:
-                if parent_fd is not None:
-                    os.close(parent_fd)
-            disposition, prior = _classify_write(
-                write.operation, write.body, prior_bodies[write.path]
-            )
-            if disposition != write.disposition or prior != write.expected_prior_fingerprint:
-                raise ValueError(
-                    f"semantic overwrite guard changed before applying {write.path}"
-                )
+                os.close(source_fd)
+            if not hmac.compare_digest(
+                fingerprint_container_at(root_fd, stage_name), observed_prior
+            ):
+                raise ValueError("staged local container is not an exact clone")
 
         for write in writes:
             failed_write = write
-            parent_fd = _ensure_parent(root_fd, write.path, created)
-            parent_stat = os.fstat(parent_fd)
-            prepared.append(
-                _PreparedWrite(
-                    write=write,
-                    parent_fd=parent_fd,
-                    parent_parts=_output_parts(write.path)[:-1],
-                    parent_identity=(parent_stat.st_dev, parent_stat.st_ino),
-                    prior_body=prior_bodies[write.path],
-                )
+            _stage_write(stage_fd, write)
+        os.fsync(stage_fd)
+        os.close(stage_fd)
+        stage_fd = None
+        desired_container_fingerprint = fingerprint_container_at(
+            root_fd, stage_name
+        )
+
+        current_prior = fingerprint_container_at(root_fd)
+        if not hmac.compare_digest(current_prior, observed_prior):
+            raise ValueError("approved local container changed before commit")
+        if hmac.compare_digest(desired_container_fingerprint, observed_prior):
+            _cleanup_owned_stage(root_fd, stage_name, desired_container_fingerprint)
+            stage_name = None
+            outcomes = _local_outcomes(root_fd, writes, "durable")
+            return LocalTransactionResult(
+                outcomes,
+                _container_outcome(
+                    "unchanged",
+                    observed_prior,
+                    desired_container_fingerprint,
+                    observed_prior,
+                    transaction_owner,
+                ),
             )
 
-        for item in prepared:
-            failed_write = item.write
-            _revalidate_parent(root_fd, item)
-            _recheck_prepared(item)
-            if item.write.disposition != "unchanged":
-                item.temporary_name = _create_temporary(
-                    item.parent_fd,
-                    _output_parts(item.write.path)[-1],
-                    item.write.body.encode("utf-8"),
-                    "stage",
+        if observed_prior == ABSENT_LOCAL_CONTAINER_FINGERPRINT:
+            atomic_noreplace(root_fd, stage_name, ".agents")
+            stage_name = None
+        else:
+            atomic_exchange(root_fd, ".agents", stage_name)
+        switched = True
+        os.fsync(root_fd)
+
+        if observed_prior != ABSENT_LOCAL_CONTAINER_FINGERPRINT:
+            try:
+                displaced_prior = fingerprint_container_at(root_fd, stage_name)
+            except BaseException:
+                displaced_prior = ""
+            if not hmac.compare_digest(displaced_prior, observed_prior):
+                disposition, active = _rollback_container_exchange(
+                    root_fd,
+                    stage_name,
+                    desired_container_fingerprint,
                 )
+                stage_name = None if disposition == "rolled_back" else stage_name
+                raise LocalTransactionError(
+                    "atomically displaced container failed approved CAS",
+                    operation=failed_write.operation if failed_write else writes[0].operation,
+                    cause=ValueError("displaced prior container fingerprint mismatch"),
+                    outcomes=_local_outcomes(root_fd, writes, disposition),
+                    container=_container_outcome(
+                        disposition,
+                        observed_prior,
+                        desired_container_fingerprint,
+                        active,
+                        transaction_owner,
+                    ),
+                )
+            try:
+                _cleanup_owned_stage(root_fd, stage_name, observed_prior)
+                stage_name = None
+            except BaseException as error:
+                active = _observed_container_fingerprint(root_fd)
+                raise LocalTransactionError(
+                    "committed local container but prior-tree cleanup failed",
+                    operation=failed_write.operation if failed_write else writes[0].operation,
+                    cause=error,
+                    outcomes=_local_outcomes(root_fd, writes, "durable"),
+                    container=_container_outcome(
+                        "cleanup_failed",
+                        observed_prior,
+                        desired_container_fingerprint,
+                        active,
+                        transaction_owner,
+                    ),
+                ) from error
 
-        for item in prepared:
-            failed_write = item.write
-            if item.write.disposition == "unchanged":
-                continue
-            _revalidate_parent(root_fd, item)
-            _recheck_prepared(item)
-            target_name = _output_parts(item.write.path)[-1]
-            assert item.temporary_name is not None
-            os.replace(
-                item.temporary_name,
-                target_name,
-                src_dir_fd=item.parent_fd,
-                dst_dir_fd=item.parent_fd,
-            )
-            item.temporary_name = None
-            states[item.write.path].append("applied")
-            applied.append(item)
-            _revalidate_parent(root_fd, item)
-
-        fsynced: set[tuple[int, int]] = set()
-        for item in prepared:
-            failed_write = item.write
-            if item.parent_identity not in fsynced:
-                os.fsync(item.parent_fd)
-                fsynced.add(item.parent_identity)
-        outcomes: list[LocalWriteOutcome] = []
-        for item in prepared:
-            states[item.write.path].append("durable")
-            outcomes.append(_outcome(item, tuple(states[item.write.path])))
-        return LocalTransactionResult(tuple(outcomes))
+        active = fingerprint_container_at(root_fd)
+        if not hmac.compare_digest(active, desired_container_fingerprint):
+            raise ValueError("active local container differs after atomic switch")
+        outcomes = _local_outcomes(root_fd, writes, "durable")
+        return LocalTransactionResult(
+            outcomes,
+            _container_outcome(
+                "created"
+                if observed_prior == ABSENT_LOCAL_CONTAINER_FINGERPRINT
+                else "replaced",
+                observed_prior,
+                desired_container_fingerprint,
+                active,
+                transaction_owner,
+            ),
+        )
+    except LocalTransactionError:
+        raise
     except BaseException as error:
-        for item in prepared:
-            _unlink_temporary(item.parent_fd, item.temporary_name)
-            item.temporary_name = None
-        outcomes = _rollback_transaction(tuple(prepared), applied, states)
+        if stage_fd is not None:
+            os.close(stage_fd)
+            stage_fd = None
+        cleanup_failed = False
+        if stage_name is not None and not switched:
+            try:
+                remove_tree_at(root_fd, stage_name)
+                stage_name = None
+            except BaseException:
+                cleanup_failed = True
+        observed = _observed_container_fingerprint(root_fd)
+        disposition = (
+            "commit_failed"
+            if switched
+            else "cleanup_failed"
+            if cleanup_failed
+            else "not_applied"
+        )
         raise LocalTransactionError(
             str(error) or type(error).__name__,
             operation=failed_write.operation if failed_write is not None else None,
             cause=error,
-            outcomes=outcomes,
+            outcomes=_local_outcomes(root_fd, writes, disposition),
+            container=_container_outcome(
+                disposition,
+                expected_container_fingerprint,
+                desired_container_fingerprint,
+                observed,
+                transaction_owner,
+            ),
         ) from error
     finally:
-        for item in prepared:
-            _unlink_temporary(item.parent_fd, item.temporary_name)
-            os.close(item.parent_fd)
+        if stage_fd is not None:
+            os.close(stage_fd)
         os.close(root_fd)
-        if applied and all(states[item.write.path][-1:] == ["durable"] for item in applied):
-            for parent_fd, _, _ in created:
-                os.close(parent_fd)
-        else:
-            _cleanup_created_directories(created)
