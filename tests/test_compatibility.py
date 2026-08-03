@@ -765,5 +765,35 @@ class CompatibilityValidatorTests(unittest.TestCase):
             )
 
 
+class WorkspaceCorePackagingTests(unittest.TestCase):
+    ASSETS = (
+        "workspace/workspace-schema.md",
+        "workspace/profile-schema.md",
+        "workspace/provider-contracts.md",
+        "workspace/story-state-model.md",
+    )
+
+    def test_workspace_core_assets_are_packaged(self):
+        root = ROOT / "plugins/elephant/references"
+        for relative in self.ASSETS:
+            self.assertTrue((root / relative).is_file(), relative)
+
+    def test_missing_workspace_core_asset_is_reported(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            references = root / "plugins/elephant/references"
+            for relative in self.ASSETS[:-1]:
+                path = references / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            errors = validator.validate_repository(root)
+            self.assertIn(
+                "missing v3 workspace core asset: "
+                "plugins/elephant/references/workspace/story-state-model.md",
+                errors,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

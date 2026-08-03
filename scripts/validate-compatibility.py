@@ -38,6 +38,13 @@ REQUIRED_V2_ASSETS = (
     "ship-story/reviewers/implementation-conformance.md",
 )
 
+REQUIRED_V3_CORE_ASSETS = (
+    "workspace/workspace-schema.md",
+    "workspace/profile-schema.md",
+    "workspace/provider-contracts.md",
+    "workspace/story-state-model.md",
+)
+
 
 def _load_json(path: Path, label: str, errors: list[str]) -> dict | None:
     if not path.is_file():
@@ -141,6 +148,14 @@ def _validate_v2_assets(root: Path, errors: list[str]) -> None:
             )
 
 
+def _validate_v3_core_assets(root: Path, errors: list[str]) -> None:
+    references_root = root / PLUGIN / "references"
+    for relative in REQUIRED_V3_CORE_ASSETS:
+        path = references_root / relative
+        if not path.is_file():
+            errors.append(f"missing v3 workspace core asset: {path.relative_to(root)}")
+
+
 def validate_repository(root: Path) -> list[str]:
     """Return every compatibility error found below *root*."""
     errors: list[str] = []
@@ -148,6 +163,7 @@ def validate_repository(root: Path) -> list[str]:
     _validate_marketplaces(root, errors)
     _validate_skills(root, errors)
     _validate_v2_assets(root, errors)
+    _validate_v3_core_assets(root, errors)
     return errors
 
 

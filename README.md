@@ -152,6 +152,12 @@ Agent-assisted design is reserved as a future extension and is not silently sele
 - Host-specific invocation and optional design tooling are isolated in the runtime compatibility contract.
 - GitHub PR is a profile choice, not a hardcoded requirement; other integration styles remain profile-driven.
 
+## Workspace v3 development
+
+The approved workspace design and phase-1 core references are present. The active shipping runtime
+remains v2 until the coordinated Maio cutover; phase 1 neither dual-writes nor translates
+artifacts. Future phases will consume the new workspace references.
+
 ## Development Validation
 
 Run deterministic compatibility checks:
