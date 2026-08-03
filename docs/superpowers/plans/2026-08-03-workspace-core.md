@@ -813,46 +813,40 @@ git commit -m "feat: define story state model"
 - Consumes: all four canonical references and Python test oracles from Tasks 1–4.
 - Produces: static failure when any v3 core asset or required vocabulary disappears.
 
-- [ ] **Step 1: Add failing static-contract tests**
+- [ ] **Step 1: Add failing packaging-behavior tests**
 
-Append a `WorkspaceCoreStaticContractTests` class to `tests/test_compatibility.py`. It must assert
-that the four reference files exist and collectively contain:
-
-```python
-required_phrases = (
-    "elephant.workspace/v3",
-    "elephant.profile/v3",
-    "story_store",
-    "product_knowledge_store",
-    "product_contract_store",
-    "delivery_workspace",
-    "platform_unsupported",
-    "connector_capability_missing",
-    "permission_missing",
-    "configuration_missing",
-    "needs_product_decision",
-    "non-semantic",
-    "semantic drift",
-)
-```
-
-The test must also assert that none of the new references contains `legacy-mixed`,
-`delivery-profile.md`, `slice-template.md`, or `superpowers:brainstorming`.
-
-Add this exact validator-wiring assertion to the same class:
+Append a `WorkspaceCorePackagingTests` class to `tests/test_compatibility.py`. Asset existence is a
+real packaging boundary, so test it directly. Do not assert prose phrases from the references.
 
 ```python
-def test_validator_requires_workspace_core_assets(self):
-    validator = load_validator()
-    self.assertEqual(
-        validator.REQUIRED_V3_CORE_ASSETS,
-        (
-            "workspace/workspace-schema.md",
-            "workspace/profile-schema.md",
-            "workspace/provider-contracts.md",
-            "workspace/story-state-model.md",
-        ),
+class WorkspaceCorePackagingTests(unittest.TestCase):
+    ASSETS = (
+        "workspace/workspace-schema.md",
+        "workspace/profile-schema.md",
+        "workspace/provider-contracts.md",
+        "workspace/story-state-model.md",
     )
+
+    def test_workspace_core_assets_are_packaged(self):
+        root = ROOT / "plugins/elephant/references"
+        for relative in self.ASSETS:
+            self.assertTrue((root / relative).is_file(), relative)
+
+    def test_missing_workspace_core_asset_is_reported(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            references = root / "plugins/elephant/references"
+            for relative in self.ASSETS[:-1]:
+                path = references / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            errors = validator.validate_repository(root)
+            self.assertIn(
+                "missing v3 workspace core asset: "
+                "plugins/elephant/references/workspace/story-state-model.md",
+                errors,
+            )
 ```
 
 - [ ] **Step 2: Run the static contract test and verify the validator does not yet enforce it**
@@ -860,12 +854,12 @@ def test_validator_requires_workspace_core_assets(self):
 Run:
 
 ```bash
-python3 -m unittest tests.test_compatibility.WorkspaceCoreStaticContractTests -v
+python3 -m unittest tests.test_compatibility.WorkspaceCorePackagingTests -v
 ```
 
-Expected: the direct reference assertions pass and
-`test_validator_requires_workspace_core_assets` fails with `AttributeError` until
-`validate-compatibility.py` defines `REQUIRED_V3_CORE_ASSETS`.
+Expected: `test_workspace_core_assets_are_packaged` passes and
+`test_missing_workspace_core_asset_is_reported` fails because the validator does not yet report
+missing v3 reference assets.
 
 - [ ] **Step 3: Wire v3 assets into the compatibility validator**
 
