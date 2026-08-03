@@ -1,0 +1,4 @@
+{
+  "name": "multi-product-fixture",
+  "workspaces": ["apps/*"]
+}

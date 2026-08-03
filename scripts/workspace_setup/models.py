@@ -259,6 +259,101 @@ class ApplyResult:
         _validate_immutable_value(self)
 
 
+@dataclass(frozen=True)
+class WorkspaceUnit:
+    path: str
+    package_name: str
+    manifest_path: str
+    instruction_paths: tuple[str, ...]
+    dependency_evidence: tuple[Evidence, ...]
+
+    def __post_init__(self) -> None:
+        _require_tuple(self.instruction_paths, "instruction_paths")
+        _require_tuple(self.dependency_evidence, "dependency_evidence")
+        _validate_immutable_value(self)
+
+
+@dataclass(frozen=True)
+class DependencyEdge:
+    source: str
+    target: str
+    evidence: tuple[Evidence, ...]
+
+    def __post_init__(self) -> None:
+        _require_tuple(self.evidence, "evidence")
+        _validate_immutable_value(self)
+
+
+@dataclass(frozen=True)
+class RepositoryDiscovery:
+    root: str
+    repository_candidate: Candidate
+    workspace_units: tuple[WorkspaceUnit, ...]
+    dependencies: tuple[DependencyEdge, ...]
+    instruction_paths: tuple[str, ...]
+    product_document_paths: tuple[str, ...]
+    deployment_evidence: tuple[str, ...]
+    problems: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "workspace_units",
+            "dependencies",
+            "instruction_paths",
+            "product_document_paths",
+            "deployment_evidence",
+            "problems",
+        ):
+            _require_tuple(getattr(self, field_name), field_name)
+        _validate_immutable_value(self)
+
+
+@dataclass(frozen=True)
+class ExternalObject:
+    provider: str
+    kind: str
+    key: str
+    display_name: str
+    external_id: str
+
+    def __post_init__(self) -> None:
+        for field_name in ("provider", "kind", "key", "display_name", "external_id"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"external object: {field_name} must be a non-empty string")
+        _validate_immutable_value(self)
+
+
+@dataclass(frozen=True)
+class ExternalDiscovery:
+    objects: tuple[ExternalObject, ...]
+
+    def __post_init__(self) -> None:
+        _require_tuple(self.objects, "objects")
+        if not all(isinstance(value, ExternalObject) for value in self.objects):
+            raise TypeError("objects: expected ExternalObject values")
+        _validate_immutable_value(self)
+
+
+@dataclass(frozen=True)
+class TopologyProposal:
+    repository_candidate: Candidate
+    product_candidates: tuple[Candidate, ...]
+    domain_candidates: tuple[Candidate, ...]
+    conflicts: tuple[TopologyConflict, ...]
+    questions: tuple[OwnerQuestion, ...]
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "product_candidates",
+            "domain_candidates",
+            "conflicts",
+            "questions",
+        ):
+            _require_tuple(getattr(self, field_name), field_name)
+        _validate_immutable_value(self)
+
+
 def _validate_manifest(manifest: SetupManifest) -> None:
     if manifest.schema != SETUP_MANIFEST_SCHEMA:
         raise ValueError(f"schema: expected {SETUP_MANIFEST_SCHEMA}")
