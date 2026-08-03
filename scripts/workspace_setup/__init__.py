@@ -25,6 +25,14 @@ from .models import (
 from .discovery import discover_repository, normalize_external_discovery
 from .proposal import confirm_topology, propose_topology
 from .dry_run import CapabilityLayers, DesiredStructure, build_setup_manifest
+from .apply import (
+    DeletionReceipt,
+    ExternalRecord,
+    MutationReceipt,
+    SetupAdapter,
+    SetupApplyError,
+    apply_setup,
+)
 
 __all__ = [
     "ApplyEvidence",
@@ -38,18 +46,24 @@ __all__ = [
     "ConfirmedTopology",
     "DependencyEdge",
     "DesiredStructure",
+    "DeletionReceipt",
     "Evidence",
     "ExternalDiscovery",
     "ExternalObject",
+    "ExternalRecord",
+    "MutationReceipt",
     "OperationKind",
     "OwnerQuestion",
     "SetupDiagnostic",
+    "SetupAdapter",
+    "SetupApplyError",
     "SetupManifest",
     "SetupOperation",
     "TopologyConflict",
     "TopologyProposal",
     "WorkspaceUnit",
     "approve_manifest",
+    "apply_setup",
     "build_setup_manifest",
     "confirm_topology",
     "discover_repository",

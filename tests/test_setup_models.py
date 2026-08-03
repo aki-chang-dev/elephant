@@ -219,7 +219,7 @@ class SetupValueContractTests(unittest.TestCase):
             ("reuse", "create", "manual", "verify", "round_trip", "write_local"),
         )
 
-    def test_public_exports_are_only_task_one_interfaces(self):
+    def test_public_exports_match_completed_setup_interfaces(self):
         self.assertEqual(
             frozenset(workspace_setup.__all__),
             {
@@ -232,19 +232,25 @@ class SetupValueContractTests(unittest.TestCase):
                 "ConfirmedDomain",
                 "ConfirmedProduct",
                 "ConfirmedTopology",
+                "DeletionReceipt",
                 "DependencyEdge",
                 "DesiredStructure",
                 "Evidence",
                 "ExternalDiscovery",
                 "ExternalObject",
+                "ExternalRecord",
+                "MutationReceipt",
                 "OperationKind",
                 "OwnerQuestion",
+                "SetupAdapter",
+                "SetupApplyError",
                 "SetupDiagnostic",
                 "SetupManifest",
                 "SetupOperation",
                 "TopologyConflict",
                 "TopologyProposal",
                 "WorkspaceUnit",
+                "apply_setup",
                 "approve_manifest",
                 "build_setup_manifest",
                 "confirm_topology",
