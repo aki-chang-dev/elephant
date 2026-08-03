@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import threading
 import unittest
 
 from scripts.workspace_core import DiagnosticCode, ProviderKind
@@ -70,6 +71,21 @@ def approved(value: SetupManifest) -> ApprovedManifest:
     return approve_manifest(value, manifest_fingerprint(value))
 
 
+def run_apply(
+    value: object,
+    adapters: dict[str, object],
+    writer: object,
+    *,
+    execution_id: str = "execution-primary",
+):
+    return apply_setup(
+        value,
+        adapters,
+        writer,
+        execution_id=execution_id,
+    )
+
+
 class RecordingAdapter:
     def __init__(
         self,
@@ -83,6 +99,7 @@ class RecordingAdapter:
         self.provider = provider
         self.calls: list[tuple[str, object]] = []
         self.created_keys: list[str] = []
+        self.deleted_keys: list[str] = []
         self.corrupt_read_back = corrupt_read_back
         self.retain_deleted = retain_deleted
         self.events = events
@@ -111,9 +128,6 @@ class RecordingAdapter:
 
     def create(self, setup_operation: SetupOperation) -> MutationReceipt:
         self._record_call("create", setup_operation)
-        existing = self.records_by_key.get(setup_operation.target_key, ())
-        if existing:
-            return MutationReceipt(existing[0].external_id)
         external_id = f"{self.provider}-{len(self.records_by_id) + 1}"
         record = ExternalRecord(
             setup_operation.target_key,
@@ -132,13 +146,69 @@ class RecordingAdapter:
             return replace(record, fingerprint="corrupt")
         return record
 
-    def delete_disposable(self, external_id: str) -> DeletionReceipt:
-        self._record_call("delete_disposable", external_id)
+    def delete_disposable(
+        self,
+        external_id: str,
+        stable_key: str,
+    ) -> DeletionReceipt:
+        self._record_call("delete_disposable", (external_id, stable_key))
         record = self.records_by_id.get(external_id)
+        if record is None or record.stable_key != stable_key:
+            raise RuntimeError("disposable ownership mismatch")
         if record is not None and not self.retain_deleted:
             del self.records_by_id[external_id]
             self.records_by_key[record.stable_key].remove(record)
-        return DeletionReceipt(external_id)
+        self.deleted_keys.append(stable_key)
+        return DeletionReceipt(external_id, stable_key)
+
+
+class InterleavingCreateAdapter(RecordingAdapter):
+    """Forces two executions to observe absence before either create returns."""
+
+    def __init__(self, provider: str, *, atomic: bool) -> None:
+        super().__init__(provider)
+        self.atomic = atomic
+        self.initial_find_barrier = threading.Barrier(2)
+        self.create_barrier = threading.Barrier(2)
+        self.create_lock = threading.Lock()
+        self.initial_find_threads: set[int] = set()
+
+    def find(self, stable_key: str) -> tuple[ExternalRecord, ...]:
+        records = super().find(stable_key)
+        thread_id = threading.get_ident()
+        if thread_id not in self.initial_find_threads:
+            self.initial_find_threads.add(thread_id)
+            self.initial_find_barrier.wait(timeout=5)
+        return records
+
+    def create(self, setup_operation: SetupOperation) -> MutationReceipt:
+        if self.atomic:
+            self._record_call("create", setup_operation)
+            with self.create_lock:
+                records = self.records_by_key.get(setup_operation.target_key, ())
+                if records:
+                    receipt = MutationReceipt(records[0].external_id)
+                else:
+                    receipt = self._insert_created_record(setup_operation)
+        else:
+            receipt = super().create(setup_operation)
+        self.create_barrier.wait(timeout=5)
+        return receipt
+
+    def _insert_created_record(
+        self,
+        setup_operation: SetupOperation,
+    ) -> MutationReceipt:
+        external_id = f"{self.provider}-{len(self.records_by_id) + 1}"
+        record = ExternalRecord(
+            setup_operation.target_key,
+            external_id,
+            setup_operation.desired_fingerprint,
+        )
+        self.records_by_key.setdefault(record.stable_key, []).append(record)
+        self.records_by_id[record.external_id] = record
+        self.created_keys.append(record.stable_key)
+        return MutationReceipt(record.external_id)
 
 
 class RecordingWriter:
@@ -150,6 +220,26 @@ class RecordingWriter:
         self.calls.append((path, body))
         if self.events is not None:
             self.events.append("local:write")
+
+
+class FailingFindAdapter(RecordingAdapter):
+    def __init__(self, provider: str, failure: BaseException) -> None:
+        super().__init__(provider)
+        self.failure = failure
+
+    def find(self, stable_key: str) -> tuple[ExternalRecord, ...]:
+        self._record_call("find", stable_key)
+        raise self.failure
+
+
+class FailingWriter(RecordingWriter):
+    def __init__(self, failure: BaseException) -> None:
+        super().__init__()
+        self.failure = failure
+
+    def __call__(self, path: str, body: object) -> None:
+        super().__call__(path, body)
+        raise self.failure
 
 
 class SetupApplyAuthorityTests(unittest.TestCase):
@@ -172,7 +262,7 @@ class SetupApplyAuthorityTests(unittest.TestCase):
         adapter = RecordingAdapter("linear")
         writer = RecordingWriter()
         with self.assertRaisesRegex((TypeError, SetupApplyError), message):
-            apply_setup(value, {"linear": adapter}, writer)
+            run_apply(value, {"linear": adapter}, writer)
         self.assertEqual(adapter.calls, [])
         self.assertEqual(writer.calls, [])
 
@@ -182,6 +272,21 @@ class SetupApplyAuthorityTests(unittest.TestCase):
     def test_stale_approval_cannot_mutate_any_authority(self):
         stale = ApprovedManifest(self.mutation_manifest, "0" * 64)
         self.assert_rejected_without_calls(stale, "stale|fingerprint")
+
+    def test_execution_id_is_explicit_and_nonblank_before_any_authority_call(self):
+        for execution_id in ("", "   "):
+            with self.subTest(execution_id=execution_id):
+                adapter = RecordingAdapter("linear")
+                writer = RecordingWriter()
+                with self.assertRaisesRegex(SetupApplyError, "execution_id"):
+                    run_apply(
+                        approved(self.mutation_manifest),
+                        {"linear": adapter},
+                        writer,
+                        execution_id=execution_id,
+                    )
+                self.assertEqual(adapter.calls, [])
+                self.assertEqual(writer.calls, [])
 
     def test_conflicts_or_questions_cannot_mutate_any_authority(self):
         cases = (
@@ -238,7 +343,7 @@ class SetupApplyAuthorityTests(unittest.TestCase):
         linear = RecordingAdapter("linear")
         writer = RecordingWriter()
         with self.assertRaisesRegex(SetupApplyError, "adapter.*notion|notion.*adapter"):
-            apply_setup(approved(two_provider_manifest), {"linear": linear}, writer)
+            run_apply(approved(two_provider_manifest), {"linear": linear}, writer)
         self.assertEqual(linear.calls, [])
         self.assertEqual(writer.calls, [])
 
@@ -258,7 +363,7 @@ class SetupApplyAuthorityTests(unittest.TestCase):
         writer = RecordingWriter()
 
         with self.assertRaisesRegex(SetupApplyError, "adapter.*notion|notion.*adapter"):
-            apply_setup(
+            run_apply(
                 approved(two_provider_manifest),
                 {"linear": linear, "notion": IncompleteAdapter()},
                 writer,
@@ -284,12 +389,66 @@ def approved_create_manifest() -> ApprovedManifest:
 
 
 class SetupApplyMutationTests(unittest.TestCase):
+    def run_concurrent_creates(
+        self,
+        adapter: RecordingAdapter,
+    ) -> tuple[list[object], list[BaseException], list[RecordingWriter]]:
+        value = approved_create_manifest()
+        results: list[object] = []
+        errors: list[BaseException] = []
+        writers = [RecordingWriter(), RecordingWriter()]
+
+        def execute(index: int) -> None:
+            try:
+                results.append(run_apply(
+                    value,
+                    {"linear": adapter},
+                    writers[index],
+                    execution_id=f"concurrent-{index}",
+                ))
+            except BaseException as error:
+                errors.append(error)
+
+        threads = tuple(
+            threading.Thread(target=execute, args=(index,)) for index in range(2)
+        )
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+            self.assertFalse(thread.is_alive(), "interleaving test deadlocked")
+        return results, errors, writers
+
+    def test_atomic_get_or_create_conforms_under_an_absent_snapshot_race(self):
+        adapter = InterleavingCreateAdapter("linear", atomic=True)
+
+        results, errors, writers = self.run_concurrent_creates(adapter)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(result.ready for result in results))
+        self.assertEqual(len(adapter.records_by_key["label.product.sample"]), 1)
+        self.assertEqual(adapter.created_keys, ["label.product.sample"])
+        self.assertTrue(all(len(writer.calls) == 1 for writer in writers))
+
+    def test_non_atomic_interleaving_is_detected_before_readiness_or_local_write(self):
+        adapter = InterleavingCreateAdapter("linear", atomic=False)
+
+        results, errors, writers = self.run_concurrent_creates(adapter)
+
+        self.assertEqual(results, [])
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(all(isinstance(error, SetupApplyError) for error in errors))
+        self.assertTrue(all("duplicate" in str(error) for error in errors))
+        self.assertEqual(len(adapter.records_by_key["label.product.sample"]), 2)
+        self.assertTrue(all(writer.calls == [] for writer in writers))
+
     def test_create_is_stable_key_idempotent_and_read_back_verified(self):
         adapter = RecordingAdapter("linear")
         value = approved_create_manifest()
 
-        first = apply_setup(value, {"linear": adapter}, RecordingWriter())
-        second = apply_setup(value, {"linear": adapter}, RecordingWriter())
+        first = run_apply(value, {"linear": adapter}, RecordingWriter())
+        second = run_apply(value, {"linear": adapter}, RecordingWriter())
 
         self.assertTrue(first.ready)
         self.assertTrue(second.ready)
@@ -303,7 +462,7 @@ class SetupApplyMutationTests(unittest.TestCase):
         writer = RecordingWriter()
 
         with self.assertRaisesRegex(SetupApplyError, "read-back"):
-            apply_setup(approved_create_manifest(), {"linear": adapter}, writer)
+            run_apply(approved_create_manifest(), {"linear": adapter}, writer)
 
         self.assertEqual(writer.calls, [])
 
@@ -318,7 +477,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                     desired_fingerprint="team-v1",
                 )))
 
-                result = apply_setup(value, {"linear": adapter}, RecordingWriter())
+                result = run_apply(value, {"linear": adapter}, RecordingWriter())
 
                 self.assertTrue(result.ready)
                 self.assertEqual(adapter.call_kinds, ("find", "read"))
@@ -359,7 +518,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                 ))
 
                 with self.assertRaisesRegex(SetupApplyError, message):
-                    apply_setup(value, {"linear": adapter}, writer)
+                    run_apply(value, {"linear": adapter}, writer)
 
                 self.assertEqual(writer.calls, [])
                 self.assertNotIn("delete_disposable", adapter.call_kinds)
@@ -384,7 +543,7 @@ class SetupApplyMutationTests(unittest.TestCase):
         ))
         writer = RecordingWriter()
 
-        result = apply_setup(value, {}, writer)
+        result = run_apply(value, {}, writer)
 
         self.assertFalse(result.ready)
         self.assertEqual(len(result.manual_handoffs), 1)
@@ -396,7 +555,7 @@ class SetupApplyMutationTests(unittest.TestCase):
         adapter = RecordingAdapter("linear", events=events)
         writer = RecordingWriter(events)
 
-        result = apply_setup(approved_create_manifest(), {"linear": adapter}, writer)
+        result = run_apply(approved_create_manifest(), {"linear": adapter}, writer)
 
         document = (("schema", "elephant.workspace/v3"),)
         self.assertEqual(
@@ -433,25 +592,106 @@ class SetupRoundTripTests(unittest.TestCase):
     def test_round_trip_creates_reads_deletes_and_verifies_absence(self):
         adapter = RecordingAdapter("notion")
         value = approved_round_trip_manifest()
+        execution_id = "round-trip-primary"
 
-        result = apply_setup(value, {"notion": adapter}, RecordingWriter())
+        result = run_apply(
+            value,
+            {"notion": adapter},
+            RecordingWriter(),
+            execution_id=execution_id,
+        )
 
         self.assertTrue(result.ready)
         self.assertEqual(
             adapter.call_kinds,
-            ("find", "create", "read", "delete_disposable", "read"),
+            ("find", "create", "read", "find", "delete_disposable", "read"),
         )
-        disposable_key = f"setup.round_trip.notion.{value.fingerprint}"
+        disposable_key = (
+            f"setup.round_trip.notion.{value.fingerprint}.{execution_id}"
+        )
         self.assertEqual(adapter.created_keys, [disposable_key])
+        self.assertEqual(adapter.deleted_keys, [disposable_key])
         self.assertEqual(result.evidence[0].target_key, disposable_key)
         self.assertEqual(result.evidence[0].disposition, "round_trip_cleaned")
+
+    def test_distinct_concurrent_executions_delete_only_their_owned_round_trip(self):
+        adapter = InterleavingCreateAdapter("notion", atomic=True)
+        value = approved_round_trip_manifest()
+        execution_ids = ("execution-alpha", "execution-beta")
+        results: list[object] = []
+        errors: list[BaseException] = []
+
+        def execute(execution_id: str) -> None:
+            try:
+                results.append(run_apply(
+                    value,
+                    {"notion": adapter},
+                    RecordingWriter(),
+                    execution_id=execution_id,
+                ))
+            except BaseException as error:
+                errors.append(error)
+
+        threads = tuple(
+            threading.Thread(target=execute, args=(execution_id,))
+            for execution_id in execution_ids
+        )
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+            self.assertFalse(thread.is_alive(), "round-trip test deadlocked")
+
+        expected_keys = {
+            f"setup.round_trip.notion.{value.fingerprint}.{execution_id}"
+            for execution_id in execution_ids
+        }
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(result.ready for result in results))
+        self.assertEqual(set(adapter.created_keys), expected_keys)
+        self.assertEqual(set(adapter.deleted_keys), expected_keys)
+        self.assertEqual(
+            {result.evidence[0].target_key for result in results},
+            expected_keys,
+        )
+        self.assertEqual(adapter.records_by_id, {})
+
+    def test_retry_of_same_execution_reuses_and_cleans_owned_round_trip(self):
+        value = approved_round_trip_manifest()
+        execution_id = "execution-retry"
+        disposable_key = (
+            f"setup.round_trip.notion.{value.fingerprint}.{execution_id}"
+        )
+        adapter = RecordingAdapter(
+            "notion",
+            records=(
+                ExternalRecord(disposable_key, "notion-interrupted", "round-trip-v1"),
+            ),
+        )
+
+        result = run_apply(
+            value,
+            {"notion": adapter},
+            RecordingWriter(),
+            execution_id=execution_id,
+        )
+
+        self.assertTrue(result.ready)
+        self.assertEqual(adapter.created_keys, [])
+        self.assertEqual(adapter.deleted_keys, [disposable_key])
+        self.assertEqual(
+            adapter.call_kinds,
+            ("find", "read", "delete_disposable", "read"),
+        )
+        self.assertEqual(result.evidence[0].external_id, "notion-interrupted")
 
     def test_cleanup_failure_blocks_readiness_and_local_write(self):
         adapter = RecordingAdapter("notion", retain_deleted=True)
         writer = RecordingWriter()
 
         with self.assertRaisesRegex(SetupApplyError, "disposable cleanup"):
-            apply_setup(approved_round_trip_manifest(), {"notion": adapter}, writer)
+            run_apply(approved_round_trip_manifest(), {"notion": adapter}, writer)
 
         self.assertEqual(writer.calls, [])
 
@@ -460,14 +700,17 @@ class SetupRoundTripTests(unittest.TestCase):
         writer = RecordingWriter()
 
         with self.assertRaisesRegex(SetupApplyError, "read-back"):
-            apply_setup(approved_round_trip_manifest(), {"notion": adapter}, writer)
+            run_apply(approved_round_trip_manifest(), {"notion": adapter}, writer)
 
         self.assertNotIn("delete_disposable", adapter.call_kinds)
         self.assertEqual(writer.calls, [])
 
     def test_duplicate_disposable_key_never_grants_delete_authority(self):
         value = approved_round_trip_manifest()
-        disposable_key = f"setup.round_trip.notion.{value.fingerprint}"
+        execution_id = "execution-duplicate"
+        disposable_key = (
+            f"setup.round_trip.notion.{value.fingerprint}.{execution_id}"
+        )
         adapter = RecordingAdapter(
             "notion",
             records=(
@@ -477,9 +720,88 @@ class SetupRoundTripTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SetupApplyError, "duplicate"):
-            apply_setup(value, {"notion": adapter}, RecordingWriter())
+            run_apply(
+                value,
+                {"notion": adapter},
+                RecordingWriter(),
+                execution_id=execution_id,
+            )
 
         self.assertNotIn("delete_disposable", adapter.call_kinds)
+
+
+class SetupApplyFailureEvidenceTests(unittest.TestCase):
+    def test_later_transport_failure_preserves_verified_create_evidence(self):
+        first_operation = operation(OperationKind.CREATE)
+        failing_operation = operation(
+            OperationKind.CREATE,
+            provider="notion",
+            target_key="database.sample",
+            desired_fingerprint="database-v1",
+        )
+        local_operation = operation(
+            OperationKind.WRITE_LOCAL,
+            provider="local",
+            target_key=".agents/elephant/workspace.yaml",
+            payload=(("document", ()),),
+        )
+        value = approved(manifest(
+            first_operation,
+            failing_operation,
+            local_operation,
+        ))
+        linear = RecordingAdapter("linear")
+        failure = RuntimeError("notion transport unavailable")
+        notion = FailingFindAdapter("notion", failure)
+        writer = RecordingWriter()
+
+        with self.assertRaises(SetupApplyError) as raised:
+            run_apply(
+                value,
+                {"linear": linear, "notion": notion},
+                writer,
+                execution_id="transport-failure",
+            )
+
+        error = raised.exception
+        self.assertIs(error.operation, failing_operation)
+        self.assertEqual(error.operation_id, failing_operation.operation_id)
+        self.assertEqual(error.provider, "notion")
+        self.assertIs(error.cause, failure)
+        self.assertEqual(
+            tuple(item.operation_id for item in error.partial_evidence),
+            (first_operation.operation_id,),
+        )
+        self.assertIn("notion transport unavailable", str(error))
+        self.assertIn("linear-1", linear.records_by_id)
+        self.assertEqual(writer.calls, [])
+
+    def test_local_writer_failure_preserves_all_external_evidence(self):
+        value = approved_create_manifest()
+        adapter = RecordingAdapter("linear")
+        failure = OSError("local disk unavailable")
+        writer = FailingWriter(failure)
+        local_operation = value.manifest.operations[-1]
+
+        with self.assertRaises(SetupApplyError) as raised:
+            run_apply(
+                value,
+                {"linear": adapter},
+                writer,
+                execution_id="writer-failure",
+            )
+
+        error = raised.exception
+        self.assertIs(error.operation, local_operation)
+        self.assertEqual(error.target_key, ".agents/elephant/workspace.yaml")
+        self.assertIs(error.cause, failure)
+        self.assertEqual(len(error.partial_evidence), 1)
+        self.assertEqual(
+            error.partial_evidence[0].operation_id,
+            value.manifest.operations[0].operation_id,
+        )
+        self.assertIn("local disk unavailable", str(error))
+        self.assertEqual(len(writer.calls), 1)
 
 
 if __name__ == "__main__":

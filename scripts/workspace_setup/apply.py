@@ -29,22 +29,40 @@ class MutationReceipt:
 @dataclass(frozen=True)
 class DeletionReceipt:
     external_id: str
+    stable_key: str
     deleted: bool = True
 
 
 class SetupAdapter(Protocol):
+    """Provider adapter contract for setup execution.
+
+    Phase 3/4 adapters must implement ``create`` as a linearizable, atomic
+    stable-key get-or-create. Concurrent calls for one stable key and desired
+    fingerprint must return receipts for the same unique semantic record;
+    conflicting semantics or duplicate records must fail rather than create or
+    select another record. The apply engine performs read-back and a second
+    uniqueness query as a conformance guard, not as a replacement for this
+    provider-side atomicity requirement.
+    """
+
     provider: str
 
     def find(self, stable_key: str) -> tuple[ExternalRecord, ...]:
         raise NotImplementedError
 
     def create(self, operation: SetupOperation) -> MutationReceipt:
+        """Atomically get or create the unique semantic stable-key record."""
         raise NotImplementedError
 
     def read(self, external_id: str) -> ExternalRecord | None:
         raise NotImplementedError
 
-    def delete_disposable(self, external_id: str) -> DeletionReceipt:
+    def delete_disposable(
+        self,
+        external_id: str,
+        stable_key: str,
+    ) -> DeletionReceipt:
+        """Delete only the disposable record owned by the exact stable key."""
         raise NotImplementedError
 
 
@@ -54,7 +72,25 @@ class _LocalWriter(Protocol):
 
 
 class SetupApplyError(RuntimeError):
-    pass
+    """Apply failure with the failing operation and verified prior effects."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        operation: SetupOperation | None = None,
+        cause: BaseException | None = None,
+        partial_evidence: tuple[ApplyEvidence, ...] = (),
+    ) -> None:
+        self.detail = message
+        self.operation = operation
+        self.operation_id = operation.operation_id if operation is not None else ""
+        self.provider = operation.provider if operation is not None else ""
+        self.target_key = operation.target_key if operation is not None else ""
+        self.cause = cause
+        self.partial_evidence = tuple(partial_evidence)
+        context = f"{self.operation_id}: " if self.operation_id else ""
+        super().__init__(f"{context}{message}")
 
 
 _ADAPTER_OPERATION_KINDS = frozenset(
@@ -163,6 +199,27 @@ def _read_back(
     return record
 
 
+def _verify_unique_read_back(
+    adapter: SetupAdapter,
+    operation: SetupOperation,
+    stable_key: str,
+    record: ExternalRecord,
+) -> None:
+    records = _find_records(adapter, operation, stable_key)
+    if not records:
+        raise SetupApplyError(f"post-create record missing for {stable_key}")
+    if records[0].external_id != record.external_id:
+        raise SetupApplyError(
+            f"post-create receipt does not own unique record for {stable_key}"
+        )
+    _require_semantic_match(
+        operation,
+        stable_key,
+        records[0],
+        context="post-create",
+    )
+
+
 def _apply_external_operation(
     operation: SetupOperation,
     adapter: SetupAdapter,
@@ -212,6 +269,12 @@ def _apply_external_operation(
             operation.target_key,
             external_id,
         )
+        _verify_unique_read_back(
+            adapter,
+            operation,
+            operation.target_key,
+            record,
+        )
     else:
         raise SetupApplyError(
             f"unsupported external operation kind {operation.kind.value}"
@@ -239,15 +302,19 @@ def _apply_round_trip(
     operation: SetupOperation,
     adapter: SetupAdapter,
     approval_fingerprint: str,
+    execution_id: str,
 ) -> ApplyEvidence:
     payload = dict(operation.payload)
     if payload.get("disposable") is not True:
         raise SetupApplyError(
             f"round-trip {operation.operation_id} lacks disposable authority"
         )
-    disposable_key = f"{operation.target_key}.{approval_fingerprint}"
+    disposable_key = (
+        f"{operation.target_key}.{approval_fingerprint}.{execution_id}"
+    )
     disposable_operation = replace(operation, target_key=disposable_key)
     records = _find_records(adapter, disposable_operation, disposable_key)
+    created = False
     if records:
         _require_semantic_match(
             disposable_operation,
@@ -263,6 +330,7 @@ def _apply_round_trip(
                 f"invalid mutation receipt for disposable {disposable_key}"
             )
         external_id = receipt.external_id
+        created = True
 
     record = _read_back(
         adapter,
@@ -270,10 +338,18 @@ def _apply_round_trip(
         disposable_key,
         external_id,
     )
-    deletion = adapter.delete_disposable(record.external_id)
+    if created:
+        _verify_unique_read_back(
+            adapter,
+            disposable_operation,
+            disposable_key,
+            record,
+        )
+    deletion = adapter.delete_disposable(record.external_id, disposable_key)
     if (
         not isinstance(deletion, DeletionReceipt)
         or deletion.external_id != record.external_id
+        or deletion.stable_key != disposable_key
         or not deletion.deleted
     ):
         raise SetupApplyError(f"disposable cleanup receipt failed for {disposable_key}")
@@ -297,11 +373,45 @@ def _local_document(operation: SetupOperation) -> object:
     return payload["document"]
 
 
+def _contextual_error(
+    error: BaseException,
+    operation: SetupOperation,
+    partial_evidence: tuple[ApplyEvidence, ...],
+) -> SetupApplyError:
+    if isinstance(error, SetupApplyError):
+        detail = error.detail
+        cause = error.cause if error.cause is not None else error
+        operation_context = error.operation or operation
+        nested_evidence = error.partial_evidence
+    else:
+        detail = str(error) or type(error).__name__
+        cause = error
+        operation_context = operation
+        nested_evidence = ()
+    return SetupApplyError(
+        detail,
+        operation=operation_context,
+        cause=cause,
+        partial_evidence=partial_evidence + nested_evidence,
+    )
+
+
 def apply_setup(
     approved: ApprovedManifest,
     adapters: Mapping[str, SetupAdapter],
     write_local: _LocalWriter,
+    *,
+    execution_id: str,
 ) -> ApplyResult:
+    """Apply one approval under an execution-owned mutation authority.
+
+    Callers must reuse ``execution_id`` when retrying the same logical apply and
+    must choose a distinct value for every independently concurrent execution.
+    The token becomes part of disposable stable keys and deletion ownership.
+    """
+    if not isinstance(execution_id, str) or not execution_id.strip():
+        raise SetupApplyError("execution_id must be a nonblank string")
+    execution_token = execution_id.strip()
     authority = _preflight(approved, adapters)
     operations = authority.manifest.operations
     local_operations = tuple(
@@ -309,32 +419,39 @@ def apply_setup(
         for operation in operations
         if operation.kind is OperationKind.WRITE_LOCAL
     )
-    local_documents = tuple(
-        (operation, _local_document(operation)) for operation in local_operations
-    )
-
     evidence: list[ApplyEvidence] = []
+    local_documents: list[tuple[SetupOperation, object]] = []
+    for operation in local_operations:
+        try:
+            local_documents.append((operation, _local_document(operation)))
+        except Exception as error:
+            raise _contextual_error(error, operation, ()) from error
+
     manual_handoffs: list[ApplyEvidence] = []
     for operation in operations:
         if operation.kind is OperationKind.WRITE_LOCAL:
             continue
-        if operation.kind is OperationKind.MANUAL:
-            handoff = _manual_handoff(operation)
-            evidence.append(handoff)
-            manual_handoffs.append(handoff)
-            continue
-        if operation.kind is OperationKind.ROUND_TRIP:
-            evidence.append(
-                _apply_round_trip(
-                    operation,
-                    adapters[operation.provider],
-                    authority.fingerprint,
+        try:
+            if operation.kind is OperationKind.MANUAL:
+                handoff = _manual_handoff(operation)
+                evidence.append(handoff)
+                manual_handoffs.append(handoff)
+                continue
+            if operation.kind is OperationKind.ROUND_TRIP:
+                evidence.append(
+                    _apply_round_trip(
+                        operation,
+                        adapters[operation.provider],
+                        authority.fingerprint,
+                        execution_token,
+                    )
                 )
+                continue
+            evidence.append(
+                _apply_external_operation(operation, adapters[operation.provider])
             )
-            continue
-        evidence.append(
-            _apply_external_operation(operation, adapters[operation.provider])
-        )
+        except Exception as error:
+            raise _contextual_error(error, operation, tuple(evidence)) from error
 
     if manual_handoffs:
         return ApplyResult(
@@ -346,7 +463,10 @@ def apply_setup(
 
     local_writes: list[ApplyEvidence] = []
     for operation, document in local_documents:
-        write_local(operation.target_key, document)
+        try:
+            write_local(operation.target_key, document)
+        except Exception as error:
+            raise _contextual_error(error, operation, tuple(evidence)) from error
         local_evidence = ApplyEvidence(
             operation_id=operation.operation_id,
             target_key=operation.target_key,
