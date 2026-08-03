@@ -276,7 +276,11 @@ def normalize_external_discovery(records: object) -> ExternalDiscovery:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"external record: {field_name} must be a non-empty string")
             values[field_name] = value.strip()
+        fingerprint = record.get("fingerprint", "")
+        if not isinstance(fingerprint, str):
+            raise ValueError("external record: fingerprint must be a string")
+        values["fingerprint"] = fingerprint.strip()
         objects.append(ExternalObject(**values))
     return ExternalDiscovery(
-        objects=tuple(sorted(objects, key=lambda item: (item.provider, item.kind, item.key, item.external_id)))
+        objects=tuple(sorted(objects, key=lambda item: (item.provider, item.kind, item.key, item.external_id, item.fingerprint)))
     )

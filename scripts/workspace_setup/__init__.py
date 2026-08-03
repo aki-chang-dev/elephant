@@ -24,17 +24,20 @@ from .models import (
 )
 from .discovery import discover_repository, normalize_external_discovery
 from .proposal import confirm_topology, propose_topology
+from .dry_run import CapabilityLayers, DesiredStructure, build_setup_manifest
 
 __all__ = [
     "ApplyEvidence",
     "ApplyResult",
     "ApprovedManifest",
+    "CapabilityLayers",
     "Candidate",
     "Confidence",
     "ConfirmedDomain",
     "ConfirmedProduct",
     "ConfirmedTopology",
     "DependencyEdge",
+    "DesiredStructure",
     "Evidence",
     "ExternalDiscovery",
     "ExternalObject",
@@ -47,6 +50,7 @@ __all__ = [
     "TopologyProposal",
     "WorkspaceUnit",
     "approve_manifest",
+    "build_setup_manifest",
     "confirm_topology",
     "discover_repository",
     "manifest_fingerprint",

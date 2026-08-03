@@ -315,12 +315,17 @@ class ExternalObject:
     key: str
     display_name: str
     external_id: str
+    fingerprint: str = ""
 
     def __post_init__(self) -> None:
         for field_name in ("provider", "kind", "key", "display_name", "external_id"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"external object: {field_name} must be a non-empty string")
+        if not isinstance(self.fingerprint, str):
+            raise ValueError("external object: fingerprint must be a string")
+        if self.kind == "setup_structure" and not self.fingerprint.strip():
+            raise ValueError("external object: setup_structure fingerprint must be a non-empty string")
         _validate_immutable_value(self)
 
 

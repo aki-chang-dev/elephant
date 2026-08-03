@@ -1,0 +1,10 @@
+[
+  {
+    "provider": "linear",
+    "kind": "setup_structure",
+    "key": "team.delivery",
+    "display_name": "Delivery",
+    "external_id": "team-delivery",
+    "fingerprint": "team-v1"
+  }
+]
