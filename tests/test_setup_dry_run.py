@@ -75,6 +75,8 @@ def build_manifest_with(
     external_objects=(),
     registry=(("schema", "elephant.workspace/v3"),),
     profiles=(("sample", (("schema", "elephant.profile/v3"), ("kind", "product"))),),
+    expected_prior_fingerprints=(),
+    rendered_local_documents=(),
 ):
     return build_setup_manifest(
         topology(),
@@ -94,6 +96,8 @@ def build_manifest_with(
         ),
         registry,
         profiles,
+        expected_prior_fingerprints=expected_prior_fingerprints,
+        rendered_local_documents=rendered_local_documents,
     )
 
 
@@ -339,6 +343,54 @@ class DryRunDiffTests(unittest.TestCase):
 
 
 class DryRunFixtureTests(unittest.TestCase):
+    def test_local_expected_prior_fingerprints_are_carried_by_exact_operations(self):
+        prior = "a" * 64
+
+        value = build_manifest_with(
+            expected_prior_fingerprints=((".agents/elephant/workspace.yaml", prior),)
+        )
+        local = {
+            operation.target_key: operation
+            for operation in value.operations
+            if operation.kind is OperationKind.WRITE_LOCAL
+        }
+
+        self.assertEqual(
+            local[".agents/elephant/workspace.yaml"].expected_prior_fingerprint,
+            prior,
+        )
+        self.assertIsNone(
+            local[".agents/elephant/profiles/sample.yaml"].expected_prior_fingerprint
+        )
+        with self.assertRaisesRegex(ValueError, "expected prior fingerprint.*unknown"):
+            build_manifest_with(
+                expected_prior_fingerprints=(("README.md", "b" * 64),)
+            )
+
+    def test_rendered_local_documents_are_the_exact_approved_write_payloads(self):
+        workspace_body = '{"schema":"elephant.workspace/v3"}\n'
+        profile_body = '{"schema":"elephant.profile/v3"}\n'
+
+        value = build_manifest_with(
+            rendered_local_documents=(
+                (".agents/elephant/workspace.yaml", workspace_body),
+                (".agents/elephant/profiles/sample.yaml", profile_body),
+            )
+        )
+        local = {
+            operation.target_key: dict(operation.payload)["document"]
+            for operation in value.operations
+            if operation.kind is OperationKind.WRITE_LOCAL
+        }
+
+        self.assertEqual(
+            local,
+            {
+                ".agents/elephant/workspace.yaml": workspace_body,
+                ".agents/elephant/profiles/sample.yaml": profile_body,
+            },
+        )
+
     def test_partial_existing_workspace_fixture_reuses_known_structure_and_creates_omission(self):
         records = json.loads((FIXTURES / "existing-workspace.json").read_text(encoding="utf-8"))
         value = build_manifest_with(

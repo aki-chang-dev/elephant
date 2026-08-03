@@ -30,6 +30,23 @@ class OperationKind(str, Enum):
     WRITE_LOCAL = "write_local"
 
 
+def _validate_expected_prior_fingerprint(
+    kind: OperationKind,
+    prior: object,
+) -> None:
+    if kind is OperationKind.WRITE_LOCAL:
+        if prior is not None and (
+            not isinstance(prior, str)
+            or len(prior) != 64
+            or any(character not in "0123456789abcdef" for character in prior)
+        ):
+            raise ValueError(
+                "expected_prior_fingerprint: expected lowercase SHA-256 or null"
+            )
+    elif prior is not None:
+        raise ValueError("expected_prior_fingerprint: allowed only for write_local")
+
+
 def _require_tuple(value: object, field_name: str) -> None:
     if not isinstance(value, tuple):
         raise TypeError(f"{field_name}: expected tuple")
@@ -186,10 +203,14 @@ class SetupOperation:
     payload: tuple[tuple[str, object], ...]
     kind: OperationKind
     runtime_required: bool
+    expected_prior_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         _require_tuple_key_value_pairs(self.payload, "payload")
         _require_enum(self.kind, OperationKind, "kind")
+        _validate_expected_prior_fingerprint(
+            self.kind, self.expected_prior_fingerprint
+        )
         _validate_immutable_value(self)
 
 
@@ -380,6 +401,9 @@ def _validate_manifest(manifest: SetupManifest) -> None:
     for operation in manifest.operations:
         _require_tuple_key_value_pairs(operation.payload, "payload")
         _require_enum(operation.kind, OperationKind, "kind")
+        _validate_expected_prior_fingerprint(
+            operation.kind, operation.expected_prior_fingerprint
+        )
     for diagnostic in manifest.diagnostics:
         _require_enum(diagnostic.logical_provider, ProviderKind, "logical_provider")
         _require_enum(diagnostic.code, DiagnosticCode, "code")

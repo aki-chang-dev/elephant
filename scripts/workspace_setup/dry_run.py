@@ -126,6 +126,8 @@ def _operation(
     kind: OperationKind,
     runtime_required: bool,
     payload: tuple[tuple[str, object], ...] = (),
+    *,
+    expected_prior_fingerprint: str | None = None,
 ) -> SetupOperation:
     return SetupOperation(
         operation_id=f"{provider}.{target_key}.{kind.value}",
@@ -136,6 +138,7 @@ def _operation(
         payload=payload,
         kind=kind,
         runtime_required=runtime_required,
+        expected_prior_fingerprint=expected_prior_fingerprint,
     )
 
 
@@ -206,6 +209,9 @@ def build_setup_manifest(
     capability_layers: tuple[tuple[str, CapabilityLayers], ...],
     registry: tuple[tuple[str, object], ...],
     profiles: tuple[tuple[str, object], ...],
+    *,
+    expected_prior_fingerprints: tuple[tuple[str, str], ...] = (),
+    rendered_local_documents: tuple[tuple[str, str], ...] = (),
 ) -> SetupManifest:
     """Create a deterministic, read-only setup plan from confirmed evidence."""
     if not isinstance(topology, ConfirmedTopology):
@@ -217,7 +223,26 @@ def build_setup_manifest(
     selection = _validate_provider_selection(provider_selection)
     layers = _validate_layers(capability_layers)
     _pair_mapping(registry, "registry")
-    _pair_mapping(profiles, "profiles")
+    profile_documents = _pair_mapping(profiles, "profiles")
+    expected_priors = _pair_mapping(
+        expected_prior_fingerprints, "expected prior fingerprints"
+    )
+    local_paths = {".agents/elephant/workspace.yaml"} | {
+        f".agents/elephant/profiles/{key}.yaml" for key in profile_documents
+    }
+    rendered_documents = _pair_mapping(
+        rendered_local_documents, "rendered local documents"
+    )
+    if rendered_documents and set(rendered_documents) != local_paths:
+        raise ValueError("rendered local documents: expected exact setup output paths")
+    if not all(isinstance(body, str) for body in rendered_documents.values()):
+        raise ValueError("rendered local documents: expected string bodies")
+    unknown_prior_paths = set(expected_priors) - local_paths
+    if unknown_prior_paths:
+        raise ValueError(
+            "expected prior fingerprint has unknown setup output path "
+            f"{sorted(unknown_prior_paths)[0]}"
+        )
 
     diagnostics: list[SetupDiagnostic] = []
     for logical, provider_kind in _LOGICAL_PROVIDERS:
@@ -326,14 +351,22 @@ def build_setup_manifest(
             _payload_fingerprint((("provider", provider),)), OperationKind.ROUND_TRIP, False,
             (("disposable", True), ("read_back_required", True)),
         ))
+    workspace_path = ".agents/elephant/workspace.yaml"
+    workspace_document = rendered_documents.get(workspace_path, registry)
     operations.append(_operation(
-        "local", "write_registry", ".agents/elephant/workspace.yaml", _payload_fingerprint(registry),
-        OperationKind.WRITE_LOCAL, False, (("document", registry),),
+        "local", "write_registry", workspace_path, _payload_fingerprint(workspace_document),
+        OperationKind.WRITE_LOCAL, False, (("document", workspace_document),),
+        expected_prior_fingerprint=expected_priors.get(
+            workspace_path
+        ),
     ))
-    for key, profile in sorted(_pair_mapping(profiles, "profiles").items()):
+    for key, profile in sorted(profile_documents.items()):
+        path = f".agents/elephant/profiles/{key}.yaml"
+        profile_document = rendered_documents.get(path, profile)
         operations.append(_operation(
-            "local", "write_profile", f".agents/elephant/profiles/{key}.yaml", _payload_fingerprint(profile),
-            OperationKind.WRITE_LOCAL, False, (("document", profile),),
+            "local", "write_profile", path, _payload_fingerprint(profile_document),
+            OperationKind.WRITE_LOCAL, False, (("document", profile_document),),
+            expected_prior_fingerprint=expected_priors.get(path),
         ))
 
     operations.sort(key=lambda item: (_PHASE_ORDER[item.kind], item.provider, item.capability, item.target_key))

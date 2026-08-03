@@ -12,6 +12,7 @@ from .models import (
     SetupOperation,
     manifest_fingerprint,
 )
+from .files import LocalTransactionError, LocalTransactionResult, LocalWriteOutcome
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,10 @@ class SetupAdapter(Protocol):
 
 
 class _LocalWriter(Protocol):
-    def __call__(self, path: str, body: object) -> None:
+    def __call__(
+        self,
+        operations: tuple[SetupOperation, ...],
+    ) -> LocalTransactionResult:
         raise NotImplementedError
 
 
@@ -396,6 +400,41 @@ def _contextual_error(
     )
 
 
+def _local_evidence(
+    operations: tuple[SetupOperation, ...],
+    outcomes: tuple[LocalWriteOutcome, ...],
+    *,
+    require_durable: bool,
+) -> tuple[ApplyEvidence, ...]:
+    operation_by_id = {operation.operation_id: operation for operation in operations}
+    if len(operation_by_id) != len(operations) or len(outcomes) != len(operations):
+        raise SetupApplyError("local transaction returned incomplete outcomes")
+    evidence: list[ApplyEvidence] = []
+    seen: set[str] = set()
+    for outcome in outcomes:
+        operation = operation_by_id.get(outcome.operation_id)
+        if operation is None or outcome.operation_id in seen:
+            raise SetupApplyError("local transaction returned unknown outcome")
+        if outcome.path != operation.target_key or not outcome.states:
+            raise SetupApplyError("local transaction outcome does not match operation")
+        disposition = outcome.states[-1]
+        if require_durable and disposition != "durable":
+            raise SetupApplyError(
+                f"local transaction did not make {operation.target_key} durable"
+            )
+        seen.add(outcome.operation_id)
+        evidence.append(
+            ApplyEvidence(
+                operation_id=operation.operation_id,
+                target_key=operation.target_key,
+                external_id=operation.target_key,
+                observed_fingerprint=outcome.observed_fingerprint,
+                disposition=disposition,
+            )
+        )
+    return tuple(evidence)
+
+
 def apply_setup(
     approved: ApprovedManifest,
     adapters: Mapping[str, SetupAdapter],
@@ -420,10 +459,9 @@ def apply_setup(
         if operation.kind is OperationKind.WRITE_LOCAL
     )
     evidence: list[ApplyEvidence] = []
-    local_documents: list[tuple[SetupOperation, object]] = []
     for operation in local_operations:
         try:
-            local_documents.append((operation, _local_document(operation)))
+            _local_document(operation)
         except Exception as error:
             raise _contextual_error(error, operation, ()) from error
 
@@ -461,24 +499,43 @@ def apply_setup(
             local_writes=(),
         )
 
-    local_writes: list[ApplyEvidence] = []
-    for operation, document in local_documents:
-        try:
-            write_local(operation.target_key, document)
-        except Exception as error:
-            raise _contextual_error(error, operation, tuple(evidence)) from error
-        local_evidence = ApplyEvidence(
-            operation_id=operation.operation_id,
-            target_key=operation.target_key,
-            external_id=operation.target_key,
-            observed_fingerprint=operation.desired_fingerprint,
-            disposition="written",
+    try:
+        transaction = write_local(local_operations)
+        if not isinstance(transaction, LocalTransactionResult):
+            raise SetupApplyError("local writer returned invalid transaction result")
+        local_writes = _local_evidence(
+            local_operations,
+            transaction.outcomes,
+            require_durable=True,
         )
-        evidence.append(local_evidence)
-        local_writes.append(local_evidence)
+    except LocalTransactionError as error:
+        try:
+            local_outcomes = _local_evidence(
+                local_operations,
+                error.outcomes,
+                require_durable=False,
+            )
+        except SetupApplyError as invalid_outcomes:
+            raise _contextual_error(
+                invalid_outcomes,
+                error.operation or local_operations[0],
+                tuple(evidence),
+            ) from error
+        raise SetupApplyError(
+            error.detail,
+            operation=error.operation or local_operations[0],
+            cause=error.cause,
+            partial_evidence=tuple(evidence) + local_outcomes,
+        ) from error
+    except Exception as error:
+        operation = local_operations[0] if local_operations else None
+        if operation is None:
+            raise SetupApplyError(str(error) or type(error).__name__, cause=error) from error
+        raise _contextual_error(error, operation, tuple(evidence)) from error
+    evidence.extend(local_writes)
     return ApplyResult(
         ready=True,
         evidence=tuple(evidence),
         manual_handoffs=(),
-        local_writes=tuple(local_writes),
+        local_writes=local_writes,
     )

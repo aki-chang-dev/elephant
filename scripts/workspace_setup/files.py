@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import errno
 import hashlib
 import hmac
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
-import tempfile
+import secrets
+import stat
 from typing import Any
 
 from scripts.workspace_core import validate_profile, validate_workspace
@@ -20,7 +22,7 @@ from scripts.workspace_core.config import (
     WORKSPACE_SCHEMA,
 )
 
-from .models import ConfirmedTopology
+from .models import ConfirmedTopology, OperationKind, SetupOperation
 
 
 WORKSPACE_PATH = ".agents/elephant/workspace.yaml"
@@ -35,7 +37,6 @@ _PROFILE_SECTIONS = (
     "language",
 )
 _PRODUCT_KEY = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
-_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _constrained_value(value: object, *, field: str = "document") -> Any:
@@ -215,6 +216,29 @@ def _validate_document(document: dict[str, object], kind: str) -> None:
         raise ValueError(f"generated {kind} document is invalid: {problems[0]}")
 
 
+def _validate_topology_links(topology: ConfirmedTopology) -> None:
+    product_keys = {product.key for product in topology.products}
+    domain_keys = {domain.key for domain in topology.domains}
+    product_links: set[tuple[str, str]] = set()
+    domain_links: set[tuple[str, str]] = set()
+    for product in topology.products:
+        if len(product.domain_keys) != len(set(product.domain_keys)):
+            raise ValueError(f"topology: duplicate domain link for product {product.key}")
+        for domain_key in product.domain_keys:
+            if domain_key not in domain_keys:
+                raise ValueError(f"topology: unknown domain key {domain_key}")
+            product_links.add((product.key, domain_key))
+    for domain in topology.domains:
+        if len(domain.product_keys) != len(set(domain.product_keys)):
+            raise ValueError(f"topology: duplicate product link for domain {domain.key}")
+        for product_key in domain.product_keys:
+            if product_key not in product_keys:
+                raise ValueError(f"topology: unknown product key {product_key}")
+            domain_links.add((product_key, domain.key))
+    if product_links != domain_links:
+        raise ValueError("topology: product and domain links must be reciprocal")
+
+
 def build_local_documents(
     topology: ConfirmedTopology,
     providers: Mapping[str, str],
@@ -238,6 +262,7 @@ def build_local_documents(
     raw_domain_keys = [domain.key for domain in topology.domains]
     if len(raw_domain_keys) != len(set(raw_domain_keys)):
         raise ValueError("topology: duplicate domain key")
+    _validate_topology_links(topology)
     product_keys = {_validated_product_key(product.key) for product in topology.products}
     if set(supplied_product_settings) != product_keys:
         raise ValueError("product profile settings: exact settings required for every product")
@@ -307,11 +332,44 @@ def build_local_documents(
 @dataclass(frozen=True)
 class LocalWrite:
     repository_root: str
+    repository_device: int
+    repository_inode: int
+    operation: SetupOperation
     path: str
     body: str
     disposition: str
     expected_prior_fingerprint: str | None
     desired_fingerprint: str
+    body_fingerprint: str
+
+
+@dataclass(frozen=True)
+class LocalWriteOutcome:
+    operation_id: str
+    path: str
+    states: tuple[str, ...]
+    observed_fingerprint: str
+
+
+@dataclass(frozen=True)
+class LocalTransactionResult:
+    outcomes: tuple[LocalWriteOutcome, ...]
+
+
+class LocalTransactionError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        operation: SetupOperation | None,
+        cause: BaseException,
+        outcomes: tuple[LocalWriteOutcome, ...],
+    ) -> None:
+        self.detail = message
+        self.operation = operation
+        self.cause = cause
+        self.outcomes = outcomes
+        super().__init__(message)
 
 
 def _output_parts(path: object) -> tuple[str, ...]:
@@ -345,38 +403,6 @@ def _resolved_root(root: object) -> Path:
     return resolved
 
 
-def _inside_root(root: Path, path: Path) -> bool:
-    try:
-        path.relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
-def _confined_target(root: Path, path: str) -> Path:
-    parts = _output_parts(path)
-    current = root
-    for index, part in enumerate(parts):
-        candidate = current / part
-        if candidate.is_symlink():
-            raise ValueError(f"repository containment rejected symlink component {path}")
-        if candidate.exists():
-            try:
-                resolved = candidate.resolve(strict=True)
-            except OSError as error:
-                raise ValueError(f"repository containment could not resolve {path}") from error
-            if not _inside_root(root, resolved):
-                raise ValueError(f"repository containment rejected {path}")
-            if index < len(parts) - 1 and not resolved.is_dir():
-                raise ValueError(f"repository containment rejected non-directory parent {path}")
-            current = resolved
-        else:
-            current = candidate
-    if not _inside_root(root, current):
-        raise ValueError(f"repository containment rejected {path}")
-    return current
-
-
 def _document_fingerprint(body: str) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
@@ -396,155 +422,537 @@ def _validate_local_body(path: str, body: object) -> str:
     return body
 
 
+_DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+_FILE_READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW
+_FILE_CREATE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+
+
+def _same_inode(first: os.stat_result, second: os.stat_result) -> bool:
+    return (
+        first.st_dev == second.st_dev
+        and first.st_ino == second.st_ino
+        and stat.S_IFMT(first.st_mode) == stat.S_IFMT(second.st_mode)
+    )
+
+
+def _open_root(root: Path, expected: tuple[int, int] | None = None) -> int:
+    descriptor = os.open(str(root), _DIRECTORY_FLAGS)
+    observed = os.fstat(descriptor)
+    if not stat.S_ISDIR(observed.st_mode):
+        os.close(descriptor)
+        raise ValueError("repository containment requires a directory root")
+    if expected is not None and (observed.st_dev, observed.st_ino) != expected:
+        os.close(descriptor)
+        raise ValueError("planned repository root changed before local transaction")
+    return descriptor
+
+
+def _open_child_directory(parent_fd: int, name: str, path: str) -> int:
+    try:
+        descriptor = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
+    except OSError as error:
+        if error.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise ValueError(
+                f"repository containment rejected parent component {path}"
+            ) from error
+        raise
+    observed = os.fstat(descriptor)
+    if not stat.S_ISDIR(observed.st_mode):
+        os.close(descriptor)
+        raise ValueError(f"repository containment rejected parent component {path}")
+    return descriptor
+
+
+def _open_existing_parent(root_fd: int, path: str) -> int | None:
+    current = os.dup(root_fd)
+    try:
+        for name in _output_parts(path)[:-1]:
+            try:
+                child = _open_child_directory(current, name, path)
+            except FileNotFoundError:
+                os.close(current)
+                return None
+            os.close(current)
+            current = child
+        return current
+    except BaseException:
+        try:
+            os.close(current)
+        except OSError:
+            pass
+        raise
+
+
+def _read_all(descriptor: int) -> bytes:
+    chunks: list[bytes] = []
+    while True:
+        chunk = os.read(descriptor, 65536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+
+
+def _read_target(parent_fd: int | None, path: str) -> bytes | None:
+    if parent_fd is None:
+        return None
+    name = _output_parts(path)[-1]
+    try:
+        before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError(f"repository containment rejected non-file target {path}")
+    try:
+        descriptor = os.open(name, _FILE_READ_FLAGS, dir_fd=parent_fd)
+    except OSError as error:
+        raise ValueError(f"repository containment rejected target {path}") from error
+    try:
+        opened = os.fstat(descriptor)
+        after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        if not _same_inode(before, opened) or not _same_inode(opened, after):
+            raise ValueError(f"repository containment target changed during read {path}")
+        return _read_all(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _thaw_document(value: object) -> object:
+    if isinstance(value, tuple):
+        if all(
+            isinstance(item, tuple)
+            and len(item) == 2
+            and isinstance(item[0], str)
+            for item in value
+        ):
+            return {key: _thaw_document(item) for key, item in value}
+        return [_thaw_document(item) for item in value]
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    raise ValueError(
+        f"local document: unsupported approved value {type(value).__name__}"
+    )
+
+
+def _operation_body(operation: SetupOperation) -> str:
+    payload = dict(operation.payload)
+    if "document" not in payload:
+        raise ValueError(f"local write {operation.operation_id} has no document payload")
+    document = payload["document"]
+    if isinstance(document, str):
+        return _validate_local_body(operation.target_key, document)
+    thawed = _thaw_document(document)
+    return _validate_local_body(operation.target_key, render_yaml(thawed))
+
+
+def _classify_write(
+    operation: SetupOperation,
+    body: str,
+    current: bytes | None,
+) -> tuple[str, str | None]:
+    current_fingerprint = (
+        hashlib.sha256(current).hexdigest() if current is not None else None
+    )
+    desired_fingerprint = _document_fingerprint(body)
+    prior = operation.expected_prior_fingerprint
+    if current is None:
+        if prior is not None:
+            raise ValueError(
+                f"semantic overwrite prior fingerprint is stale for {operation.target_key}"
+            )
+        return "create", None
+    if prior is not None and not hmac.compare_digest(prior, current_fingerprint or ""):
+        raise ValueError(
+            f"semantic overwrite of {operation.target_key} requires exact prior fingerprint"
+        )
+    if hmac.compare_digest(current_fingerprint or "", desired_fingerprint):
+        return "unchanged", current_fingerprint
+    if prior is None:
+        raise ValueError(
+            f"semantic overwrite of {operation.target_key} requires exact prior fingerprint"
+        )
+    return "replace", current_fingerprint
+
+
 def plan_local_writes(
     root: object,
-    documents: Mapping[str, str],
-    *,
-    expected_fingerprints: Mapping[str, str] | None = None,
+    operations: tuple[SetupOperation, ...],
 ) -> tuple[LocalWrite, ...]:
-    """Classify confined local writes without mutating the repository."""
+    """Preflight every approved local operation without local mutation."""
     repository_root = _resolved_root(root)
-    if not isinstance(documents, Mapping):
-        raise ValueError("documents: expected mapping")
-    expected = {} if expected_fingerprints is None else dict(expected_fingerprints)
-    unknown_fingerprints = set(expected) - set(documents)
-    if unknown_fingerprints:
-        raise ValueError(
-            f"semantic overwrite fingerprint has no document: {sorted(unknown_fingerprints)[0]}"
-        )
-
+    if not isinstance(operations, tuple) or not all(
+        isinstance(operation, SetupOperation) for operation in operations
+    ):
+        raise TypeError("operations: expected SetupOperation tuple")
+    if not all(operation.kind is OperationKind.WRITE_LOCAL for operation in operations):
+        raise ValueError("operations: expected only write_local operations")
+    paths = [operation.target_key for operation in operations]
+    if len(paths) != len(set(paths)):
+        raise ValueError("operations: duplicate setup output path")
+    ordered = tuple(
+        sorted(operations, key=lambda item: (item.target_key == WORKSPACE_PATH, item.target_key))
+    )
+    root_fd = _open_root(repository_root)
+    root_stat = os.fstat(root_fd)
     writes: list[LocalWrite] = []
-    for path in sorted(documents):
-        target = _confined_target(repository_root, path)
-        body = _validate_local_body(path, documents[path])
-        desired_fingerprint = _document_fingerprint(body)
-        if target.exists():
-            if not target.is_file():
-                raise ValueError(f"repository containment rejected non-file target {path}")
-            current_body = target.read_text(encoding="utf-8")
-            current_fingerprint = _document_fingerprint(current_body)
-            if hmac.compare_digest(current_fingerprint, desired_fingerprint):
-                disposition = "unchanged"
-                prior = current_fingerprint
-            else:
-                supplied = expected.get(path)
-                if (
-                    not isinstance(supplied, str)
-                    or _SHA256.fullmatch(supplied) is None
-                    or not hmac.compare_digest(supplied, current_fingerprint)
-                ):
-                    raise ValueError(
-                        f"semantic overwrite of {path} requires exact prior fingerprint"
-                    )
-                disposition = "replace"
-                prior = current_fingerprint
-        else:
-            disposition = "create"
-            prior = None
-        writes.append(
-            LocalWrite(
-                repository_root=str(repository_root),
-                path=path,
-                body=body,
-                disposition=disposition,
-                expected_prior_fingerprint=prior,
-                desired_fingerprint=desired_fingerprint,
+    try:
+        for operation in ordered:
+            _output_parts(operation.target_key)
+            body = _operation_body(operation)
+            parent_fd = _open_existing_parent(root_fd, operation.target_key)
+            try:
+                current = _read_target(parent_fd, operation.target_key)
+            finally:
+                if parent_fd is not None:
+                    os.close(parent_fd)
+            disposition, prior = _classify_write(operation, body, current)
+            writes.append(
+                LocalWrite(
+                    repository_root=str(repository_root),
+                    repository_device=root_stat.st_dev,
+                    repository_inode=root_stat.st_ino,
+                    operation=operation,
+                    path=operation.target_key,
+                    body=body,
+                    disposition=disposition,
+                    expected_prior_fingerprint=prior,
+                    desired_fingerprint=operation.desired_fingerprint,
+                    body_fingerprint=_document_fingerprint(body),
+                )
             )
-        )
+    finally:
+        os.close(root_fd)
     return tuple(writes)
 
 
-def _ensure_confined_parent(root: Path, path: str) -> Path:
-    parts = _output_parts(path)
-    current = root
-    for part in parts[:-1]:
-        candidate = current / part
-        if candidate.is_symlink():
-            raise ValueError(f"repository containment rejected symlink component {path}")
-        if candidate.exists():
-            resolved = candidate.resolve(strict=True)
-            if not _inside_root(root, resolved) or not resolved.is_dir():
-                raise ValueError(f"repository containment rejected {path}")
-            current = resolved
+@dataclass
+class _PreparedWrite:
+    write: LocalWrite
+    parent_fd: int
+    parent_parts: tuple[str, ...]
+    parent_identity: tuple[int, int]
+    prior_body: bytes | None
+    temporary_name: str | None = None
+
+
+def _ensure_parent(
+    root_fd: int,
+    path: str,
+    created: list[tuple[int, str, tuple[int, int]]],
+) -> int:
+    current = os.dup(root_fd)
+    try:
+        for name in _output_parts(path)[:-1]:
+            try:
+                child = _open_child_directory(current, name, path)
+            except FileNotFoundError:
+                made_directory = False
+                try:
+                    os.mkdir(name, 0o755, dir_fd=current)
+                    made_directory = True
+                except FileExistsError:
+                    pass
+                child = _open_child_directory(current, name, path)
+                if made_directory:
+                    child_stat = os.fstat(child)
+                    created.append(
+                        (os.dup(current), name, (child_stat.st_dev, child_stat.st_ino))
+                    )
+            os.close(current)
+            current = child
+        return current
+    except BaseException:
+        try:
+            os.close(current)
+        except OSError:
+            pass
+        raise
+
+
+def _revalidate_parent(root_fd: int, prepared: _PreparedWrite) -> None:
+    current = os.dup(root_fd)
+    try:
+        for name in prepared.parent_parts:
+            child = _open_child_directory(current, name, prepared.write.path)
+            os.close(current)
+            current = child
+        observed = os.fstat(current)
+        if (observed.st_dev, observed.st_ino) != prepared.parent_identity:
+            raise ValueError(
+                f"repository containment parent changed for {prepared.write.path}"
+            )
+    finally:
+        try:
+            os.close(current)
+        except OSError:
+            pass
+
+
+def _write_bytes(descriptor: int, body: bytes) -> None:
+    offset = 0
+    while offset < len(body):
+        written = os.write(descriptor, body[offset:])
+        if written <= 0:
+            raise OSError("temporary local write made no progress")
+        offset += written
+
+
+def _create_temporary(parent_fd: int, target_name: str, body: bytes, label: str) -> str:
+    for _ in range(32):
+        name = f".{target_name}.{label}-{secrets.token_hex(8)}.tmp"
+        try:
+            descriptor = os.open(
+                name,
+                _FILE_CREATE_FLAGS,
+                0o600,
+                dir_fd=parent_fd,
+            )
+        except FileExistsError:
             continue
         try:
-            candidate.mkdir()
-        except FileExistsError:
-            pass
-        if candidate.is_symlink():
-            raise ValueError(f"repository containment rejected symlink component {path}")
-        resolved = candidate.resolve(strict=True)
-        if not _inside_root(root, resolved) or not resolved.is_dir():
-            raise ValueError(f"repository containment rejected {path}")
-        current = resolved
-    return current
+            _write_bytes(descriptor, body)
+            os.fsync(descriptor)
+        except BaseException:
+            os.close(descriptor)
+            try:
+                os.unlink(name, dir_fd=parent_fd)
+            except FileNotFoundError:
+                pass
+            raise
+        finally:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        return name
+    raise OSError("could not allocate sibling local temporary file")
 
 
-def _observed_fingerprint(target: Path, path: str) -> str | None:
-    if target.is_symlink():
-        raise ValueError(f"repository containment rejected symlink target {path}")
-    if not target.exists():
-        return None
-    if not target.is_file():
-        raise ValueError(f"repository containment rejected non-file target {path}")
-    return _document_fingerprint(target.read_text(encoding="utf-8"))
+def _unlink_temporary(parent_fd: int, name: str | None) -> None:
+    if name is None:
+        return
+    try:
+        os.unlink(name, dir_fd=parent_fd)
+    except FileNotFoundError:
+        pass
 
 
-def _recheck_write(target: Path, write: LocalWrite) -> None:
-    observed = _observed_fingerprint(target, write.path)
-    if write.disposition == "create":
+def _recheck_prepared(prepared: _PreparedWrite) -> None:
+    current = _read_target(prepared.parent_fd, prepared.write.path)
+    observed = hashlib.sha256(current).hexdigest() if current is not None else None
+    if prepared.write.disposition == "create":
         valid = observed is None
-    elif write.disposition in {"unchanged", "replace"}:
-        expected = write.expected_prior_fingerprint
+    else:
+        expected = prepared.write.expected_prior_fingerprint
         valid = (
             observed is not None
             and expected is not None
             and hmac.compare_digest(observed, expected)
         )
-    else:
-        raise ValueError(f"local write disposition {write.disposition!r} is invalid")
     if not valid:
         raise ValueError(
-            f"semantic overwrite guard changed before applying {write.path}"
+            f"semantic overwrite guard changed before applying {prepared.write.path}"
         )
 
 
-def apply_local_write(root: object, write: LocalWrite) -> None:
-    """Apply one planned local write through a sibling fsynced temporary file."""
-    if not isinstance(write, LocalWrite):
-        raise TypeError("write: expected LocalWrite")
-    repository_root = _resolved_root(root)
-    if str(repository_root) != write.repository_root:
-        raise ValueError("local write does not belong to the planned repository root")
-    _validate_local_body(write.path, write.body)
-    if not hmac.compare_digest(
-        _document_fingerprint(write.body), write.desired_fingerprint
-    ):
-        raise ValueError("local write body does not match planned document fingerprint")
-    target = _confined_target(repository_root, write.path)
-    _recheck_write(target, write)
-    if write.disposition == "unchanged":
-        return
-
-    parent = _ensure_confined_parent(repository_root, write.path)
-    target = parent / PurePosixPath(write.path).name
-    _recheck_write(target, write)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{target.name}.", suffix=".tmp", dir=str(parent)
-    )
-    temporary = Path(temporary_name)
+def _outcome(
+    prepared: _PreparedWrite,
+    states: tuple[str, ...],
+) -> LocalWriteOutcome:
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
-            handle.write(write.body)
-            handle.flush()
-            os.fsync(handle.fileno())
-        _recheck_write(target, write)
-        os.replace(temporary, target)
-        directory_descriptor = os.open(str(parent), os.O_RDONLY)
+        current = _read_target(prepared.parent_fd, prepared.write.path)
+        fingerprint = hashlib.sha256(current).hexdigest() if current is not None else ""
+    except BaseException:
+        fingerprint = ""
+    return LocalWriteOutcome(
+        operation_id=prepared.write.operation.operation_id,
+        path=prepared.write.path,
+        states=states,
+        observed_fingerprint=fingerprint,
+    )
+
+
+def _cleanup_created_directories(
+    created: list[tuple[int, str, tuple[int, int]]],
+) -> None:
+    for parent_fd, name, identity in reversed(created):
         try:
-            os.fsync(directory_descriptor)
+            observed = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            if (
+                stat.S_ISDIR(observed.st_mode)
+                and (observed.st_dev, observed.st_ino) == identity
+            ):
+                os.rmdir(name, dir_fd=parent_fd)
+        except (FileNotFoundError, OSError):
+            pass
         finally:
-            os.close(directory_descriptor)
+            os.close(parent_fd)
+
+
+def _rollback_transaction(
+    prepared: tuple[_PreparedWrite, ...],
+    applied: list[_PreparedWrite],
+    states: dict[str, list[str]],
+) -> tuple[LocalWriteOutcome, ...]:
+    applied_paths = {item.write.path for item in applied}
+    for item in reversed(applied):
+        try:
+            target_name = _output_parts(item.write.path)[-1]
+            if item.prior_body is None:
+                os.unlink(target_name, dir_fd=item.parent_fd)
+            else:
+                rollback_name = _create_temporary(
+                    item.parent_fd, target_name, item.prior_body, "rollback"
+                )
+                try:
+                    os.replace(
+                        rollback_name,
+                        target_name,
+                        src_dir_fd=item.parent_fd,
+                        dst_dir_fd=item.parent_fd,
+                    )
+                finally:
+                    _unlink_temporary(item.parent_fd, rollback_name)
+            os.fsync(item.parent_fd)
+            states[item.write.path].append("rolled_back")
+        except BaseException:
+            states[item.write.path].append("rollback_failed")
+    for item in prepared:
+        if item.write.path not in applied_paths:
+            if item.write.disposition == "unchanged":
+                states[item.write.path].append("durable")
+            else:
+                states[item.write.path].append("rolled_back")
+    return tuple(_outcome(item, tuple(states[item.write.path])) for item in prepared)
+
+
+def apply_local_write(
+    root: object,
+    writes: tuple[LocalWrite, ...],
+) -> LocalTransactionResult:
+    """Apply the complete local document set as one confined transaction."""
+    if not isinstance(writes, tuple) or not all(
+        isinstance(write, LocalWrite) for write in writes
+    ):
+        raise TypeError("writes: expected LocalWrite tuple")
+    if not writes:
+        return LocalTransactionResult(())
+    repository_root = _resolved_root(root)
+    expected_root = (
+        writes[0].repository_device,
+        writes[0].repository_inode,
+    )
+    if any(
+        write.repository_root != str(repository_root)
+        or (write.repository_device, write.repository_inode) != expected_root
+        for write in writes
+    ):
+        raise ValueError("local write does not belong to the planned repository root")
+    for write in writes:
+        _validate_local_body(write.path, write.body)
+        if not hmac.compare_digest(
+            _document_fingerprint(write.body), write.body_fingerprint
+        ):
+            raise ValueError("local write body does not match planned document fingerprint")
+
+    root_fd = _open_root(repository_root, expected_root)
+    prepared: list[_PreparedWrite] = []
+    created: list[tuple[int, str, tuple[int, int]]] = []
+    applied: list[_PreparedWrite] = []
+    states = {write.path: [] for write in writes}
+    failed_write: LocalWrite | None = None
+    try:
+        # Re-preflight the full set before creating a directory or temporary.
+        prior_bodies: dict[str, bytes | None] = {}
+        for write in writes:
+            failed_write = write
+            parent_fd = _open_existing_parent(root_fd, write.path)
+            try:
+                prior_bodies[write.path] = _read_target(parent_fd, write.path)
+            finally:
+                if parent_fd is not None:
+                    os.close(parent_fd)
+            disposition, prior = _classify_write(
+                write.operation, write.body, prior_bodies[write.path]
+            )
+            if disposition != write.disposition or prior != write.expected_prior_fingerprint:
+                raise ValueError(
+                    f"semantic overwrite guard changed before applying {write.path}"
+                )
+
+        for write in writes:
+            failed_write = write
+            parent_fd = _ensure_parent(root_fd, write.path, created)
+            parent_stat = os.fstat(parent_fd)
+            prepared.append(
+                _PreparedWrite(
+                    write=write,
+                    parent_fd=parent_fd,
+                    parent_parts=_output_parts(write.path)[:-1],
+                    parent_identity=(parent_stat.st_dev, parent_stat.st_ino),
+                    prior_body=prior_bodies[write.path],
+                )
+            )
+
+        for item in prepared:
+            failed_write = item.write
+            _revalidate_parent(root_fd, item)
+            _recheck_prepared(item)
+            if item.write.disposition != "unchanged":
+                item.temporary_name = _create_temporary(
+                    item.parent_fd,
+                    _output_parts(item.write.path)[-1],
+                    item.write.body.encode("utf-8"),
+                    "stage",
+                )
+
+        for item in prepared:
+            failed_write = item.write
+            if item.write.disposition == "unchanged":
+                continue
+            _revalidate_parent(root_fd, item)
+            _recheck_prepared(item)
+            target_name = _output_parts(item.write.path)[-1]
+            assert item.temporary_name is not None
+            os.replace(
+                item.temporary_name,
+                target_name,
+                src_dir_fd=item.parent_fd,
+                dst_dir_fd=item.parent_fd,
+            )
+            item.temporary_name = None
+            states[item.write.path].append("applied")
+            applied.append(item)
+            _revalidate_parent(root_fd, item)
+
+        fsynced: set[tuple[int, int]] = set()
+        for item in prepared:
+            failed_write = item.write
+            if item.parent_identity not in fsynced:
+                os.fsync(item.parent_fd)
+                fsynced.add(item.parent_identity)
+        outcomes: list[LocalWriteOutcome] = []
+        for item in prepared:
+            states[item.write.path].append("durable")
+            outcomes.append(_outcome(item, tuple(states[item.write.path])))
+        return LocalTransactionResult(tuple(outcomes))
+    except BaseException as error:
+        for item in prepared:
+            _unlink_temporary(item.parent_fd, item.temporary_name)
+            item.temporary_name = None
+        outcomes = _rollback_transaction(tuple(prepared), applied, states)
+        raise LocalTransactionError(
+            str(error) or type(error).__name__,
+            operation=failed_write.operation if failed_write is not None else None,
+            cause=error,
+            outcomes=outcomes,
+        ) from error
     finally:
-        if temporary.exists():
-            temporary.unlink()
+        for item in prepared:
+            _unlink_temporary(item.parent_fd, item.temporary_name)
+            os.close(item.parent_fd)
+        os.close(root_fd)
+        if applied and all(states[item.write.path][-1:] == ["durable"] for item in applied):
+            for parent_fd, _, _ in created:
+                os.close(parent_fd)
+        else:
+            _cleanup_created_directories(created)

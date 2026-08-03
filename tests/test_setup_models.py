@@ -128,6 +128,48 @@ class SetupManifestTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertNotEqual(manifest_fingerprint(changed), fingerprint)
 
+    def test_local_expected_prior_fingerprint_is_approved_manifest_authority(self):
+        value = manifest()
+        local = SetupOperation(
+            operation_id="local.workspace.replace",
+            provider="local",
+            capability="write_registry",
+            target_key=".agents/elephant/workspace.yaml",
+            desired_fingerprint="desired",
+            payload=(("document", (("schema", "elephant.workspace/v3"),)),),
+            kind=OperationKind.WRITE_LOCAL,
+            runtime_required=False,
+        )
+        without_prior = replace(value, operations=(local,))
+        with_prior = replace(
+            value,
+            operations=(replace(local, expected_prior_fingerprint="a" * 64),),
+        )
+
+        self.assertIsNone(local.expected_prior_fingerprint)
+        self.assertNotEqual(
+            manifest_fingerprint(without_prior), manifest_fingerprint(with_prior)
+        )
+
+    def test_expected_prior_fingerprint_is_valid_only_for_local_writes(self):
+        with self.assertRaisesRegex(ValueError, "expected_prior_fingerprint"):
+            replace(
+                manifest().operations[0],
+                expected_prior_fingerprint="a" * 64,
+            )
+        local = replace(
+            manifest().operations[0],
+            kind=OperationKind.WRITE_LOCAL,
+            provider="local",
+        )
+        with self.assertRaisesRegex(ValueError, "expected_prior_fingerprint"):
+            replace(local, expected_prior_fingerprint="not-a-sha256")
+
+        bypassed = manifest().operations[0]
+        object.__setattr__(bypassed, "expected_prior_fingerprint", "a" * 64)
+        with self.assertRaisesRegex(ValueError, "expected_prior_fingerprint"):
+            manifest_fingerprint(replace(manifest(), operations=(bypassed,)))
+
     def test_unsupported_values_are_rejected(self):
         with self.assertRaisesRegex(TypeError, "immutable value: unsupported object"):
             value = replace(

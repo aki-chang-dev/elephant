@@ -1,17 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import os
 from pathlib import Path
+import stat
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
-from scripts.workspace_core import DiagnosticCode, ProviderKind
+from scripts.workspace_core import (
+    CONTRACT_RUNTIME_CAPABILITIES,
+    DELIVERY_RUNTIME_CAPABILITIES,
+    KNOWLEDGE_RUNTIME_CAPABILITIES,
+    STORY_RUNTIME_CAPABILITIES,
+    DiagnosticCode,
+    ProviderKind,
+)
 from scripts.workspace_setup import (
     ApprovedManifest,
+    CapabilityLayers,
     Confidence,
     DeletionReceipt,
+    DesiredStructure,
     Evidence,
+    ExternalDiscovery,
+    ExternalObject,
     ExternalRecord,
     MutationReceipt,
     OperationKind,
@@ -23,6 +37,8 @@ from scripts.workspace_setup import (
     TopologyConflict,
     apply_setup,
     approve_manifest,
+    build_local_documents,
+    build_setup_manifest,
     manifest_fingerprint,
 )
 from scripts.workspace_setup.models import SETUP_MANIFEST_SCHEMA
@@ -33,7 +49,14 @@ from scripts.workspace_setup import (
     load_rendered_yaml,
     plan_local_writes,
 )
-from tests.test_setup_files import body_fingerprint, build_documents
+from tests.test_setup_files import (
+    body_fingerprint,
+    confirmed_topology,
+    engineering_settings,
+    external_provider_selection,
+    product_settings,
+)
+from scripts.workspace_setup.files import LocalTransactionResult, LocalWriteOutcome
 
 
 def operation(
@@ -226,10 +249,19 @@ class RecordingWriter:
         self.calls: list[tuple[str, object]] = []
         self.events = events
 
-    def __call__(self, path: str, body: object) -> None:
-        self.calls.append((path, body))
+    def __call__(self, operations: tuple[SetupOperation, ...]) -> LocalTransactionResult:
+        self.calls.append(operations)
         if self.events is not None:
-            self.events.append("local:write")
+            self.events.append("local:batch")
+        return LocalTransactionResult(tuple(
+            LocalWriteOutcome(
+                operation.operation_id,
+                operation.target_key,
+                ("durable",),
+                operation.desired_fingerprint,
+            )
+            for operation in operations
+        ))
 
 
 class FailingFindAdapter(RecordingAdapter):
@@ -247,8 +279,8 @@ class FailingWriter(RecordingWriter):
         super().__init__()
         self.failure = failure
 
-    def __call__(self, path: str, body: object) -> None:
-        super().__call__(path, body)
+    def __call__(self, operations: tuple[SetupOperation, ...]) -> LocalTransactionResult:
+        super().__call__(operations)
         raise self.failure
 
 
@@ -567,14 +599,12 @@ class SetupApplyMutationTests(unittest.TestCase):
 
         result = run_apply(approved_create_manifest(), {"linear": adapter}, writer)
 
-        document = (("schema", "elephant.workspace/v3"),)
-        self.assertEqual(
-            writer.calls,
-            [(".agents/elephant/workspace.yaml", document)],
-        )
-        self.assertEqual(events[-1], "local:write")
-        self.assertLess(events.index("adapter:read"), events.index("local:write"))
+        local_operation = approved_create_manifest().manifest.operations[-1]
+        self.assertEqual(writer.calls, [(local_operation,)])
+        self.assertEqual(events[-1], "local:batch")
+        self.assertLess(events.index("adapter:read"), events.index("local:batch"))
         self.assertEqual(result.local_writes[0].target_key, ".agents/elephant/workspace.yaml")
+        self.assertEqual(result.local_writes[0].disposition, "durable")
 
 
 def approved_round_trip_manifest() -> ApprovedManifest:
@@ -819,41 +849,155 @@ class AtomicLocalWriter:
         self.root = root
         self.events = events
 
-    def __call__(self, path: str, body: object) -> None:
-        writes = plan_local_writes(self.root, {path: body})
-        self.assert_single_write(writes)
-        apply_local_write(self.root, writes[0])
-        self.events.append(f"local:{path}")
-
-    @staticmethod
-    def assert_single_write(writes: object) -> None:
-        if not isinstance(writes, tuple) or len(writes) != 1:
-            raise AssertionError("expected one planned local write")
+    def __call__(
+        self,
+        operations: tuple[SetupOperation, ...],
+    ) -> LocalTransactionResult:
+        self.events.append("local:batch")
+        writes = plan_local_writes(self.root, operations)
+        return apply_local_write(self.root, writes)
 
 
-def approved_integrated_manifest():
-    documents = build_documents()
-    local_operations = tuple(
-        operation(
-            OperationKind.WRITE_LOCAL,
-            provider="local",
-            target_key=path,
-            desired_fingerprint=body_fingerprint(body),
-            payload=(("document", body),),
-        )
-        for path, body in documents.items()
+def complete_layers(capabilities: frozenset[str]) -> CapabilityLayers:
+    return CapabilityLayers(capabilities, capabilities, capabilities, capabilities)
+
+
+def freeze_document(value: object) -> object:
+    if isinstance(value, dict):
+        return tuple((key, freeze_document(item)) for key, item in sorted(value.items()))
+    if isinstance(value, list):
+        return tuple(freeze_document(item) for item in value)
+    return value
+
+
+def binding_record(provider: str, key: str, external_id: str) -> ExternalRecord:
+    return ExternalRecord(key, external_id, f"verified-{key}")
+
+
+def integrated_adapters(events: list[str]) -> dict[str, RecordingAdapter]:
+    linear_records = (
+        binding_record("linear", "binding.linear.workspace", "linear-workspace"),
+        binding_record("linear", "binding.linear.team", "linear-team"),
+        ExternalRecord("label.product.sample", "linear-label-sample", "label-v1"),
     )
-    return approved(manifest(
-        operation(OperationKind.CREATE),
-        operation(
-            OperationKind.ROUND_TRIP,
-            provider="notion",
-            target_key="setup.round_trip.notion",
-            desired_fingerprint="round-trip-v1",
-            payload=(("disposable", True), ("read_back_required", True)),
+    notion_records = (
+        binding_record("notion", "binding.notion.workspace", "notion-workspace"),
+        binding_record("notion", "binding.notion.products", "notion-products"),
+        binding_record("notion", "binding.notion.knowledge", "notion-knowledge"),
+        binding_record("notion", "binding.notion.contracts", "notion-contracts"),
+        binding_record("notion", "binding.notion.product.sample", "notion-product-sample"),
+    )
+    return {
+        "linear": RecordingAdapter("linear", records=linear_records, events=events),
+        "notion": RecordingAdapter("notion", records=notion_records, events=events),
+    }
+
+
+def verified_bindings_from_adapters(
+    adapters: dict[str, RecordingAdapter],
+) -> dict[str, object]:
+    def verified_id(provider: str, stable_key: str) -> str:
+        adapter = adapters[provider]
+        records = adapter.find(stable_key)
+        if len(records) != 1:
+            raise AssertionError(f"expected one adapter binding record for {stable_key}")
+        record = adapter.read(records[0].external_id)
+        if record != records[0]:
+            raise AssertionError(f"binding read-back mismatch for {stable_key}")
+        return record.external_id
+
+    return {
+        "linear": {
+            "verified": True,
+            "values": {
+                "workspace_id": verified_id("linear", "binding.linear.workspace"),
+                "team_id": verified_id("linear", "binding.linear.team"),
+            },
+            "story_refs": {
+                "sample": verified_id("linear", "label.product.sample")
+            },
+        },
+        "notion": {
+            "verified": True,
+            "values": {
+                "workspace_id": verified_id("notion", "binding.notion.workspace"),
+                "products_database_id": verified_id("notion", "binding.notion.products"),
+                "knowledge_database_id": verified_id("notion", "binding.notion.knowledge"),
+                "contracts_database_id": verified_id("notion", "binding.notion.contracts"),
+            },
+            "knowledge_refs": {
+                "sample": verified_id("notion", "binding.notion.product.sample")
+            },
+        },
+    }
+
+
+def approved_integrated_manifest(
+    root: Path,
+    adapters: dict[str, RecordingAdapter],
+    *,
+    repository_id: str,
+):
+    topology = replace(confirmed_topology(), repository_id=repository_id)
+    profile_settings = product_settings()
+    if repository_id == "repo-updated":
+        profile_settings["sample"]["language"] = {
+            "dialogue": "zh-CN",
+            "docs": "fr",
+        }
+    documents = build_local_documents(
+        topology,
+        external_provider_selection(),
+        verified_bindings_from_adapters(adapters),
+        profile_settings,
+        engineering_settings(),
+    )
+    normalized = {path: load_rendered_yaml(body) for path, body in documents.items()}
+    expected_priors = tuple(
+        (path, body_fingerprint(target.read_text(encoding="utf-8")))
+        for path in sorted(documents)
+        if (target := root / path).is_file()
+        and target.read_text(encoding="utf-8") != documents[path]
+    )
+    setup_manifest = build_setup_manifest(
+        topology,
+        tuple(sorted(external_provider_selection().items())),
+        (
+            DesiredStructure(
+                "linear", "ensure_label", "label.product.sample", "label-v1", True, False
+            ),
         ),
-        *local_operations,
-    ))
+        ExternalDiscovery(
+            objects=(
+                ExternalObject(
+                    "linear",
+                    "setup_structure",
+                    "label.product.sample",
+                    "Sample label",
+                    "linear-label-sample",
+                    "label-v1",
+                ),
+            )
+        ),
+        (
+            ("story_store", complete_layers(STORY_RUNTIME_CAPABILITIES | {"ensure_label"})),
+            ("product_knowledge_store", complete_layers(KNOWLEDGE_RUNTIME_CAPABILITIES)),
+            ("product_contract_store", complete_layers(CONTRACT_RUNTIME_CAPABILITIES)),
+            ("delivery_workspace", complete_layers(DELIVERY_RUNTIME_CAPABILITIES)),
+        ),
+        freeze_document(normalized[WORKSPACE_PATH]),
+        tuple(
+            (
+                Path(path).stem,
+                freeze_document(document),
+            )
+            for path, document in sorted(normalized.items())
+            if path != WORKSPACE_PATH
+        ),
+        expected_prior_fingerprints=expected_priors,
+        rendered_local_documents=tuple(sorted(documents.items())),
+    )
+    return approved(setup_manifest), documents
 
 
 class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
@@ -861,46 +1005,226 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             events: list[str] = []
-            adapters = {
-                "linear": RecordingAdapter("linear", events=events),
-                "notion": RecordingAdapter("notion", events=events),
-            }
+            adapters = integrated_adapters(events)
+            original, _ = approved_integrated_manifest(
+                root, adapters, repository_id="repo-sample"
+            )
+            AtomicLocalWriter(root, [])(tuple(
+                operation
+                for operation in original.manifest.operations
+                if operation.kind is OperationKind.WRITE_LOCAL
+            ))
+            value, documents = approved_integrated_manifest(
+                root, adapters, repository_id="repo-updated"
+            )
+            local_operations = tuple(
+                operation
+                for operation in value.manifest.operations
+                if operation.kind is OperationKind.WRITE_LOCAL
+            )
+            self.assertEqual(local_operations[-1].target_key, WORKSPACE_PATH)
+            self.assertEqual(
+                local_operations[-1].expected_prior_fingerprint,
+                body_fingerprint((root / WORKSPACE_PATH).read_text(encoding="utf-8")),
+            )
+            events.clear()
 
             result = run_apply(
-                approved_integrated_manifest(),
+                value,
                 adapters,
                 AtomicLocalWriter(root, events),
                 execution_id="integrated-success",
             )
 
             self.assertTrue(result.ready)
-            first_local = next(index for index, event in enumerate(events) if event.startswith("local:"))
-            self.assertTrue(all(event.startswith("local:") for event in events[first_local:]))
+            self.assertEqual(events[-1], "local:batch")
             workspace = load_rendered_yaml((root / WORKSPACE_PATH).read_text(encoding="utf-8"))
             self.assertEqual(validate_workspace(workspace), ())
+            self.assertEqual(workspace["repository"]["id"], "repo-updated")
             for path in sorted((root / ".agents/elephant/profiles").glob("*.yaml")):
                 self.assertEqual(
                     validate_profile(load_rendered_yaml(path.read_text(encoding="utf-8"))),
                     (),
                 )
+            self.assertEqual(
+                {path: (root / path).read_text(encoding="utf-8") for path in documents},
+                documents,
+            )
 
     def test_external_read_back_failure_leaves_no_local_setup_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             writer = AtomicLocalWriter(root, [])
+            adapters = integrated_adapters([])
+            value, _ = approved_integrated_manifest(
+                root, adapters, repository_id="repo-sample"
+            )
+            adapters["linear"].corrupt_read_back = True
 
             with self.assertRaisesRegex(SetupApplyError, "read-back"):
                 run_apply(
-                    approved_integrated_manifest(),
-                    {
-                        "linear": RecordingAdapter("linear", corrupt_read_back=True),
-                        "notion": RecordingAdapter("notion"),
-                    },
+                    value,
+                    adapters,
                     writer,
                     execution_id="integrated-read-failure",
                 )
 
             self.assertFalse((root / ".agents/elephant").exists())
+
+    def test_local_batch_failure_restores_prior_config_and_reports_rollback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapters = integrated_adapters([])
+            original, original_documents = approved_integrated_manifest(
+                root, adapters, repository_id="repo-sample"
+            )
+            AtomicLocalWriter(root, [])(tuple(
+                operation
+                for operation in original.manifest.operations
+                if operation.kind is OperationKind.WRITE_LOCAL
+            ))
+            value, _ = approved_integrated_manifest(
+                root, adapters, repository_id="repo-updated"
+            )
+            original_replace = os.replace
+            replacements = 0
+
+            def fail_second_replace(source, destination, **kwargs):
+                nonlocal replacements
+                replacements += 1
+                if replacements == 2:
+                    raise OSError("second local commit failed")
+                return original_replace(source, destination, **kwargs)
+
+            with mock.patch(
+                "scripts.workspace_setup.files.os.replace",
+                side_effect=fail_second_replace,
+            ):
+                with self.assertRaises(SetupApplyError) as raised:
+                    run_apply(
+                        value,
+                        adapters,
+                        AtomicLocalWriter(root, []),
+                        execution_id="integrated-local-failure",
+                    )
+
+            local_evidence = tuple(
+                evidence
+                for evidence in raised.exception.partial_evidence
+                if evidence.operation_id.startswith("local.")
+            )
+            self.assertTrue(local_evidence)
+            self.assertTrue(all(item.disposition in {"durable", "rolled_back"} for item in local_evidence))
+            self.assertEqual(
+                {
+                    path: (root / path).read_text(encoding="utf-8")
+                    for path in original_documents
+                },
+                original_documents,
+            )
+
+    def test_post_replace_fsync_failure_partial_evidence_matches_rolled_back_disk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapters = integrated_adapters([])
+            original, original_documents = approved_integrated_manifest(
+                root, adapters, repository_id="repo-sample"
+            )
+            AtomicLocalWriter(root, [])(tuple(
+                operation
+                for operation in original.manifest.operations
+                if operation.kind is OperationKind.WRITE_LOCAL
+            ))
+            value, _ = approved_integrated_manifest(
+                root, adapters, repository_id="repo-updated"
+            )
+            original_fsync = os.fsync
+            failed = False
+
+            def fail_first_directory_fsync(descriptor):
+                nonlocal failed
+                if stat.S_ISDIR(os.fstat(descriptor).st_mode) and not failed:
+                    failed = True
+                    raise OSError("post-replace fsync failed")
+                return original_fsync(descriptor)
+
+            with mock.patch(
+                "scripts.workspace_setup.files.os.fsync",
+                side_effect=fail_first_directory_fsync,
+            ):
+                with self.assertRaises(SetupApplyError) as raised:
+                    run_apply(
+                        value,
+                        adapters,
+                        AtomicLocalWriter(root, []),
+                        execution_id="integrated-fsync-failure",
+                    )
+
+            local_evidence = tuple(
+                evidence
+                for evidence in raised.exception.partial_evidence
+                if evidence.operation_id.startswith("local.")
+            )
+            self.assertTrue(failed)
+            self.assertEqual(
+                {item.disposition for item in local_evidence},
+                {"durable", "rolled_back"},
+            )
+            self.assertEqual(
+                {path: (root / path).read_text(encoding="utf-8") for path in original_documents},
+                original_documents,
+            )
+
+    def test_rollback_failure_evidence_reports_the_changed_file_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapters = integrated_adapters([])
+            original, _ = approved_integrated_manifest(
+                root, adapters, repository_id="repo-sample"
+            )
+            AtomicLocalWriter(root, [])(tuple(
+                operation
+                for operation in original.manifest.operations
+                if operation.kind is OperationKind.WRITE_LOCAL
+            ))
+            value, changed_documents = approved_integrated_manifest(
+                root, adapters, repository_id="repo-updated"
+            )
+            original_replace = os.replace
+            replacements = 0
+
+            def fail_second_commit_and_rollback(source, destination, **kwargs):
+                nonlocal replacements
+                replacements += 1
+                if replacements in {2, 3}:
+                    raise OSError("commit or rollback failed")
+                return original_replace(source, destination, **kwargs)
+
+            with mock.patch(
+                "scripts.workspace_setup.files.os.replace",
+                side_effect=fail_second_commit_and_rollback,
+            ):
+                with self.assertRaises(SetupApplyError) as raised:
+                    run_apply(
+                        value,
+                        adapters,
+                        AtomicLocalWriter(root, []),
+                        execution_id="integrated-rollback-failure",
+                    )
+
+            failed_evidence = next(
+                evidence
+                for evidence in raised.exception.partial_evidence
+                if evidence.disposition == "rollback_failed"
+            )
+            self.assertEqual(
+                failed_evidence.observed_fingerprint,
+                body_fingerprint(changed_documents[failed_evidence.target_key]),
+            )
+            self.assertEqual(
+                (root / failed_evidence.target_key).read_text(encoding="utf-8"),
+                changed_documents[failed_evidence.target_key],
+            )
 
 
 if __name__ == "__main__":
