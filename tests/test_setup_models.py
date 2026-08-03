@@ -1,4 +1,4 @@
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError, dataclass, replace
 from enum import Enum
 import unittest
 
@@ -24,6 +24,11 @@ from scripts.workspace_setup import (
     manifest_fingerprint,
 )
 from scripts.workspace_setup.models import SETUP_MANIFEST_SCHEMA
+
+
+@dataclass
+class MutableValue:
+    value: str
 
 
 def manifest() -> SetupManifest:
@@ -124,14 +129,67 @@ class SetupManifestTests(unittest.TestCase):
                 self.assertNotEqual(manifest_fingerprint(changed), fingerprint)
 
     def test_unsupported_values_are_rejected(self):
-        value = replace(
-            manifest(),
-            operations=(
-                replace(manifest().operations[0], payload=(("invalid", object()),)),
-            ),
-        )
-        with self.assertRaisesRegex(TypeError, "unsupported canonical value"):
+        with self.assertRaisesRegex(TypeError, "immutable value: unsupported object"):
+            value = replace(
+                manifest(),
+                operations=(
+                    replace(manifest().operations[0], payload=(("invalid", object()),)),
+                ),
+            )
             manifest_fingerprint(value)
+
+    def test_rejects_unknown_schema_and_non_enum_vocabulary_before_fingerprinting(self):
+        first = manifest()
+        cases = {
+            "schema": lambda: replace(first, schema="elephant.setup-manifest/v2"),
+            "operation kind": lambda: replace(
+                first, operations=(replace(first.operations[0], kind="delete"),)
+            ),
+            "diagnostic provider": lambda: replace(
+                first, diagnostics=(replace(first.diagnostics[0], logical_provider="story"),)
+            ),
+            "diagnostic code": lambda: replace(
+                first, diagnostics=(replace(first.diagnostics[0], code="permission_missing"),)
+            ),
+            "question confidence": lambda: replace(
+                first, questions=(replace(first.questions[0], confidence="medium"),)
+            ),
+        }
+        for name, build_changed in cases.items():
+            with self.subTest(name=name):
+                with self.assertRaisesRegex((TypeError, ValueError), "schema|expected"):
+                    manifest_fingerprint(build_changed())
+
+    def test_mapping_fields_reject_arrays_and_non_string_keys(self):
+        first = manifest()
+        cases = {
+            "provider selection array": lambda: replace(first, provider_selection=("story_store",)),
+            "registry non-string key": lambda: replace(first, registry=((1, "value"),)),
+            "profile array": lambda: replace(first, profiles=("sample",)),
+            "operation payload non-string key": lambda: replace(
+                first, operations=(replace(first.operations[0], payload=((1, "Sample"),)),)
+            ),
+        }
+        for name, build_changed in cases.items():
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(TypeError, "tuple key/value pairs"):
+                    manifest_fingerprint(build_changed())
+
+    def test_recursively_rejects_mutable_nested_values_before_approval(self):
+        first = manifest()
+        cases = {
+            "mutable dataclass": lambda: replace(
+                first, registry=(("mutable", MutableValue("before")),)
+            ),
+            "nested list": lambda: replace(
+                first, profiles=(("sample", (("items", ["mutable"]),)),)),
+        }
+        for name, build_changed in cases.items():
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(TypeError, "immutable"):
+                    changed = build_changed()
+                    supplied = manifest_fingerprint(changed)
+                    approve_manifest(changed, supplied)
 
 
 class SetupApprovalTests(unittest.TestCase):

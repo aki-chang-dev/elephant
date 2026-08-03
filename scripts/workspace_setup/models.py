@@ -5,6 +5,7 @@ from enum import Enum
 import hashlib
 import hmac
 import json
+import math
 from typing import Any
 
 from scripts.workspace_core import DiagnosticCode, ProviderKind
@@ -34,11 +35,52 @@ def _require_tuple(value: object, field_name: str) -> None:
         raise TypeError(f"{field_name}: expected tuple")
 
 
+def _require_tuple_key_value_pairs(value: object, field_name: str) -> None:
+    _require_tuple(value, field_name)
+    keys: set[str] = set()
+    for item in value:
+        if not isinstance(item, tuple) or len(item) != 2 or not isinstance(item[0], str):
+            raise TypeError(f"{field_name}: expected tuple key/value pairs")
+        if item[0] in keys:
+            raise TypeError(f"{field_name}: duplicate mapping key {item[0]}")
+        keys.add(item[0])
+
+
+def _require_enum(value: object, enum_type: type[Enum], field_name: str) -> None:
+    if not isinstance(value, enum_type):
+        raise TypeError(f"{field_name}: expected {enum_type.__name__}")
+
+
+def _validate_immutable_value(value: object) -> None:
+    if isinstance(value, Enum):
+        _validate_immutable_value(value.value)
+        return
+    if is_dataclass(value) and not isinstance(value, type):
+        parameters = getattr(type(value), "__dataclass_params__", None)
+        if parameters is None or not parameters.frozen:
+            raise TypeError("immutable value: expected frozen dataclass")
+        for field in fields(value):
+            _validate_immutable_value(getattr(value, field.name))
+        return
+    if isinstance(value, tuple):
+        for item in value:
+            _validate_immutable_value(item)
+        return
+    if value is None or isinstance(value, (str, int, bool)):
+        return
+    if isinstance(value, float) and math.isfinite(value):
+        return
+    raise TypeError(f"immutable value: unsupported {type(value).__name__}")
+
+
 @dataclass(frozen=True)
 class Evidence:
     source: str
     ref: str
     value: str
+
+    def __post_init__(self) -> None:
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -50,6 +92,8 @@ class Candidate:
 
     def __post_init__(self) -> None:
         _require_tuple(self.evidence, "evidence")
+        _require_enum(self.confidence, Confidence, "confidence")
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -62,6 +106,7 @@ class TopologyConflict:
     def __post_init__(self) -> None:
         _require_tuple(self.alternatives, "alternatives")
         _require_tuple(self.evidence, "evidence")
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -73,6 +118,8 @@ class OwnerQuestion:
 
     def __post_init__(self) -> None:
         _require_tuple(self.evidence, "evidence")
+        _require_enum(self.confidence, Confidence, "confidence")
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -83,6 +130,7 @@ class ConfirmedProduct:
 
     def __post_init__(self) -> None:
         _require_tuple(self.domain_keys, "domain_keys")
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -99,6 +147,7 @@ class ConfirmedDomain:
         _require_tuple(self.scopes, "scopes")
         _require_tuple(self.instruction_paths, "instruction_paths")
         _require_tuple(self.verification, "verification")
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -110,6 +159,7 @@ class ConfirmedTopology:
     def __post_init__(self) -> None:
         _require_tuple(self.products, "products")
         _require_tuple(self.domains, "domains")
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -119,6 +169,11 @@ class SetupDiagnostic:
     capability: str
     code: DiagnosticCode
     blocking: bool
+
+    def __post_init__(self) -> None:
+        _require_enum(self.logical_provider, ProviderKind, "logical_provider")
+        _require_enum(self.code, DiagnosticCode, "code")
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -133,10 +188,9 @@ class SetupOperation:
     runtime_required: bool
 
     def __post_init__(self) -> None:
-        _require_tuple(self.payload, "payload")
-        for item in self.payload:
-            if not isinstance(item, tuple) or len(item) != 2:
-                raise TypeError("payload: expected tuple key/value pairs")
+        _require_tuple_key_value_pairs(self.payload, "payload")
+        _require_enum(self.kind, OperationKind, "kind")
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -154,24 +208,29 @@ class SetupManifest:
     profiles: tuple[tuple[str, object], ...]
 
     def __post_init__(self) -> None:
+        if self.schema != SETUP_MANIFEST_SCHEMA:
+            raise ValueError(f"schema: expected {SETUP_MANIFEST_SCHEMA}")
         for field_name in (
-            "provider_selection",
             "products",
             "domains",
             "operations",
             "diagnostics",
             "conflicts",
             "questions",
-            "registry",
-            "profiles",
         ):
             _require_tuple(getattr(self, field_name), field_name)
+        for field_name in ("provider_selection", "registry", "profiles"):
+            _require_tuple_key_value_pairs(getattr(self, field_name), field_name)
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
 class ApprovedManifest:
     manifest: SetupManifest
     fingerprint: str
+
+    def __post_init__(self) -> None:
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -181,6 +240,9 @@ class ApplyEvidence:
     external_id: str
     observed_fingerprint: str
     disposition: str
+
+    def __post_init__(self) -> None:
+        _validate_immutable_value(self)
 
 
 @dataclass(frozen=True)
@@ -194,12 +256,43 @@ class ApplyResult:
         _require_tuple(self.evidence, "evidence")
         _require_tuple(self.manual_handoffs, "manual_handoffs")
         _require_tuple(self.local_writes, "local_writes")
+        _validate_immutable_value(self)
+
+
+def _validate_manifest(manifest: SetupManifest) -> None:
+    if manifest.schema != SETUP_MANIFEST_SCHEMA:
+        raise ValueError(f"schema: expected {SETUP_MANIFEST_SCHEMA}")
+    _require_tuple_key_value_pairs(manifest.provider_selection, "provider_selection")
+    _require_tuple_key_value_pairs(manifest.registry, "registry")
+    _require_tuple_key_value_pairs(manifest.profiles, "profiles")
+    for field_name, item_type in (
+        ("products", ConfirmedProduct),
+        ("domains", ConfirmedDomain),
+        ("operations", SetupOperation),
+        ("diagnostics", SetupDiagnostic),
+        ("conflicts", TopologyConflict),
+        ("questions", OwnerQuestion),
+    ):
+        values = getattr(manifest, field_name)
+        _require_tuple(values, field_name)
+        if not all(isinstance(value, item_type) for value in values):
+            raise TypeError(f"{field_name}: expected {item_type.__name__} values")
+    for operation in manifest.operations:
+        _require_tuple_key_value_pairs(operation.payload, "payload")
+        _require_enum(operation.kind, OperationKind, "kind")
+    for diagnostic in manifest.diagnostics:
+        _require_enum(diagnostic.logical_provider, ProviderKind, "logical_provider")
+        _require_enum(diagnostic.code, DiagnosticCode, "code")
+    for question in manifest.questions:
+        _require_enum(question.confidence, Confidence, "confidence")
+    _validate_immutable_value(manifest)
 
 
 def _canonicalize(value: object) -> Any:
     if isinstance(value, Enum):
         return _canonicalize(value.value)
     if is_dataclass(value) and not isinstance(value, type):
+        _validate_immutable_value(value)
         return _canonicalize(
             tuple((field.name, getattr(value, field.name)) for field in fields(value))
         )
@@ -223,6 +316,7 @@ def _canonicalize(value: object) -> Any:
 def manifest_fingerprint(manifest: SetupManifest) -> str:
     if not isinstance(manifest, SetupManifest):
         raise TypeError("manifest: expected SetupManifest")
+    _validate_manifest(manifest)
     canonical_json = json.dumps(
         _canonicalize(manifest),
         sort_keys=True,
