@@ -390,37 +390,86 @@ def _validate_v3_core_oracle(root: Path, errors: list[str]) -> None:
         errors.append("invalid v3 workspace core oracle: repair mapping differs")
 
     provider_capabilities = (
-        ("story", "STORY_RUNTIME_CAPABILITIES"),
-        ("product_knowledge", "KNOWLEDGE_RUNTIME_CAPABILITIES"),
-        ("product_contract", "CONTRACT_RUNTIME_CAPABILITIES"),
-        ("delivery_workspace", "DELIVERY_RUNTIME_CAPABILITIES"),
+        (
+            "story",
+            "STORY_RUNTIME_CAPABILITIES",
+            "attach_delivery_evidence",
+            "bind_product_contract",
+        ),
+        (
+            "product_knowledge",
+            "KNOWLEDGE_RUNTIME_CAPABILITIES",
+            "create_knowledge",
+            "link_knowledge_relation",
+        ),
+        (
+            "product_contract",
+            "CONTRACT_RUNTIME_CAPABILITIES",
+            "approve_contract",
+            "create_contract_draft",
+        ),
+        (
+            "delivery_workspace",
+            "DELIVERY_RUNTIME_CAPABILITIES",
+            "bind_delivery_branch",
+            "persist_plan",
+        ),
     )
-    diagnostic_layers = (
-        ("platform_supported", "platform_unsupported"),
-        ("exposed", "connector_capability_missing"),
-        ("permitted", "permission_missing"),
-        ("configured", "configuration_missing"),
+    cumulative_failures = (
+        (
+            ("platform_supported", "exposed", "permitted", "configured"),
+            "platform_unsupported",
+        ),
+        (
+            ("exposed", "permitted", "configured"),
+            "connector_capability_missing",
+        ),
+        (("permitted", "configured"), "permission_missing"),
+        (("configured",), "configuration_missing"),
     )
     try:
         precedence_matches = True
-        for provider_value, capabilities_name in provider_capabilities:
+        for (
+            provider_value,
+            capabilities_name,
+            platform_capability,
+            connector_capability,
+        ) in provider_capabilities:
             required = getattr(core, capabilities_name)
-            capability = min(required)
-            for missing_layer, expected_code in diagnostic_layers:
+            for missing_layers, expected_code in cumulative_failures:
                 available = {
                     "platform_supported": required,
                     "exposed": required,
                     "permitted": required,
                     "configured": required,
                 }
-                available[missing_layer] = required - {capability}
+                for missing_layer in missing_layers:
+                    available[missing_layer] = required - {platform_capability}
                 result = core.preflight_provider(provider_value, **available)
                 observed = tuple(
                     (diagnostic.capability, diagnostic.code.value)
                     for diagnostic in result.diagnostics
                 )
-                if result.ready or observed != ((capability, expected_code),):
+                if result.ready or observed != ((platform_capability, expected_code),):
                     precedence_matches = False
+
+            both = {platform_capability, connector_capability}
+            result = core.preflight_provider(
+                provider_value,
+                platform_supported=required - {platform_capability},
+                exposed=required - both,
+                permitted=required - both,
+                configured=required - both,
+            )
+            observed = tuple(
+                (diagnostic.capability, diagnostic.code.value)
+                for diagnostic in result.diagnostics
+            )
+            if result.ready or observed != (
+                (platform_capability, "platform_unsupported"),
+                (connector_capability, "connector_capability_missing"),
+            ):
+                precedence_matches = False
     except (AttributeError, KeyError, TypeError, ValueError):
         precedence_matches = False
     if not precedence_matches:

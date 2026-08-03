@@ -11,6 +11,34 @@ from scripts.workspace_core import (
 )
 
 
+PROVIDER_FAILURE_CASES = (
+    (
+        ProviderKind.STORY,
+        STORY_RUNTIME_CAPABILITIES,
+        "attach_delivery_evidence",
+        "bind_product_contract",
+    ),
+    (
+        ProviderKind.PRODUCT_KNOWLEDGE,
+        KNOWLEDGE_RUNTIME_CAPABILITIES,
+        "create_knowledge",
+        "link_knowledge_relation",
+    ),
+    (
+        ProviderKind.PRODUCT_CONTRACT,
+        CONTRACT_RUNTIME_CAPABILITIES,
+        "approve_contract",
+        "create_contract_draft",
+    ),
+    (
+        ProviderKind.DELIVERY_WORKSPACE,
+        DELIVERY_RUNTIME_CAPABILITIES,
+        "bind_delivery_branch",
+        "persist_plan",
+    ),
+)
+
+
 class ProviderContractTests(unittest.TestCase):
     def test_provider_kinds_and_capability_sets_match_the_exact_contract(self):
         cases = (
@@ -92,29 +120,29 @@ class ProviderContractTests(unittest.TestCase):
         )
 
     def test_diagnostic_precedence_is_exact_for_every_logical_provider(self):
-        providers = (
-            (ProviderKind.STORY, STORY_RUNTIME_CAPABILITIES),
-            (ProviderKind.PRODUCT_KNOWLEDGE, KNOWLEDGE_RUNTIME_CAPABILITIES),
-            (ProviderKind.PRODUCT_CONTRACT, CONTRACT_RUNTIME_CAPABILITIES),
-            (ProviderKind.DELIVERY_WORKSPACE, DELIVERY_RUNTIME_CAPABILITIES),
+        cumulative_failures = (
+            (
+                ("platform_supported", "exposed", "permitted", "configured"),
+                "platform_unsupported",
+            ),
+            (
+                ("exposed", "permitted", "configured"),
+                "connector_capability_missing",
+            ),
+            (("permitted", "configured"), "permission_missing"),
+            (("configured",), "configuration_missing"),
         )
-        layers = (
-            ("platform_supported", "platform_unsupported"),
-            ("exposed", "connector_capability_missing"),
-            ("permitted", "permission_missing"),
-            ("configured", "configuration_missing"),
-        )
-        for provider, required in providers:
-            capability = min(required)
-            for layer, expected_code in layers:
-                with self.subTest(provider=provider, layer=layer):
+        for provider, required, capability, _ in PROVIDER_FAILURE_CASES:
+            for missing_layers, expected_code in cumulative_failures:
+                with self.subTest(provider=provider, missing_layers=missing_layers):
                     arguments = {
                         "platform_supported": required,
                         "exposed": required,
                         "permitted": required,
                         "configured": required,
                     }
-                    arguments[layer] = required - {capability}
+                    for layer in missing_layers:
+                        arguments[layer] = required - {capability}
                     result = preflight_provider(provider, **arguments)
                     self.assertFalse(result.ready)
                     self.assertEqual(
@@ -124,6 +152,34 @@ class ProviderContractTests(unittest.TestCase):
                         ),
                         ((capability, expected_code),),
                     )
+
+    def test_overlapping_failures_emit_one_sorted_diagnostic_per_capability(self):
+        for (
+            provider,
+            required,
+            platform_capability,
+            connector_capability,
+        ) in PROVIDER_FAILURE_CASES:
+            with self.subTest(provider=provider):
+                both = {platform_capability, connector_capability}
+                result = preflight_provider(
+                    provider,
+                    platform_supported=required - {platform_capability},
+                    exposed=required - both,
+                    permitted=required - both,
+                    configured=required - both,
+                )
+                self.assertFalse(result.ready)
+                self.assertEqual(
+                    tuple(
+                        (diagnostic.capability, diagnostic.code.value)
+                        for diagnostic in result.diagnostics
+                    ),
+                    (
+                        (platform_capability, "platform_unsupported"),
+                        (connector_capability, "connector_capability_missing"),
+                    ),
+                )
 
     def test_complete_contract_provider_is_ready(self):
         result = preflight_provider(

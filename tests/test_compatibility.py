@@ -829,6 +829,31 @@ class WorkspaceCorePackagingTests(unittest.TestCase):
                 errors,
             )
 
+    def test_changed_diagnostic_precedence_is_reported(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT / "scripts/workspace_core", root / "scripts/workspace_core")
+            providers = root / "scripts/workspace_core/providers.py"
+            source = providers.read_text(encoding="utf-8")
+            mutated = source.replace(
+                "            (\"platform_supported\", platform_supported, "
+                "DiagnosticCode.PLATFORM_UNSUPPORTED),\n"
+                "            (\"exposed\", exposed, "
+                "DiagnosticCode.CONNECTOR_CAPABILITY_MISSING),\n",
+                "            (\"exposed\", exposed, "
+                "DiagnosticCode.CONNECTOR_CAPABILITY_MISSING),\n"
+                "            (\"platform_supported\", platform_supported, "
+                "DiagnosticCode.PLATFORM_UNSUPPORTED),\n",
+            )
+            self.assertNotEqual(mutated, source, "precedence mutation fixture did not apply")
+            providers.write_text(mutated, encoding="utf-8")
+            errors = validator.validate_repository(root)
+            self.assertIn(
+                "invalid v3 workspace core oracle: diagnostic precedence differs",
+                errors,
+            )
+
     def test_missing_workspace_core_asset_is_reported(self):
         validator = load_validator()
         with tempfile.TemporaryDirectory() as directory:
