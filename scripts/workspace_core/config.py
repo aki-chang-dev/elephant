@@ -4,6 +4,8 @@ from collections.abc import Mapping
 
 
 WORKSPACE_SCHEMA = "elephant.workspace/v3"
+PROFILE_SCHEMA = "elephant.profile/v3"
+PROFILE_KINDS = {"product", "engineering"}
 PROVIDER_CHOICES = {
     "story_store": {"linear", "git"},
     "product_knowledge_store": {"notion", "git"},
@@ -86,3 +88,49 @@ def validate_workspace(document: Mapping[str, object]) -> tuple[str, ...]:
     if not _is_repo_relative_posix_path(document.get("engineering_profile")):
         problems.append("engineering_profile: expected repository-relative POSIX path")
     return tuple(problems)
+
+
+def validate_profile(document: Mapping[str, object]) -> tuple[str, ...]:
+    problems: list[str] = []
+    if document.get("schema") != PROFILE_SCHEMA:
+        problems.append(f"schema: expected {PROFILE_SCHEMA}")
+    kind = document.get("kind")
+    if kind not in PROFILE_KINDS:
+        problems.append(f"kind: expected one of {sorted(PROFILE_KINDS)}")
+    if kind == "product" and not isinstance(document.get("product"), str):
+        problems.append("product: product profile requires a product key")
+    if kind == "engineering" and document.get("behavior_preservation_required") is not True:
+        problems.append("behavior_preservation_required: engineering profile requires true")
+    for section in (
+        "context",
+        "design_gate",
+        "research",
+        "execution",
+        "verification",
+        "finish",
+        "language",
+    ):
+        if not isinstance(document.get(section), Mapping):
+            problems.append(f"{section}: required mapping")
+    return tuple(problems)
+
+
+def resolve_profile(
+    workspace: Mapping[str, object], *, story_kind: str, product_key: str | None
+) -> str:
+    if validate_workspace(workspace):
+        raise WorkspaceRouteError("workspace is invalid")
+    if story_kind == "engineering-only":
+        profile = workspace.get("engineering_profile")
+        if not isinstance(profile, str):
+            raise WorkspaceRouteError("engineering_profile is required")
+        return profile
+    if story_kind != "product-facing":
+        raise WorkspaceRouteError("story_kind must be product-facing or engineering-only")
+    products = _mapping(workspace.get("products"))
+    if product_key is None or product_key not in products:
+        raise WorkspaceRouteError("product-facing story requires one known product_key")
+    profile = _mapping(products[product_key]).get("profile")
+    if not isinstance(profile, str):
+        raise WorkspaceRouteError(f"product {product_key} has no profile")
+    return profile

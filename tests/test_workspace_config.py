@@ -1,7 +1,7 @@
 from copy import deepcopy
 import unittest
 
-from scripts.workspace_core import validate_workspace
+from scripts.workspace_core import WorkspaceRouteError, resolve_profile, validate_profile, validate_workspace
 
 
 VALID_WORKSPACE = {
@@ -127,3 +127,53 @@ class WorkspaceValidationTests(unittest.TestCase):
         }
         value["bindings"] = {}
         self.assertEqual(validate_workspace(value), ())
+
+
+PRODUCT_PROFILE = {
+    "schema": "elephant.profile/v3",
+    "kind": "product",
+    "product": "clickfalcon",
+    "context": {"knowledge_keys": ["product-overview", "glossary"]},
+    "design_gate": {"enabled": False},
+    "research": {"mode": "auto-assess", "depth": "light"},
+    "execution": {"isolation": "git-worktree", "review_cadence": "task"},
+    "verification": {"commands": ["bun run type-check"]},
+    "finish": {"integration": "github-pr-squash", "auto_merge_on_green": True},
+    "language": {"dialogue": "zh-CN", "docs": "en", "commits": "en"},
+}
+
+ENGINEERING_PROFILE = {
+    **PRODUCT_PROFILE,
+    "kind": "engineering",
+    "product": None,
+    "behavior_preservation_required": True,
+}
+
+
+class ProfileAndRoutingTests(unittest.TestCase):
+    def test_valid_product_profile_has_no_problems(self):
+        self.assertEqual(validate_profile(PRODUCT_PROFILE), ())
+
+    def test_engineering_profile_requires_behavior_preservation(self):
+        value = deepcopy(ENGINEERING_PROFILE)
+        value["behavior_preservation_required"] = False
+        self.assertIn(
+            "behavior_preservation_required: engineering profile requires true",
+            validate_profile(value),
+        )
+
+    def test_product_story_resolves_product_profile(self):
+        self.assertEqual(
+            resolve_profile(VALID_WORKSPACE, story_kind="product-facing", product_key="clickfalcon"),
+            ".agents/elephant/profiles/clickfalcon.yaml",
+        )
+
+    def test_engineering_story_resolves_engineering_profile(self):
+        self.assertEqual(
+            resolve_profile(VALID_WORKSPACE, story_kind="engineering-only", product_key=None),
+            ".agents/elephant/profiles/engineering.yaml",
+        )
+
+    def test_product_story_requires_exactly_one_known_product(self):
+        with self.assertRaisesRegex(WorkspaceRouteError, "known product_key"):
+            resolve_profile(VALID_WORKSPACE, story_kind="product-facing", product_key=None)
