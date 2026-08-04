@@ -819,7 +819,10 @@ class LinearStoryProvider:
         sequences = tuple(item[0].sequence for item in values)
         if len(set(sequences)) != len(sequences):
             return _duplicate_authority()
-        if values and values[0][0].sequence == 1 and values[0][0].previous_sha256 is not None:
+        if values and (
+            values[0][0].sequence != 1
+            or values[0][0].previous_sha256 is not None
+        ):
             return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "checkpoint_chain")
         if len({item[0].contract for item in values}) > 1:
             return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "checkpoint_chain")

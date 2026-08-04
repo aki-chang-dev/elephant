@@ -794,6 +794,31 @@ class LinearCheckpointLifecycleTests(unittest.TestCase):
         self.assertIsInstance(result, LinearDrift)
         self.assertEqual(result.kind.value, "approved_contract_changed")
 
+    def test_checkpoint_chain_requires_sequence_one_genesis(self) -> None:
+        bad = Checkpoint(
+            story_key=self.snapshot.key.marker,
+            issue_id=self.snapshot.issue_id,
+            phase=self.snapshot.checkpoint_phase,
+            sequence=3,
+            contract=self.binding,
+            delivery=self.empty_delivery,
+            previous_sha256=None,
+        )
+        identifier = "00000000-0000-0000-0000-999999999996"
+        self.connector.attachments[identifier] = {
+            "id": identifier,
+            "title": bad.filename,
+            "url": "linear-asset://bad-genesis",
+            "content": bad.canonical_bytes,
+        }
+
+        result = self.provider.read_checkpoint(
+            self.request, self.snapshot, self.verified_binding
+        )
+
+        self.assertIsInstance(result, LinearDrift)
+        self.assertEqual(result.kind.value, "approved_contract_changed")
+
     def test_attachment_connector_and_decoder_failures_are_sanitized(self) -> None:
         self.provider.write_checkpoint(
             self.request, self.snapshot, self.verified_binding, delivery=self.empty_delivery
