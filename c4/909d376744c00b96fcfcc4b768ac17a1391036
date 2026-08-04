@@ -1,0 +1,39 @@
+plugins/elephant/elephant_runtime/linear/sandbox.py
+  s_7c6e11e61c7ee5::t_fd014984fa4c13 31-36,82-84,158-203,210,218-221,232,253-255,276-283,285-290,296-304,309,311-320,322
+  s_7c6e11e61c7ee5::t_47075031f6caff 97-104,284,305,321,323-330
+scripts/validate-linear-provider.py
+  s_7c6e11e61c7ee5::t_fac0dab8f9e3a2 34-39,79-81,93,101-102,175-195,197-221,235,237,242,247-256,259-269,271,274-282,298-300,302-305,307
+  s_7c6e11e61c7ee5::t_a7a97afac3257b 112-119,196,270,301,306,308-315
+plugins/elephant/elephant_runtime/linear/__init__.py
+  s_7c6e11e61c7ee5::t_fd014984fa4c13 36,40,124,127
+docs/testing/linear-provider-sandbox.json
+  s_7c6e11e61c7ee5::t_4a169d95e5132f 22-40,64,91-94,97
+tests/test_linear_packaging.py
+  s_7c6e11e61c7ee5::t_754a1534169ced 300-309
+  s_7c6e11e61c7ee5::t_7efccf87eb077d 47-65,87-90,112-115,136,287
+  s_7c6e11e61c7ee5::t_cf2c0a8ec4705a 120
+  s_7c6e11e61c7ee5::t_e758d44ec9c86e 265-286,288-299
+docs/testing/linear-provider-sandbox.md
+  s_7c6e11e61c7ee5::t_4a169d95e5132f 48-50,83-92
+  s_7c6e11e61c7ee5::t_cfc16080fde0b3 65-75
+tests/test_linear_sandbox.py
+  s_7c6e11e61c7ee5::t_8f8d43e438161a 30,33,43,57,60,71,78-80,88,91,102,107-109,114-123,144-151,175-178,183,185-189
+  s_7c6e11e61c7ee5::t_3d23cba937b58c 75
+  s_7c6e11e61c7ee5::t_3a0149874baa18 49-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "c4909d376744c00b96fcfcc4b768ac17a1391036",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
