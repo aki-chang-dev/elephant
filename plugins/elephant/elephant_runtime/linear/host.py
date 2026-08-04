@@ -17,7 +17,10 @@ class HostAttachmentContentReader:
             if len(content) != 1:
                 raise ValueError
             block = content[0]
-            if block.get("type") != "resource":
+            block_type = block.get("type")
+            if block_type == "text":
+                return self._decode_unpadded_text(block.get("text"))
+            if block_type != "resource":
                 raise ValueError
             resource = block.get("resource")
             if not isinstance(resource, Mapping):
@@ -42,3 +45,17 @@ class HostAttachmentContentReader:
         if not isinstance(content, list) or not all(isinstance(item, Mapping) for item in content):
             raise ValueError
         return tuple(content)
+
+    @staticmethod
+    def _decode_unpadded_text(value: object) -> bytes:
+        if (
+            not isinstance(value, str)
+            or not value
+            or "=" in value
+            or any(character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" for character in value)
+        ):
+            raise ValueError
+        decoded = base64.b64decode(value + "=" * (-len(value) % 4), validate=True)
+        if base64.b64encode(decoded).decode("ascii").rstrip("=") != value:
+            raise ValueError
+        return decoded

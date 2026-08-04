@@ -15,6 +15,11 @@ document invokes Linear.
   exact title `[Elephant provider certification — cleaned] <marker suffix>`.
 - Do not put OAuth data, tokens, signed URLs or headers, raw bytes, base64,
   raw responses, or timestamps used as authority in tracked evidence.
+- The live `GET_ATTACHMENT` probe certified exactly one MCP `text` block whose
+  text is strict unpadded base64 of the known raw bytes. The installed reader
+  receives the expected attachment identity separately, returns only decoded
+  bytes, and sanitizes malformed/ambiguous responses without retaining the
+  encoded text or connector exception prose.
 
 ## Ignored local run report
 

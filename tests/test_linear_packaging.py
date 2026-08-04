@@ -162,6 +162,38 @@ class LinearProviderPackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "attachment content could not be decoded"):
             HostAttachmentContentReader().read(response, attachment_id="another-attachment")
 
+    def test_attachment_reader_decodes_observed_unpadded_text_block_exactly(self):
+        from elephant_runtime.linear import HostAttachmentContentReader
+
+        response = {"content": [{"type": "text", "text": "eyJwcm9iZSI6Mn0K"}]}
+        self.assertEqual(
+            HostAttachmentContentReader().read(
+                response, attachment_id="attachment-observed-by-caller"
+            ),
+            b'{"probe":2}\n',
+        )
+
+    def test_attachment_reader_rejects_text_ambiguity_padding_and_invalid_alphabet(self):
+        from elephant_runtime.linear import HostAttachmentContentReader
+
+        cases = (
+            {"content": [
+                {"type": "text", "text": "eyJwcm9iZSI6Mn0K"},
+                {"type": "text", "text": "eyJwcm9iZSI6Mn0K"},
+            ]},
+            {"content": [{"type": "text", "text": "eyJwcm9iZSI6Mn0K="}]},
+            {"content": [{"type": "text", "text": "eyJwcm9iZSI6Mn0*"}]},
+        )
+        for response in cases:
+            with self.subTest(response=response):
+                with self.assertRaisesRegex(
+                    RuntimeError, "^attachment content could not be decoded$"
+                ) as caught:
+                    HostAttachmentContentReader().read(
+                        response, attachment_id="attachment-observed-by-caller"
+                    )
+                self.assertNotIn("eyJwcm9i", str(caught.exception))
+
     def test_attachment_reader_sanitizes_opaque_mapping_exceptions(self):
         from collections.abc import Mapping
         from elephant_runtime.linear import HostAttachmentContentReader
