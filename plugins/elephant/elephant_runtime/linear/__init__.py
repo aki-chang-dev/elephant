@@ -18,6 +18,7 @@ from .capabilities import (
     preflight_story_capabilities,
 )
 from .connector import LinearConnector
+from .provider import LinearStoryProvider, LinearStoryProviderConfig
 from .models import (
     ContractBinding,
     DeliveryEvidence,
@@ -71,6 +72,8 @@ __all__ = [
     "LinearConnector",
     "LinearProviderDiagnostic",
     "LinearProviderError",
+    "LinearStoryProvider",
+    "LinearStoryProviderConfig",
     "LinearTool",
     "LinearAttachment",
     "LinearAuthorityMissing",

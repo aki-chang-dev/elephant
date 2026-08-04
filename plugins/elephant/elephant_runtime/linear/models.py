@@ -118,6 +118,17 @@ class StoryCreateRequest:
     description: str
     team_id: str
     human_status: HumanStatus
+    story_kind: str | None = None
+    product_label_id: str | None = None
+    product_label_name: str | None = None
+    kind_label_id: str | None = None
+    kind_label_name: str | None = None
+    priority: int | None = None
+    project_id: str | None = None
+    parent_id: str | None = None
+    label_inventory: tuple[LinearLabel, ...] = ()
+    product_group_label_ids: frozenset[str] = frozenset()
+    kind_group_label_ids: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not isinstance(self.key, StoryKey):
@@ -127,6 +138,38 @@ class StoryCreateRequest:
             raise TypeError("description: expected string")
         _require_nonempty_string("team_id", self.team_id)
         _require_enum("human_status", self.human_status, HumanStatus)
+        if self.story_kind is not None and self.story_kind not in {
+            "product-facing",
+            "engineering-only",
+        }:
+            raise ValueError("story_kind: expected product-facing or engineering-only")
+        for field_name in (
+            "product_label_id",
+            "product_label_name",
+            "kind_label_id",
+            "kind_label_name",
+            "project_id",
+            "parent_id",
+        ):
+            _require_optional_nonempty_string(field_name, getattr(self, field_name))
+        if (self.product_label_id is None) != (self.product_label_name is None):
+            raise ValueError("product label: ID and name must be paired")
+        if (self.kind_label_id is None) != (self.kind_label_name is None):
+            raise ValueError("kind label: ID and name must be paired")
+        if self.priority is not None and (
+            not isinstance(self.priority, int) or isinstance(self.priority, bool)
+        ):
+            raise TypeError("priority: expected int or None")
+        if not isinstance(self.label_inventory, tuple) or not all(
+            isinstance(item, LinearLabel) for item in self.label_inventory
+        ):
+            raise TypeError("label_inventory: expected LinearLabel tuple")
+        for field_name in ("product_group_label_ids", "kind_group_label_ids"):
+            value = getattr(self, field_name)
+            if not isinstance(value, frozenset) or not all(
+                isinstance(item, str) and item.strip() for item in value
+            ):
+                raise TypeError(f"{field_name}: expected frozenset of nonblank strings")
 
 
 @dataclass(frozen=True)
