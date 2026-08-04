@@ -1,0 +1,25 @@
+plugins/elephant/elephant_runtime/notion/capabilities.py
+  s_7c6e11e61c7ee5::t_a688f5b219b09a 45,164-167,171,177
+plugins/elephant/elephant_runtime/notion/models.py
+  s_7c6e11e61c7ee5::t_a688f5b219b09a 23
+.superpowers/sdd/2026-08-04-notion-providers/task-1-report.md
+  s_7c6e11e61c7ee5::t_c1e4e03ef1e632 90-134
+tests/test_notion_capabilities.py
+  s_7c6e11e61c7ee5::t_ba751bdd4234e0 42,147,153-167,283-295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "585eeb7234cda637a6842cef21c0e460d83ec978",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
