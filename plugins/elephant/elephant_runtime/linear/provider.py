@@ -209,8 +209,9 @@ class LinearStoryProvider:
         if not isinstance(summary, str) or not summary.strip() or "\n" in summary:
             raise ValueError("disposition summary: expected one concise nonblank line")
         label = "Reconsideration" if disposition is ProductDisposition.DEFERRED else "Disposition"
-        desired = _disposition_body(current.description, label, summary.strip())
-        if desired is None:
+        canonical = _story_description(request)
+        desired = _disposition_body(canonical, label, summary.strip())
+        if desired is None or current.description not in {canonical, desired}:
             return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "disposition_summary")
         if current.description != desired:
             try:
@@ -343,7 +344,11 @@ class LinearStoryProvider:
             raise ValueError("request: configured authority changed")
         labels = {label.id: label.name for label in self._config.label_inventory}
         if request.story_kind == "product-facing":
-            if request.product_label_id is None or request.kind_label_id != self._config.product_facing_kind_label_id:
+            if (
+                request.product_label_id is None
+                or request.product_label_id not in self._config.product_group_label_ids
+                or request.kind_label_id != self._config.product_facing_kind_label_id
+            ):
                 raise ValueError("product-facing kind/product authority")
         elif request.story_kind == "engineering-only":
             if request.product_label_id is not None or request.kind_label_id != self._config.engineering_only_kind_label_id:

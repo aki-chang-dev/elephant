@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+from hashlib import sha256
 import unittest
 
 from scripts._elephant_runtime_forward import canonical_module
@@ -396,8 +397,10 @@ class LinearIssueLifecycleTests(unittest.TestCase):
         )
 
         self.assertEqual(deferred.status_name, "Backlog")
-        deferred_body = self.connector.issues["ISS-1"]["description"]
-        self.provider.update_human_status(replace(shaping_request, human_status=HumanStatus.BACKLOG), HumanStatus.SHAPING, expected_description=deferred_body)
+        self.setUp()
+        self.provider.create_story(self.request)
+        shaping_request = replace(self.request, human_status=HumanStatus.SHAPING)
+        self.provider.update_human_status(self.request, HumanStatus.SHAPING)
         rejected = self.provider.apply_disposition(
             shaping_request,
             ProductDisposition.REJECTED,
@@ -509,6 +512,44 @@ class LinearIssueLifecycleTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "kind"):
             self.provider.create_story(cross_kind)
+        self.assertEqual(self.connector.calls, [])
+
+    def test_disposition_stops_before_save_for_tampered_or_stale_marker_owned_body(self) -> None:
+        summary = "Reconsider after research."
+        label = "Reconsideration"
+        cases = (
+            ("Tampered recap", sha256(b"Tampered recap").hexdigest()),
+            (f"A concise one-line recap. {label}: {summary}", "0" * 64),
+        )
+        for recap, digest in cases:
+            with self.subTest(recap=recap):
+                self.setUp()
+                self.provider.create_story(self.request)
+                shaping = replace(self.request, human_status=HumanStatus.SHAPING)
+                self.provider.update_human_status(self.request, HumanStatus.SHAPING)
+                self.connector.issues["ISS-1"]["description"] = (
+                    f"{recap}\n\n---\nElephant story key: `{self.request.key.marker}`\n"
+                    f"Elephant recap SHA-256: `{digest}`"
+                )
+                self.connector.calls.clear()
+
+                result = self.provider.apply_disposition(
+                    shaping, ProductDisposition.DEFERRED, summary=summary
+                )
+
+                self.assertEqual(result.kind.value, "approved_contract_changed")
+                self.assertNotIn(LinearTool.SAVE_ISSUE, tuple(tool for tool, _ in self.connector.calls))
+
+    def test_product_facing_rejects_kind_label_as_product_authority_before_save(self) -> None:
+        invalid = replace(
+            self.request,
+            product_label_id="kind-engineering",
+            product_label_name="engineering-only",
+        )
+
+        with self.assertRaisesRegex(ValueError, "product"):
+            self.provider.create_story(invalid)
+
         self.assertEqual(self.connector.calls, [])
 
 
