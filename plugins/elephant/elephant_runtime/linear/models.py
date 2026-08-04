@@ -32,6 +32,7 @@ class LinearTool(str, Enum):
     DELETE_ATTACHMENT = "mcp__codex_apps__linear_delete_attachment"
     LIST_COMMENTS = "mcp__codex_apps__linear_list_comments"
     SAVE_COMMENT = "mcp__codex_apps__linear_save_comment"
+    DELETE_COMMENT = "mcp__codex_apps__linear_delete_comment"
     LIST_DIFFS = "mcp__codex_apps__linear_list_diffs"
     GET_DIFF = "mcp__codex_apps__linear_get_diff"
     LIST_TEAMS = "mcp__codex_apps__linear_list_teams"

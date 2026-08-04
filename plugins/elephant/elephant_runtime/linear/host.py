@@ -31,7 +31,7 @@ class HostAttachmentContentReader:
             if not isinstance(blob, str) or not blob:
                 raise ValueError
             return base64.b64decode(blob, validate=True)
-        except (TypeError, ValueError, UnicodeError):
+        except Exception:
             raise RuntimeError("attachment content could not be decoded") from None
 
     @staticmethod

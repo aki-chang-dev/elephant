@@ -17,6 +17,7 @@ WORKSPACE_LOCATOR_CAPABILITY = "workspace_locator"
 PRODUCT_KIND_LABELS_CAPABILITY = "product_kind_labels"
 CHECKPOINT_UPLOAD_CAPABILITY = "checkpoint_upload"
 NATIVE_GITHUB_DIFF_CAPABILITY = "native_github_diff"
+SANDBOX_CLEANUP_CAPABILITY = "sandbox_cleanup"
 
 
 STORY_CAPABILITY_TOOLS = MappingProxyType({
@@ -70,6 +71,15 @@ ADMIN_CAPABILITY_TOOLS = MappingProxyType({
     }),
     CHECKPOINT_UPLOAD_CAPABILITY: STORY_CAPABILITY_TOOLS["write_checkpoint"],
     NATIVE_GITHUB_DIFF_CAPABILITY: frozenset({LinearTool.LIST_DIFFS, LinearTool.GET_DIFF}),
+    SANDBOX_CLEANUP_CAPABILITY: frozenset({
+        LinearTool.LIST_ISSUES,
+        LinearTool.SAVE_ISSUE,
+        LinearTool.GET_ISSUE,
+        LinearTool.LIST_COMMENTS,
+        LinearTool.DELETE_COMMENT,
+        LinearTool.GET_ATTACHMENT,
+        LinearTool.DELETE_ATTACHMENT,
+    }),
 })
 
 _ADMIN_PLATFORM_REQUIREMENTS = MappingProxyType({

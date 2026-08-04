@@ -12,6 +12,7 @@ from elephant_runtime.linear import (
     NATIVE_GITHUB_DIFF_CAPABILITY,
     PRODUCT_KIND_LABELS_CAPABILITY,
     READ_ONLY_DISCOVERY_TOOLS,
+    SANDBOX_CLEANUP_CAPABILITY,
     STORY_CAPABILITY_TOOLS,
     STORY_CAPABILITY_PLATFORM_REQUIREMENTS,
     TEAM_CREATION_CAPABILITY,
@@ -109,6 +110,10 @@ class LinearValueContractTests(unittest.TestCase):
 
     def test_administrative_and_read_only_inventory_is_exact(self):
         self.assertEqual(
+            LinearTool.DELETE_COMMENT.value,
+            "mcp__codex_apps__linear_delete_comment",
+        )
+        self.assertEqual(
             {tool.value for tool in READ_ONLY_DISCOVERY_TOOLS},
             {
                 "mcp__codex_apps__linear_list_teams",
@@ -144,8 +149,18 @@ class LinearValueContractTests(unittest.TestCase):
                     "mcp__codex_apps__linear_list_diffs",
                     "mcp__codex_apps__linear_get_diff",
                 },
+                SANDBOX_CLEANUP_CAPABILITY: {
+                    "mcp__codex_apps__linear_list_issues",
+                    "mcp__codex_apps__linear_save_issue",
+                    "mcp__codex_apps__linear_get_issue",
+                    "mcp__codex_apps__linear_list_comments",
+                    "mcp__codex_apps__linear_delete_comment",
+                    "mcp__codex_apps__linear_get_attachment",
+                    "mcp__codex_apps__linear_delete_attachment",
+                },
             },
         )
+        self.assertNotIn(LinearTool.DELETE_COMMENT, STORY_CAPABILITY_TOOLS["attach_delivery_evidence"])
 
     def test_story_key_has_a_stable_canonical_marker_and_rejects_empty_parts(self):
         key = StoryKey("repo", "intent")
