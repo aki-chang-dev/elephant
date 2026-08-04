@@ -1,0 +1,23 @@
+plugins/elephant/elephant_runtime/linear/capabilities.py
+  s_7c6e11e61c7ee5::t_ad7606ac43000e 138-147
+tests/test_linear_capabilities.py
+  s_7c6e11e61c7ee5::t_6bf60a340fa50a 23,221-246,249-264
+plugins/elephant/elephant_runtime/linear/models.py
+  s_7c6e11e61c7ee5::t_ad7606ac43000e 9,17,148-159,172-178,193-194,197-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "cf943ea9ff100d925c04e2dc95789adb0e38df3c",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
