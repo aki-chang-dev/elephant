@@ -2,7 +2,7 @@
 
 Date: 2026-08-04
 Base commit: `f3fe0b2362576383f76c1a000df7652c8a0162ba`
-Implementation commit: recorded by the signed follow-up evidence commit after verification
+Implementation commit: `c2a7ca0974c7c81ac1a9857756140340f46fb49b`
 Marketplace source: `./plugins/elephant`
 
 ## Fresh-context forward prompt
