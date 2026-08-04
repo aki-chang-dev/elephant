@@ -1,0 +1,31 @@
+.superpowers/sdd/2026-08-04-notion-providers/task-2-report.md
+  s_7c6e11e61c7ee5::t_b29f6f9bc80751 164-299
+tests/test_notion_setup_adapter.py
+  s_7c6e11e61c7ee5::t_1db59d593905a4 297-309
+  s_7c6e11e61c7ee5::t_fcbc95db5b4ab7 448-457,503-506,508-524
+  s_7c6e11e61c7ee5::t_2b289f3a4fb524 480,507,529
+  s_7c6e11e61c7ee5::t_7c0910ad8d0789 27-29,169,208-236,263-270,277-296,421,440,446-447,467-479,481-502,525-528,530-532,539-540,545-565
+  s_7c6e11e61c7ee5::t_b118f26c176f25 567-594
+plugins/elephant/elephant_runtime/notion/setup_adapter.py
+  s_7c6e11e61c7ee5::t_6fbcad38a1a8a2 219-229,234-238,250-254,447-450,454-458,569
+  s_7c6e11e61c7ee5::t_955dfabb7c0c13 7,91-93,105-127,696-697,710-715,730-735,739-747,750-757,759-760,770-813
+  s_7c6e11e61c7ee5::t_55f0a2bf6f7e74 724-729,738
+  s_7c6e11e61c7ee5::t_cab9c7bbbc4dc2 583-585
+  s_7c6e11e61c7ee5::t_02dfc1186b5fcd 380,385,398-407,653-673,683-684
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "763886c347bee5d75427c213cc9eeb8a14b6dc98",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
