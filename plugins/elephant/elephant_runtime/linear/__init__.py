@@ -18,6 +18,13 @@ from .capabilities import (
     preflight_story_capabilities,
 )
 from .connector import LinearConnector
+from .checkpoint import (
+    CHECKPOINT_SCHEMA,
+    Checkpoint,
+    CheckpointDelivery,
+    DeliveryRecord,
+    HostRawByteUploader,
+)
 from .provider import LinearStoryProvider, LinearStoryProviderConfig
 from .models import (
     ContractBinding,
@@ -64,9 +71,14 @@ from .normalize import (
 __all__ = [
     "ADMIN_CAPABILITY_TOOLS",
     "CHECKPOINT_UPLOAD_CAPABILITY",
+    "CHECKPOINT_SCHEMA",
+    "Checkpoint",
+    "CheckpointDelivery",
     "ContractBinding",
     "DeliveryEvidence",
+    "DeliveryRecord",
     "HOST_RAW_SIGNED_PUT",
+    "HostRawByteUploader",
     "LinearCapabilityInventory",
     "LinearCapabilityPreflight",
     "LinearConnector",

@@ -265,10 +265,12 @@ class LinearComment:
 class LinearDiff:
     id: str
     url: str
+    issue_identifier: str | None = None
 
     def __post_init__(self) -> None:
         _require_nonempty_string("id", self.id)
         _require_nonempty_string("url", self.url)
+        _require_optional_nonempty_string("issue_identifier", self.issue_identifier)
 
 
 @dataclass(frozen=True)

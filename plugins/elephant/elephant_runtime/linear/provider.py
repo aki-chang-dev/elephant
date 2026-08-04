@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from hashlib import sha256
+import json
+import re
 
 from elephant_runtime.workspace_core import (
+    DiagnosticCode,
     DriftKind,
     HumanStatus,
     ProductDisposition,
@@ -15,16 +18,32 @@ from elephant_runtime.workspace_core import (
 )
 
 from .connector import LinearConnector
+from .checkpoint import (
+    Checkpoint,
+    CheckpointDelivery,
+    DeliveryRecord,
+    HostRawByteUploader,
+)
 from .models import (
+    ContractBinding,
     LinearAuthorityMissing,
     LinearDrift,
     LinearIssue,
     LinearLabel,
+    LinearProviderError,
     LinearTool,
     StoryCreateRequest,
     StoryKey,
+    StorySnapshot,
 )
-from .normalize import normalize_issue, normalize_issue_statuses, normalize_issues, parse_story_marker
+from .normalize import (
+    normalize_comments,
+    normalize_diff,
+    normalize_issue,
+    normalize_issue_statuses,
+    normalize_issues,
+    parse_story_marker,
+)
 
 
 _STATUS_TYPES = {
@@ -46,6 +65,15 @@ _REMOVE_RELATIONS = {
     "blocks": ("removeBlocks", "blocks", "blocked_by"),
     "relatedTo": ("removeRelatedTo", "related_to", "related_to"),
 }
+_CONTRACT_TITLE = "Elephant Product Contract"
+_DELIVERY_LINKS = (
+    ("Elephant Delivery Branch", "branch_url"),
+    ("Elephant Pull Request", "pull_request_url"),
+    ("Elephant Verification", "verification_url"),
+)
+_CHECKPOINT_TITLE = re.compile(
+    r"elephant-checkpoint-(?P<story>[0-9a-f]{64})-(?P<sequence>[1-9][0-9]*)\.json\Z"
+)
 
 
 @dataclass(frozen=True)
@@ -87,11 +115,18 @@ class LinearStoryProviderConfig:
 
 
 class LinearStoryProvider:
-    def __init__(self, connector: LinearConnector, config: LinearStoryProviderConfig) -> None:
+    def __init__(
+        self,
+        connector: LinearConnector,
+        config: LinearStoryProviderConfig,
+        *,
+        raw_uploader: HostRawByteUploader | None = None,
+    ) -> None:
         if not isinstance(config, LinearStoryProviderConfig):
             raise TypeError("config: expected LinearStoryProviderConfig")
         self._connector = connector
         self._config = config
+        self._raw_uploader = raw_uploader
 
     def create_story(self, request: StoryCreateRequest) -> LinearIssue | LinearDrift:
         self._validate_request(request)
@@ -117,6 +152,270 @@ class LinearStoryProvider:
         if len(matches) != 1 or matches[0].id != created.id:
             return _duplicate_authority() if len(matches) > 1 else LinearDrift(DriftKind.TIMED_OUT_WRITE, "create_lookup")
         return created
+
+    def write_product_recap(
+        self,
+        request: StoryCreateRequest,
+        *,
+        problem: str,
+        outcome: str,
+        acceptance: tuple[str, ...],
+        contract_url: str | None = None,
+        behavior_preservation: str | None = None,
+    ) -> LinearIssue | LinearAuthorityMissing | LinearDrift:
+        desired = _product_recap_description(
+            request,
+            problem=problem,
+            outcome=outcome,
+            acceptance=acceptance,
+            contract_url=contract_url,
+            behavior_preservation=behavior_preservation,
+        )
+        current = self._read_for_operation(request, exact_body=False)
+        if not isinstance(current, LinearIssue):
+            return current
+        if current.description == desired:
+            return current
+        try:
+            self._connector.call(
+                LinearTool.SAVE_ISSUE,
+                (("id", current.id), ("description", desired)),
+            )
+        except Exception:
+            resumed = self._read_for_operation(request, exact_body=False)
+            if isinstance(resumed, LinearIssue) and resumed.description == desired:
+                return resumed
+            raise
+        return self._read_and_verify(
+            current.id,
+            request,
+            expected_description=desired,
+        )
+
+    def bind_product_contract(
+        self,
+        request: StoryCreateRequest,
+        contract_url: str,
+    ) -> LinearIssue | LinearAuthorityMissing | LinearDrift:
+        if (
+            not isinstance(contract_url, str)
+            or not contract_url.startswith("https://www.notion.so/")
+            or any(character.isspace() for character in contract_url)
+        ):
+            raise ValueError("contract_url: expected canonical Notion HTTPS URL")
+        current = self._read_for_operation(request, exact_body=False)
+        if not isinstance(current, LinearIssue):
+            return current
+        binding = _one_titled_attachment(current, _CONTRACT_TITLE)
+        if isinstance(binding, LinearDrift):
+            return binding
+        if binding is not None:
+            return (
+                current
+                if binding.url == contract_url
+                else LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "product_contract_url")
+            )
+        link = {"title": _CONTRACT_TITLE, "url": contract_url}
+        try:
+            self._connector.call(
+                LinearTool.SAVE_ISSUE,
+                (("id", current.id), ("links", (link,))),
+            )
+        except Exception:
+            resumed = self._read_for_operation(request, exact_body=False)
+            if isinstance(resumed, LinearIssue):
+                observed = _one_titled_attachment(resumed, _CONTRACT_TITLE)
+                if observed is not None and not isinstance(observed, LinearDrift) and observed.url == contract_url:
+                    return resumed
+            raise
+        verified = self._read_and_verify(current.id, request, exact_body=False)
+        if not isinstance(verified, LinearIssue):
+            return verified
+        observed = _one_titled_attachment(verified, _CONTRACT_TITLE)
+        if observed is None or isinstance(observed, LinearDrift) or observed.url != contract_url:
+            return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "product_contract_readback")
+        return verified
+
+    def read_checkpoint(
+        self,
+        snapshot: StorySnapshot,
+        contract: ContractBinding,
+    ) -> Checkpoint | None | LinearDrift:
+        checkpoints = self._read_checkpoints(snapshot)
+        if isinstance(checkpoints, LinearDrift):
+            return checkpoints
+        if not checkpoints:
+            return None
+        current = checkpoints[-1][0]
+        if current.contract != contract:
+            return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "checkpoint_contract")
+        if current.phase is not snapshot.checkpoint_phase:
+            return LinearDrift(DriftKind.VERIFIED_CHECKPOINT_LAG, "checkpoint_phase")
+        return current
+
+    def write_checkpoint(
+        self,
+        snapshot: StorySnapshot,
+        contract: ContractBinding,
+        *,
+        delivery: CheckpointDelivery,
+    ) -> Checkpoint | LinearDrift:
+        if not isinstance(snapshot, StorySnapshot):
+            raise TypeError("snapshot: expected StorySnapshot")
+        if not isinstance(contract, ContractBinding):
+            raise TypeError("contract: expected ContractBinding")
+        if not isinstance(delivery, CheckpointDelivery):
+            raise TypeError("delivery: expected CheckpointDelivery")
+        checkpoints = self._read_checkpoints(snapshot)
+        if isinstance(checkpoints, LinearDrift):
+            return checkpoints
+        current = checkpoints[-1][0] if checkpoints else None
+        if current is not None and current.contract != contract:
+            return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "checkpoint_contract")
+        if (
+            current is not None
+            and current.phase is snapshot.checkpoint_phase
+            and current.delivery == delivery
+        ):
+            self._cleanup_checkpoint_attachments(snapshot, checkpoints[:-1])
+            return current
+        desired = Checkpoint(
+            story_key=snapshot.key.marker,
+            issue_id=snapshot.issue_id,
+            phase=snapshot.checkpoint_phase,
+            sequence=1 if current is None else current.sequence + 1,
+            contract=contract,
+            delivery=delivery,
+            previous_sha256=None if current is None else current.sha256,
+        )
+        if self._raw_uploader is None:
+            raise RuntimeError("checkpoint raw uploader is not configured")
+        try:
+            prepared = self._connector.call(
+                LinearTool.PREPARE_ATTACHMENT_UPLOAD,
+                (
+                    ("issue", snapshot.issue_id),
+                    ("filename", desired.filename),
+                    ("contentType", "application/json"),
+                    ("size", len(desired.canonical_bytes)),
+                    ("title", desired.filename),
+                ),
+            )
+            asset_url, upload_url, headers = _prepared_upload(prepared)
+        except Exception:
+            raise RuntimeError("checkpoint upload preparation failed") from None
+        try:
+            self._raw_uploader.put(upload_url, headers, desired.canonical_bytes)
+        except Exception:
+            raise TimeoutError("checkpoint raw upload failed") from None
+        try:
+            receipt = self._connector.call(
+                LinearTool.CREATE_ATTACHMENT_FROM_UPLOAD,
+                (
+                    ("assetUrl", asset_url),
+                    ("issue", snapshot.issue_id),
+                    ("title", desired.filename),
+                ),
+            )
+        except Exception:
+            raise TimeoutError("checkpoint finalize failed") from None
+        if not isinstance(receipt, Mapping) or not isinstance(receipt.get("id"), str) or not receipt["id"].strip():
+            raise ValueError("checkpoint finalize receipt: expected attachment ID")
+        verified = self._read_checkpoints(snapshot)
+        if isinstance(verified, LinearDrift):
+            return verified
+        exact = tuple(
+            item for item in verified
+            if item[0] == desired and item[1] == receipt["id"]
+        )
+        if len(exact) != 1:
+            return LinearDrift(DriftKind.TIMED_OUT_WRITE, "checkpoint_readback")
+        self._cleanup_checkpoint_attachments(
+            snapshot, tuple(item for item in verified if item != exact[0])
+        )
+        return desired
+
+    def attach_delivery_evidence(
+        self,
+        request: StoryCreateRequest,
+        record: DeliveryRecord,
+    ) -> LinearIssue | LinearAuthorityMissing | LinearDrift:
+        if not isinstance(record, DeliveryRecord):
+            raise TypeError("record: expected DeliveryRecord")
+        current = self._read_for_operation(request, exact_body=False)
+        if not isinstance(current, LinearIssue):
+            return current
+        marker = f"Elephant delivery evidence: `{request.key.marker}`"
+        comments = self._delivery_comments(current.id, marker)
+        if len(comments) > 1:
+            return _duplicate_authority()
+        body = _delivery_comment(record, marker)
+        if not comments:
+            arguments = (("issueId", current.id), ("body", body))
+        elif comments[0].body != body:
+            arguments = (("id", comments[0].id), ("body", body))
+        else:
+            arguments = None
+        if arguments is not None:
+            try:
+                receipt = self._connector.call(LinearTool.SAVE_COMMENT, arguments)
+            except Exception:
+                resumed = self._delivery_comments(current.id, marker)
+                if len(resumed) != 1 or resumed[0].body != body:
+                    raise
+            else:
+                if not isinstance(receipt, Mapping) or not isinstance(receipt.get("id"), str):
+                    raise ValueError("comment receipt: expected comment ID")
+                resumed = self._delivery_comments(current.id, marker)
+                if len(resumed) != 1 or resumed[0].id != receipt["id"] or resumed[0].body != body:
+                    return LinearDrift(DriftKind.TIMED_OUT_WRITE, "delivery_comment_readback")
+        links = tuple(
+            {"title": title, "url": getattr(record, field)}
+            for title, field in _DELIVERY_LINKS
+        )
+        link_result = self._append_exact_links(request, current, links)
+        return link_result
+
+    def verify_github_binding(
+        self,
+        request: StoryCreateRequest,
+        pull_request_url: str,
+        issue_identifier: str,
+        *,
+        native_diff_tool_exposed: bool,
+        native_diff_configured: bool,
+    ):
+        if not isinstance(pull_request_url, str) or not pull_request_url.startswith("https://"):
+            raise ValueError("pull_request_url: expected HTTPS URL")
+        current = self._read_for_operation(request, exact_body=False)
+        if not isinstance(current, LinearIssue):
+            return current
+        attachment = _one_titled_attachment(current, "Elephant Pull Request")
+        if isinstance(attachment, LinearDrift):
+            return attachment
+        if attachment is None or attachment.url != pull_request_url:
+            return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "pull_request_attachment")
+        if not isinstance(native_diff_tool_exposed, bool) or not isinstance(native_diff_configured, bool):
+            raise TypeError("native diff flags: expected bool")
+        if not native_diff_tool_exposed:
+            raise self._github_diagnostic(request, issue_identifier, DiagnosticCode.CONNECTOR_CAPABILITY_MISSING)
+        if not native_diff_configured:
+            raise self._github_diagnostic(request, issue_identifier, DiagnosticCode.CONFIGURATION_MISSING)
+        try:
+            diff = normalize_diff(
+                self._connector.call(
+                    LinearTool.GET_DIFF, (("urlOrId", pull_request_url),)
+                )
+            )
+        except (LookupError, KeyError, ValueError, TypeError):
+            raise self._github_diagnostic(request, issue_identifier, DiagnosticCode.CONFIGURATION_MISSING) from None
+        if diff.issue_identifier is None:
+            raise self._github_diagnostic(
+                request, issue_identifier, DiagnosticCode.CONFIGURATION_MISSING
+            )
+        if diff.url != pull_request_url or diff.issue_identifier != issue_identifier:
+            return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "github_diff_binding")
+        return diff
 
     def read_story(self, key: StoryKey, *, request: StoryCreateRequest | None = None) -> LinearIssue | LinearAuthorityMissing | LinearDrift:
         if not isinstance(key, StoryKey):
@@ -297,6 +596,151 @@ class LinearStoryProvider:
             raise ValueError("read-back issue ID does not match requested issue")
         return issue
 
+    def _read_checkpoints(
+        self, snapshot: StorySnapshot
+    ) -> tuple[tuple[Checkpoint, str], ...] | LinearDrift:
+        if not isinstance(snapshot, StorySnapshot):
+            raise TypeError("snapshot: expected StorySnapshot")
+        issue = self._read_detail(snapshot.issue_id)
+        marker = parse_story_marker(issue.description)
+        if (
+            issue.title != snapshot.title
+            or marker is None
+            or marker[0] != snapshot.key.marker
+        ):
+            return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "checkpoint_story_identity")
+        if issue.attachments is None:
+            raise ValueError("checkpoint read requires issue attachments")
+        story_digest = snapshot.key.marker.rsplit("/", 1)[1]
+        values: list[tuple[Checkpoint, str]] = []
+        for attachment in issue.attachments:
+            title = _CHECKPOINT_TITLE.fullmatch(attachment.title)
+            if title is None or title.group("story") != story_digest:
+                continue
+            raw = self._connector.call(
+                LinearTool.GET_ATTACHMENT, (("id", attachment.id),)
+            )
+            if (
+                not isinstance(raw, Mapping)
+                or raw.get("id") != attachment.id
+                or not isinstance(raw.get("data"), bytes)
+            ):
+                raise ValueError("checkpoint attachment: expected exact raw-byte response")
+            checkpoint = Checkpoint.from_bytes(raw["data"])
+            checkpoint.verify_identity(snapshot)
+            if (
+                checkpoint.filename != attachment.title
+                or checkpoint.sequence != int(title.group("sequence"))
+            ):
+                raise ValueError("checkpoint attachment title does not match content")
+            values.append((checkpoint, attachment.id))
+        values.sort(key=lambda item: item[0].sequence)
+        sequences = tuple(item[0].sequence for item in values)
+        if len(set(sequences)) != len(sequences):
+            return _duplicate_authority()
+        for prior, newer in zip(values, values[1:]):
+            if newer[0].previous_sha256 != prior[0].sha256:
+                return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "checkpoint_chain")
+        return tuple(values)
+
+    def _cleanup_checkpoint_attachments(
+        self,
+        snapshot: StorySnapshot,
+        obsolete: tuple[tuple[Checkpoint, str], ...],
+    ) -> None:
+        for _checkpoint, attachment_id in obsolete:
+            try:
+                self._connector.call(
+                    LinearTool.DELETE_ATTACHMENT, (("id", attachment_id),)
+                )
+            except Exception:
+                issue = self._read_detail(snapshot.issue_id)
+                if issue.attachments is not None and all(
+                    item.id != attachment_id for item in issue.attachments
+                ):
+                    continue
+                raise TimeoutError("checkpoint attachment cleanup failed") from None
+            issue = self._read_detail(snapshot.issue_id)
+            if issue.attachments is None or any(
+                item.id == attachment_id for item in issue.attachments
+            ):
+                raise TimeoutError("checkpoint attachment cleanup failed")
+
+    def _delivery_comments(self, issue_id: str, marker: str):
+        cursor = None
+        seen: tuple[str, ...] = ()
+        found = []
+        while True:
+            arguments: tuple[tuple[str, object], ...] = (("issueId", issue_id),)
+            if cursor is not None:
+                arguments += (("cursor", cursor),)
+            page = normalize_comments(
+                self._connector.call(LinearTool.LIST_COMMENTS, arguments),
+                seen_cursors=seen,
+            )
+            found.extend(
+                comment for comment in page.values if marker in comment.body
+            )
+            if page.next_cursor is None:
+                return tuple(found)
+            seen += (page.next_cursor,)
+            cursor = page.next_cursor
+
+    def _append_exact_links(
+        self,
+        request: StoryCreateRequest,
+        current: LinearIssue,
+        links: tuple[dict[str, str], ...],
+    ) -> LinearIssue | LinearDrift:
+        missing: list[dict[str, str]] = []
+        for link in links:
+            observed = _one_titled_attachment(current, link["title"])
+            if isinstance(observed, LinearDrift):
+                return observed
+            if observed is None:
+                missing.append(link)
+            elif observed.url != link["url"]:
+                return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "delivery_link_url")
+        if missing:
+            try:
+                self._connector.call(
+                    LinearTool.SAVE_ISSUE,
+                    (("id", current.id), ("links", tuple(missing))),
+                )
+            except Exception:
+                verified = self._read_for_operation(request, exact_body=False)
+                if not isinstance(verified, LinearIssue):
+                    raise
+            else:
+                verified = self._read_and_verify(current.id, request, exact_body=False)
+                if not isinstance(verified, LinearIssue):
+                    return verified
+        else:
+            verified = current
+        for link in links:
+            observed = _one_titled_attachment(verified, link["title"])
+            if (
+                observed is None
+                or isinstance(observed, LinearDrift)
+                or observed.url != link["url"]
+            ):
+                return LinearDrift(DriftKind.TIMED_OUT_WRITE, "delivery_link_readback")
+        return verified
+
+    def _github_diagnostic(
+        self,
+        request: StoryCreateRequest,
+        issue_identifier: str,
+        diagnostic: DiagnosticCode,
+    ) -> LinearProviderError:
+        return LinearProviderError(
+            capability="attach_delivery_evidence",
+            tool=LinearTool.GET_DIFF,
+            diagnostic_code=diagnostic,
+            operation_key=f"elephant-linear/v1/{request.key.marker.rsplit('/', 1)[1]}",
+            verified_prior_receipts=(("issue_identifier", issue_identifier),),
+        )
+
     def _complete_relation_write(self, request: StoryCreateRequest, source: LinearIssue, target_id: str, field: str, value: object, source_field: str, reciprocal_field: str | None, *, present: bool) -> LinearIssue | LinearDrift:
         try:
             self._connector.call(LinearTool.SAVE_ISSUE, (("id", source.id), (field, value)))
@@ -368,6 +812,93 @@ def _story_description(request: StoryCreateRequest) -> str:
     return f"{recap}\n\n---\nElephant story key: `{request.key.marker}`\nElephant recap SHA-256: `{sha256(recap.encode('utf-8')).hexdigest()}`"
 
 
+_FORBIDDEN_RECAP_CONTENT = (
+    "product contract",
+    "technical contract",
+    "implementation checklist",
+    "elephant.linear-checkpoint/",
+    "internal progress",
+)
+
+
+def _recap_field(name: str, value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name}: expected concise nonblank text")
+    normalized = value.strip()
+    lowered = normalized.casefold()
+    if "\n" in normalized or any(marker in lowered for marker in _FORBIDDEN_RECAP_CONTENT):
+        raise ValueError(f"{name}: contains non-recap content")
+    return normalized
+
+
+def _product_recap_description(
+    request: StoryCreateRequest,
+    *,
+    problem: str,
+    outcome: str,
+    acceptance: tuple[str, ...],
+    contract_url: str | None,
+    behavior_preservation: str | None,
+) -> str:
+    if not isinstance(request, StoryCreateRequest):
+        raise TypeError("request: expected StoryCreateRequest")
+    problem_value = _recap_field("problem", problem)
+    outcome_value = _recap_field("outcome", outcome)
+    if not isinstance(acceptance, tuple) or not acceptance:
+        raise ValueError("acceptance: expected one or more summaries")
+    acceptance_values = tuple(
+        _recap_field("acceptance", value) for value in acceptance
+    )
+    if len(set(acceptance_values)) != len(acceptance_values):
+        raise ValueError("acceptance: duplicate summary")
+    if request.story_kind == "product-facing":
+        if behavior_preservation is not None:
+            raise ValueError("behavior_preservation: not valid for product-facing recap")
+        if (
+            not isinstance(contract_url, str)
+            or not contract_url.startswith("https://www.notion.so/")
+            or any(character.isspace() for character in contract_url)
+        ):
+            raise ValueError("contract_url: expected canonical Notion HTTPS URL")
+        contract_value: str | None = contract_url
+        behavior_value: str | None = None
+        binding = f"**Product Contract:** [Open in Notion](<{contract_url}>)"
+    elif request.story_kind == "engineering-only":
+        if contract_url is not None:
+            raise ValueError("contract_url: not valid for engineering-only recap")
+        behavior_value = _recap_field(
+            "behavior_preservation", behavior_preservation
+        )
+        contract_value = None
+        binding = f"**Behavior preservation:** {behavior_value}"
+    else:
+        raise ValueError("story_kind: expected configured kind")
+    fields = json.dumps(
+        {
+            "acceptance": list(acceptance_values),
+            "behavior_preservation": behavior_value,
+            "contract_url": contract_value,
+            "outcome": outcome_value,
+            "problem": problem_value,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    acceptance_body = "\n".join(f"- {value}" for value in acceptance_values)
+    return (
+        "## Product Recap\n\n"
+        f"**Problem:** {problem_value}\n\n"
+        f"**Outcome:** {outcome_value}\n\n"
+        "**Acceptance:**\n\n"
+        f"{acceptance_body}\n\n"
+        f"{binding}\n\n"
+        "---\n"
+        f"Elephant story key: `{request.key.marker}`\n"
+        f"Elephant recap SHA-256: `{sha256(fields).hexdigest()}`"
+    )
+
+
 def _disposition_body(description: str, label: str, summary: str) -> str | None:
     marker = parse_story_marker(description)
     if marker is None:
@@ -384,6 +915,49 @@ def _disposition_body(description: str, label: str, summary: str) -> str | None:
 
 def _duplicate_authority() -> LinearDrift:
     return LinearDrift(DriftKind.DUPLICATE_AUTHORITY, "duplicate_authoritative_story_key")
+
+
+def _one_titled_attachment(issue: LinearIssue, title: str):
+    if issue.attachments is None:
+        raise ValueError("issue attachments are required for evidence read-back")
+    matches = tuple(item for item in issue.attachments if item.title == title)
+    if len(matches) > 1:
+        return _duplicate_authority()
+    return matches[0] if matches else None
+
+
+def _prepared_upload(
+    raw: object,
+) -> tuple[str, str, tuple[tuple[str, str], ...]]:
+    if not isinstance(raw, Mapping):
+        raise TypeError("prepared upload: expected mapping")
+    asset_url = raw.get("assetUrl")
+    request = raw.get("uploadRequest")
+    if not isinstance(asset_url, str) or not asset_url.strip() or not isinstance(request, Mapping):
+        raise ValueError("prepared upload: expected asset and request")
+    upload_url = request.get("url")
+    headers = request.get("headers")
+    if not isinstance(upload_url, str) or not upload_url.strip() or not isinstance(headers, Mapping):
+        raise ValueError("prepared upload: expected URL and headers")
+    header_values = tuple(headers.items())
+    if not header_values or not all(
+        isinstance(name, str) and name and isinstance(value, str) and value
+        for name, value in header_values
+    ):
+        raise ValueError("prepared upload: expected signed string headers")
+    return asset_url, upload_url, header_values
+
+
+def _delivery_comment(record: DeliveryRecord, marker: str) -> str:
+    return (
+        "## Elephant Delivery Evidence\n\n"
+        f"**Branch:** `{record.branch}`\n\n"
+        f"**Pull request:** {record.pull_request_url}\n\n"
+        f"**Merge commit:** `{record.merge_commit}`\n\n"
+        f"**Verification SHA-256:** `{record.verification_sha256}`\n\n"
+        "---\n"
+        f"{marker}"
+    )
 
 
 def _has_relation(issue: LinearIssue, field: str, target_id: str) -> bool:

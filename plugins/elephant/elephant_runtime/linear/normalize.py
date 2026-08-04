@@ -175,6 +175,9 @@ def normalize_diff(raw: object) -> LinearDiff:
     return LinearDiff(
         id=_string("diff.id", value.get("id")),
         url=_string("diff.url", value.get("url")),
+        issue_identifier=_optional_string(
+            "diff.issueIdentifier", value.get("issueIdentifier")
+        ),
     )
 
 
