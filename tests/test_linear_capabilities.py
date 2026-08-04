@@ -20,6 +20,7 @@ from elephant_runtime.linear import (
     ContractBinding,
     DeliveryEvidence,
     LinearCapabilityInventory,
+    LinearCapabilityPreflight,
     LinearProviderDiagnostic,
     LinearProviderError,
     LinearTool,
@@ -217,8 +218,50 @@ class LinearValueContractTests(unittest.TestCase):
                 verified_prior_receipts=(("upload_url", "https://example.invalid/signed"),),
             )
 
+    def test_error_rejects_secret_content_even_under_benign_receipt_names_or_operation_key(self):
+        secrets = (
+            "token=super-secret",
+            "Bearer super-secret",
+            "data:image/png;base64,QUJDRA==",
+        )
+        for secret in secrets:
+            with self.subTest(secret=secret):
+                with self.assertRaisesRegex(ValueError, "safe") as receipt_error:
+                    LinearProviderError(
+                        capability="write_checkpoint",
+                        tool=LinearTool.CREATE_ATTACHMENT_FROM_UPLOAD,
+                        diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
+                        operation_key="checkpoint.story-1",
+                        verified_prior_receipts=(("receipt_id", secret),),
+                    )
+                self.assertNotIn(secret, str(receipt_error.exception))
+                with self.assertRaisesRegex(ValueError, "safe") as operation_error:
+                    LinearProviderError(
+                        capability="write_checkpoint",
+                        tool=LinearTool.CREATE_ATTACHMENT_FROM_UPLOAD,
+                        diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
+                        operation_key=secret,
+                    )
+                self.assertNotIn(secret, str(operation_error.exception))
+
 
 class LinearCapabilityInventoryTests(unittest.TestCase):
+    def test_preflight_freezes_caller_diagnostics_and_validates_its_public_fields(self):
+        diagnostic = LinearProviderDiagnostic(
+            capability="create_story",
+            code=DiagnosticCode.PERMISSION_MISSING,
+            blocking=True,
+        )
+        supplied = [diagnostic]
+        preflight = LinearCapabilityPreflight(ready=False, diagnostics=supplied)
+        supplied.append(diagnostic)
+
+        self.assertEqual(preflight.diagnostics, (diagnostic,))
+        with self.assertRaisesRegex(TypeError, "ready"):
+            LinearCapabilityPreflight(ready="false", diagnostics=())
+        with self.assertRaisesRegex(TypeError, "diagnostics"):
+            LinearCapabilityPreflight(ready=False, diagnostics=(object(),))
+
     def test_preflight_requires_every_mapped_tool_and_reports_the_first_missing_layer(self):
         all_tools = frozenset(tool.value for tool in LinearTool)
         inventory = LinearCapabilityInventory(

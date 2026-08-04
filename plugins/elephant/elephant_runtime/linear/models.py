@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from hashlib import sha256
 import json
+import re
 
 from elephant_runtime.workspace_core import (
     CheckpointPhase,
@@ -13,6 +14,7 @@ from elephant_runtime.workspace_core import (
     DriftKind,
     HumanStatus,
     ProductDisposition,
+    STORY_RUNTIME_CAPABILITIES,
 )
 
 
@@ -143,11 +145,22 @@ class StorySnapshot:
         _require_enum("checkpoint_phase", self.checkpoint_phase, CheckpointPhase)
 
 
+_SAFE_OPAQUE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+_SAFE_OPERATION_KEY = re.compile(r"[a-z0-9]+(?:[._:-][a-z0-9]+)+\Z")
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_SAFE_RECEIPT_NAMES = frozenset({
+    "receipt_id",
+    "issue_id",
+    "attachment_id",
+    "comment_id",
+    "observed_fingerprint",
+})
+
+
 def _safe_receipts(value: object) -> tuple[tuple[str, str], ...]:
     if not isinstance(value, tuple):
         raise TypeError("verified_prior_receipts: expected tuple")
     receipts: list[tuple[str, str]] = []
-    forbidden_key_parts = ("token", "url", "base64", "bytes", "payload", "content")
     for receipt in value:
         if (
             not isinstance(receipt, tuple)
@@ -156,11 +169,13 @@ def _safe_receipts(value: object) -> tuple[tuple[str, str], ...]:
         ):
             raise ValueError("verified_prior_receipts: expected safe receipt identifiers")
         name, identifier = receipt
-        if (
-            any(part in name.lower() for part in forbidden_key_parts)
-            or "://" in identifier
-            or len(identifier) > 512
-        ):
+        if name not in _SAFE_RECEIPT_NAMES:
+            raise ValueError("verified_prior_receipts: expected safe receipt identifiers")
+        if name == "observed_fingerprint":
+            is_safe = _SHA256.fullmatch(identifier) is not None
+        else:
+            is_safe = _SAFE_OPAQUE_IDENTIFIER.fullmatch(identifier) is not None
+        if not is_safe:
             raise ValueError("verified_prior_receipts: expected safe receipt identifiers")
         receipts.append((name, identifier))
     return tuple(receipts)
@@ -175,10 +190,15 @@ class LinearProviderError(Exception):
     verified_prior_receipts: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
-        _require_nonempty_string("capability", self.capability)
+        if self.capability not in STORY_RUNTIME_CAPABILITIES:
+            raise ValueError("capability: expected known story capability")
         _require_enum("tool", self.tool, LinearTool)
         _require_enum("diagnostic_code", self.diagnostic_code, DiagnosticCode)
-        _require_nonempty_string("operation_key", self.operation_key)
+        if (
+            not isinstance(self.operation_key, str)
+            or _SAFE_OPERATION_KEY.fullmatch(self.operation_key) is None
+        ):
+            raise ValueError("operation_key: expected safe operation key")
         object.__setattr__(
             self, "verified_prior_receipts", _safe_receipts(self.verified_prior_receipts)
         )

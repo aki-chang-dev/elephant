@@ -135,6 +135,16 @@ class LinearCapabilityPreflight:
     ready: bool
     diagnostics: tuple[LinearProviderDiagnostic, ...]
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.ready, bool):
+            raise TypeError("ready: expected bool")
+        if not isinstance(self.diagnostics, (list, tuple)) or not all(
+            isinstance(diagnostic, LinearProviderDiagnostic)
+            for diagnostic in self.diagnostics
+        ):
+            raise TypeError("diagnostics: expected LinearProviderDiagnostic sequence")
+        object.__setattr__(self, "diagnostics", tuple(self.diagnostics))
+
 
 def _first_missing_code(
     inventory: LinearCapabilityInventory,
