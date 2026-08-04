@@ -1,0 +1,21 @@
+docs/superpowers/plans/2026-08-04-linear-provider.md
+  s_7c6e11e61c7ee5::t_185f8e9eff2750 1-95,100-487,489-503,505-524
+  s_7c6e11e61c7ee5::t_21676af7c46bf1 96-99,488,504
+  s_7c6e11e61c7ee5::t_1c6dafe471a9d6 525-528
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "b8550bda5399d27640bc219eade07d3dd87150d3",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
