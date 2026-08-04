@@ -145,6 +145,206 @@ class StorySnapshot:
         _require_enum("checkpoint_phase", self.checkpoint_phase, CheckpointPhase)
 
 
+def _require_optional_nonempty_string(name: str, value: object) -> str | None:
+    if value is None:
+        return None
+    return _require_nonempty_string(name, value)
+
+
+def _require_tuple_of_strings(name: str, value: object) -> tuple[str, ...]:
+    if not isinstance(value, tuple) or not all(
+        isinstance(item, str) and item.strip() for item in value
+    ):
+        raise TypeError(f"{name}: expected tuple of nonblank strings")
+    return value
+
+
+@dataclass(frozen=True)
+class LinearTeam:
+    id: str
+    name: str
+    key: str
+    member_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _require_nonempty_string("id", self.id)
+        _require_nonempty_string("name", self.name)
+        _require_nonempty_string("key", self.key)
+        _require_tuple_of_strings("member_ids", self.member_ids)
+        if len(set(self.member_ids)) != len(self.member_ids):
+            raise ValueError("member_ids: duplicate opaque ID")
+
+
+@dataclass(frozen=True)
+class LinearStatus:
+    id: str
+    name: str
+    type: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty_string("id", self.id)
+        _require_nonempty_string("name", self.name)
+        _require_nonempty_string("type", self.type)
+
+
+@dataclass(frozen=True)
+class LinearLabel:
+    id: str
+    name: str
+    group_id: str | None
+    group_name: str | None
+
+    def __post_init__(self) -> None:
+        _require_nonempty_string("id", self.id)
+        _require_nonempty_string("name", self.name)
+        _require_optional_nonempty_string("group_id", self.group_id)
+        _require_optional_nonempty_string("group_name", self.group_name)
+        if (self.group_id is None) != (self.group_name is None):
+            raise ValueError("label group: expected both ID and name or neither")
+
+
+@dataclass(frozen=True)
+class LinearAttachment:
+    id: str
+    url: str
+    title: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty_string("id", self.id)
+        _require_nonempty_string("url", self.url)
+        _require_nonempty_string("title", self.title)
+
+
+@dataclass(frozen=True)
+class LinearComment:
+    id: str
+    body: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty_string("id", self.id)
+        if not isinstance(self.body, str):
+            raise TypeError("body: expected string")
+
+
+@dataclass(frozen=True)
+class LinearDiff:
+    id: str
+    url: str
+    issue_id: str | None = None
+    issue_identifier: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty_string("id", self.id)
+        _require_nonempty_string("url", self.url)
+        _require_optional_nonempty_string("issue_id", self.issue_id)
+        _require_optional_nonempty_string("issue_identifier", self.issue_identifier)
+        if (self.issue_id is None) != (self.issue_identifier is None):
+            raise ValueError("diff issue: expected both ID and identifier or neither")
+
+
+@dataclass(frozen=True)
+class LinearRelation:
+    id: str
+    type: str
+    issue_id: str
+    issue_identifier: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty_string("id", self.id)
+        _require_nonempty_string("type", self.type)
+        _require_nonempty_string("issue_id", self.issue_id)
+        _require_nonempty_string("issue_identifier", self.issue_identifier)
+
+
+@dataclass(frozen=True)
+class LinearIssue:
+    id: str
+    identifier: str
+    title: str
+    description: str
+    team_id: str
+    state: LinearStatus
+    labels: tuple[LinearLabel, ...]
+    attachments: tuple[LinearAttachment, ...]
+    state_history: tuple[tuple[str, str], ...]
+    relations: tuple[LinearRelation, ...] | None
+    priority: int | None
+
+    def __post_init__(self) -> None:
+        for field_name in ("id", "identifier", "title", "team_id"):
+            _require_nonempty_string(field_name, getattr(self, field_name))
+        if not isinstance(self.description, str):
+            raise TypeError("description: expected string")
+        if not isinstance(self.state, LinearStatus):
+            raise TypeError("state: expected LinearStatus")
+        if not isinstance(self.labels, tuple) or not all(
+            isinstance(label, LinearLabel) for label in self.labels
+        ):
+            raise TypeError("labels: expected LinearLabel tuple")
+        if not isinstance(self.attachments, tuple) or not all(
+            isinstance(attachment, LinearAttachment) for attachment in self.attachments
+        ):
+            raise TypeError("attachments: expected LinearAttachment tuple")
+        if not isinstance(self.state_history, tuple) or not all(
+            isinstance(entry, tuple)
+            and len(entry) == 2
+            and all(isinstance(value, str) and value.strip() for value in entry)
+            for entry in self.state_history
+        ):
+            raise TypeError("state_history: expected (entry ID, state ID) tuple")
+        if self.relations is not None and (
+            not isinstance(self.relations, tuple)
+            or not all(isinstance(relation, LinearRelation) for relation in self.relations)
+        ):
+            raise TypeError("relations: expected LinearRelation tuple or None")
+        if self.priority is not None and (
+            not isinstance(self.priority, int) or isinstance(self.priority, bool)
+        ):
+            raise TypeError("priority: expected int or None")
+        for name, values in (
+            ("labels", self.labels),
+            ("attachments", self.attachments),
+            ("state_history", tuple(entry[0] for entry in self.state_history)),
+            ("relations", self.relations or ()),
+        ):
+            ids = tuple(value.id if hasattr(value, "id") else value for value in values)
+            if len(set(ids)) != len(ids):
+                raise ValueError(f"{name}: duplicate opaque ID")
+
+
+@dataclass(frozen=True)
+class PageCursor:
+    values: tuple[object, ...]
+    next_cursor: str | None
+
+    def __post_init__(self) -> None:
+        public_values = (
+            LinearTeam,
+            LinearStatus,
+            LinearLabel,
+            LinearIssue,
+            LinearRelation,
+            LinearAttachment,
+            LinearComment,
+            LinearDiff,
+        )
+        if not isinstance(self.values, tuple) or not all(
+            isinstance(value, public_values) for value in self.values
+        ):
+            raise TypeError("values: expected normalized value tuple")
+        _require_optional_nonempty_string("next_cursor", self.next_cursor)
+
+
+@dataclass(frozen=True)
+class LinearDrift:
+    kind: DriftKind
+    observation: str
+
+    def __post_init__(self) -> None:
+        _require_enum("kind", self.kind, DriftKind)
+        _require_nonempty_string("observation", self.observation)
+
+
 _CANONICAL_LINEAR_UUID = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z"
 )
