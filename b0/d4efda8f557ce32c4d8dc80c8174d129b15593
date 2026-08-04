@@ -1,0 +1,21 @@
+plugins/elephant/elephant_runtime/linear/provider.py
+  s_7c6e11e61c7ee5::t_829e32df24c3b9 822-825
+tests/test_linear_checkpoint.py
+  s_7c6e11e61c7ee5::t_ab703769c65d46 797-821
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "b0d4efda8f557ce32c4d8dc80c8174d129b15593",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
