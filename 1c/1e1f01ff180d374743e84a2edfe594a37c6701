@@ -1,0 +1,61 @@
+tests/test_notion_schema.py
+  s_7c6e11e61c7ee5::t_16361625a906c4 256-259
+  s_7c6e11e61c7ee5::t_376aaf218b06cf 1-187,205-255,260-266
+  s_7c6e11e61c7ee5::t_5881dec4e5db88 188-204
+plugins/elephant/elephant_runtime/notion/__init__.py
+  s_7c6e11e61c7ee5::t_a19eda18dbffe0 50-51,94-95
+  s_7c6e11e61c7ee5::t_386d10ea93ce75 41-49,52,77-79,81-83,92-93
+  s_7c6e11e61c7ee5::t_7340504cb2ccfd 25-40,64-66,71,75-76,84-88,91,97-98
+tests/test_setup_models.py
+  s_7c6e11e61c7ee5::t_376aaf218b06cf 356
+plugins/elephant/elephant_runtime/workspace_setup/apply.py
+  s_7c6e11e61c7ee5::t_d8952d98b1a472 4,90-96,100-105,109,115,261-278
+.superpowers/sdd/2026-08-04-notion-providers/task-2-report.md
+  s_7c6e11e61c7ee5::t_acbdfc41a045c6 1-163
+plugins/elephant/references/workspace/provider-contracts.md
+  s_7c6e11e61c7ee5::t_3740d8b2fc4803 89-95
+scripts/validate-compatibility.py
+  s_7c6e11e61c7ee5::t_58e2c0538040ad 111,130-132
+plugins/elephant/elephant_runtime/workspace_setup/__init__.py
+  s_7c6e11e61c7ee5::t_d8952d98b1a472 48
+plugins/elephant/elephant_runtime/installed_smoke.py
+  s_7c6e11e61c7ee5::t_d8952d98b1a472 37,52
+tests/test_compatibility.py
+  s_7c6e11e61c7ee5::t_376aaf218b06cf 25
+tests/test_setup_apply.py
+  s_7c6e11e61c7ee5::t_376aaf218b06cf 15,231-232,1332-1349
+plugins/elephant/elephant_runtime/notion/schema.py
+  s_7c6e11e61c7ee5::t_c3dec7a3f27f31 91,232-237,290
+  s_7c6e11e61c7ee5::t_7340504cb2ccfd 1-90,92-231,238-289,291-376
+tests/test_notion_setup_adapter.py
+  s_7c6e11e61c7ee5::t_318db48f606995 105-106
+  s_7c6e11e61c7ee5::t_58e2c0538040ad 42-45,50,182,189,268-273
+  s_7c6e11e61c7ee5::t_59e62f2c003175 22,35,46-49,77,81-99,214-236
+  s_7c6e11e61c7ee5::t_376aaf218b06cf 1-21,23-34,36-41,51-76,78-80,100-104,107-181,183-188,190-194,199-213,237-267,274-279,325-394
+  s_7c6e11e61c7ee5::t_4134fa30d9cc48 195-198
+  s_7c6e11e61c7ee5::t_fb806452b6acd6 280-324
+plugins/elephant/elephant_runtime/notion/setup_adapter.py
+  s_7c6e11e61c7ee5::t_a19eda18dbffe0 110-114,116-119,186-222,281-297,299,305,309-313,384-388,395-408,410,416,434-447,450-455,504-551,553-558
+  s_7c6e11e61c7ee5::t_386d10ea93ce75 1-6,8-49,52-53,63-109,120-185,223-257,263-272,274-280,314-341,351-383,389-394,420-433,448-449,456-503,552,559-718
+  s_7c6e11e61c7ee5::t_949067329ea5c1 7,50-51,54-62,258-262
+  s_7c6e11e61c7ee5::t_c3dec7a3f27f31 115,298,300-304,306-308,409,411-415,417-419
+  s_7c6e11e61c7ee5::t_58e2c0538040ad 273,342-350
+plugins/elephant/references/workspace/setup-workspace.md
+  s_7c6e11e61c7ee5::t_3740d8b2fc4803 13-16,199-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "1c1e1f01ff180d374743e84a2edfe594a37c6701",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
