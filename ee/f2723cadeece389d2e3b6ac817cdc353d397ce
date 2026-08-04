@@ -1,0 +1,40 @@
+plugins/elephant/elephant_runtime/notion/models.py
+  s_7c6e11e61c7ee5::t_86493bfb90b982 58-72,82
+  s_7c6e11e61c7ee5::t_393afccefffd37 5
+  s_7c6e11e61c7ee5::t_482037c8bb2189 1-4,6-18,26-57,73-81,83-158
+  s_7c6e11e61c7ee5::t_c34a030838452b 19-25
+tests/test_notion_normalize.py
+  s_7c6e11e61c7ee5::t_e1f71fc8b3db0a 33
+  s_7c6e11e61c7ee5::t_94f53e1e1b1f81 1-32,34-78
+plugins/elephant/elephant_runtime/notion/connector.py
+  s_7c6e11e61c7ee5::t_482037c8bb2189 1-16
+plugins/elephant/elephant_runtime/notion/capabilities.py
+  s_7c6e11e61c7ee5::t_482037c8bb2189 1-175
+tests/test_notion_capabilities.py
+  s_7c6e11e61c7ee5::t_94f53e1e1b1f81 1-37,45-55,57-61,63-64,66-67,69-71,73-79,81-86,88-90,92-93,95-96,98-110,112-113,115-125,127,130-132,134-141,143-145,147-173,187-269
+  s_7c6e11e61c7ee5::t_0f1d8af0da4add 38-44,56,62,65,68,72,80,87,91,94,97,111,114,126,128-129,133,142,146
+  s_7c6e11e61c7ee5::t_9e5d4693d2bfad 174-186
+plugins/elephant/elephant_runtime/notion/__init__.py
+  s_7c6e11e61c7ee5::t_482037c8bb2189 1-47
+.superpowers/sdd/2026-08-04-notion-providers/task-1-report.md
+  s_7c6e11e61c7ee5::t_87f13cc5798d40 1-89
+plugins/elephant/elephant_runtime/notion/normalize.py
+  s_7c6e11e61c7ee5::t_30f75b7c5e249e 15-23,38
+  s_7c6e11e61c7ee5::t_482037c8bb2189 1-14,24-37,39-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "eef2723cadeece389d2e3b6ac817cdc353d397ce",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
