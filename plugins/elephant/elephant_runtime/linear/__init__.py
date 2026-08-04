@@ -31,6 +31,13 @@ from .checkpoint import (
     VerifiedContractBinding,
 )
 from .provider import LinearStoryProvider, LinearStoryProviderConfig
+from .sandbox import (
+    SANDBOX_TRANSCRIPT_SCHEMA,
+    LinearSandboxTranscript,
+    SandboxCall,
+    SandboxCheckpoint,
+    verify_linear_sandbox,
+)
 from .models import (
     ContractBinding,
     DeliveryEvidence,
@@ -94,6 +101,7 @@ __all__ = [
     "LinearProviderError",
     "LinearStoryProvider",
     "LinearStoryProviderConfig",
+    "LinearSandboxTranscript",
     "LinearTool",
     "LinearAttachment",
     "LinearAuthorityMissing",
@@ -110,6 +118,9 @@ __all__ = [
     "NATIVE_GITHUB_DIFF_CAPABILITY",
     "PRODUCT_KIND_LABELS_CAPABILITY",
     "SANDBOX_CLEANUP_CAPABILITY",
+    "SANDBOX_TRANSCRIPT_SCHEMA",
+    "SandboxCall",
+    "SandboxCheckpoint",
     "ProductRecap",
     "PageCursor",
     "READ_ONLY_DISCOVERY_TOOLS",
@@ -123,6 +134,7 @@ __all__ = [
     "WORKSPACE_LOCATOR_CAPABILITY",
     "VerifiedContractBinding",
     "preflight_story_capabilities",
+    "verify_linear_sandbox",
     "classify_drift",
     "normalize_attachment",
     "normalize_comment",
