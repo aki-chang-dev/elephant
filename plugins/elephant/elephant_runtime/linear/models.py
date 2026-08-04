@@ -254,11 +254,13 @@ class LinearAttachment:
 class LinearComment:
     id: str
     body: str
+    quoted_text: str | None = None
 
     def __post_init__(self) -> None:
         _require_nonempty_string("id", self.id)
         if not isinstance(self.body, str):
             raise TypeError("body: expected string")
+        _require_optional_nonempty_string("quoted_text", self.quoted_text)
 
 
 @dataclass(frozen=True)
@@ -343,6 +345,7 @@ class LinearIssue:
     status_id: str | None = None
     project_id: str | None = None
     parent_id: str | None = None
+    identifier: str | None = None
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -355,6 +358,7 @@ class LinearIssue:
         _require_optional_nonempty_string("status_id", self.status_id)
         _require_optional_nonempty_string("project_id", self.project_id)
         _require_optional_nonempty_string("parent_id", self.parent_id)
+        _require_optional_nonempty_string("identifier", self.identifier)
         _require_tuple_of_strings("labels", self.labels)
         if len(set(self.labels)) != len(self.labels):
             raise ValueError("labels: duplicate name")
@@ -490,7 +494,7 @@ class LinearProviderError(Exception):
     verified_prior_receipts: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
-        if self.capability not in STORY_RUNTIME_CAPABILITIES:
+        if self.capability not in STORY_RUNTIME_CAPABILITIES | {"native_github_diff"}:
             raise ValueError("capability: expected known story capability")
         _require_enum("tool", self.tool, LinearTool)
         _require_enum("diagnostic_code", self.diagnostic_code, DiagnosticCode)

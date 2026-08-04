@@ -202,3 +202,70 @@ class HostRawByteUploader(Protocol):
         headers: tuple[tuple[str, str], ...],
         data: bytes,
     ) -> None: ...
+
+
+class AttachmentContentReader(Protocol):
+    """Host adapter for decoding an opaque connector attachment response."""
+
+    def read(self, response: object, *, attachment_id: str) -> bytes: ...
+
+
+@dataclass(frozen=True)
+class VerifiedContractBinding:
+    binding: ContractBinding
+    url: str
+    issue_id: str
+    attachment_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.binding, ContractBinding):
+            raise TypeError("binding: expected ContractBinding")
+        for name in ("url", "issue_id", "attachment_id"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name}: expected nonblank string")
+        if not self.url.startswith("https://"):
+            raise ValueError("url: expected HTTPS URL")
+
+
+@dataclass(frozen=True)
+class LinearEvidenceReplay:
+    """Caller-persistable prior state for unresolved append-only writes."""
+
+    story_key: str
+    operation: str
+    prior_comment_ids: tuple[str, ...] = ()
+    comment_create_pending: bool = False
+    pending_comment_id: str | None = None
+    prior_attachment_ids: tuple[str, ...] = ()
+    pending_links: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        if _STORY_KEY.fullmatch(self.story_key) is None:
+            raise ValueError("story_key: expected exact Elephant story marker")
+        if self.operation not in {"bind_product_contract", "attach_delivery_evidence"}:
+            raise ValueError("operation: expected evidence capability")
+        for name in ("prior_comment_ids", "prior_attachment_ids"):
+            values = getattr(self, name)
+            if not isinstance(values, tuple) or not all(
+                isinstance(value, str) and value.strip() for value in values
+            ):
+                raise TypeError(f"{name}: expected nonblank string tuple")
+            if len(set(values)) != len(values):
+                raise ValueError(f"{name}: duplicate identifier")
+        _optional_nonblank("pending_comment_id", self.pending_comment_id)
+        if not isinstance(self.comment_create_pending, bool):
+            raise TypeError("comment_create_pending: expected bool")
+        if self.pending_comment_id is not None and not self.comment_create_pending:
+            raise ValueError("pending_comment_id: requires pending create")
+        if not isinstance(self.pending_links, tuple) or not all(
+            isinstance(link, tuple)
+            and len(link) == 2
+            and all(isinstance(value, str) and value.strip() for value in link)
+            for link in self.pending_links
+        ):
+            raise TypeError("pending_links: expected (title, URL) tuples")
+
+    @classmethod
+    def initial(cls, story_key: str, operation: str) -> LinearEvidenceReplay:
+        return cls(story_key=story_key, operation=operation)

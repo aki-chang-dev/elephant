@@ -19,11 +19,14 @@ from .capabilities import (
 )
 from .connector import LinearConnector
 from .checkpoint import (
+    AttachmentContentReader,
     CHECKPOINT_SCHEMA,
     Checkpoint,
     CheckpointDelivery,
     DeliveryRecord,
     HostRawByteUploader,
+    LinearEvidenceReplay,
+    VerifiedContractBinding,
 )
 from .provider import LinearStoryProvider, LinearStoryProviderConfig
 from .models import (
@@ -70,6 +73,7 @@ from .normalize import (
 
 __all__ = [
     "ADMIN_CAPABILITY_TOOLS",
+    "AttachmentContentReader",
     "CHECKPOINT_UPLOAD_CAPABILITY",
     "CHECKPOINT_SCHEMA",
     "Checkpoint",
@@ -79,6 +83,7 @@ __all__ = [
     "DeliveryRecord",
     "HOST_RAW_SIGNED_PUT",
     "HostRawByteUploader",
+    "LinearEvidenceReplay",
     "LinearCapabilityInventory",
     "LinearCapabilityPreflight",
     "LinearConnector",
@@ -112,6 +117,7 @@ __all__ = [
     "TEAM_CREATION_CAPABILITY",
     "WORKFLOW_STATUS_CREATION_CAPABILITY",
     "WORKSPACE_LOCATOR_CAPABILITY",
+    "VerifiedContractBinding",
     "preflight_story_capabilities",
     "classify_drift",
     "normalize_attachment",

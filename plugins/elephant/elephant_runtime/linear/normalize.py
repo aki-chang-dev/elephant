@@ -163,7 +163,11 @@ def normalize_comment(raw: object) -> LinearComment:
     body = value.get("body")
     if not isinstance(body, str):
         raise TypeError("comment.body: expected string")
-    return LinearComment(id=_string("comment.id", value.get("id")), body=body)
+    return LinearComment(
+        id=_string("comment.id", value.get("id")),
+        body=body,
+        quoted_text=_optional_string("comment.quotedText", value.get("quotedText")),
+    )
 
 
 def normalize_comments(raw: object, *, seen_cursors: tuple[str, ...] = ()) -> PageCursor:
@@ -298,6 +302,7 @@ def normalize_issue(raw: object, *, include_relations: bool = False) -> LinearIs
         status_id=status_id,
         project_id=_optional_string("issue.projectId", value.get("projectId")),
         parent_id=_optional_string("issue.parentId", value.get("parentId")),
+        identifier=_optional_string("issue.identifier", value.get("identifier")),
     )
 
 
