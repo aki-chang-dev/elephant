@@ -37,11 +37,15 @@ Before the run, fill the ignored
 The report is a working log, not certification evidence. Keep it ignored and
 redact durable IDs before transferring only the permitted values below.
 
-## Tracked transcript template
+## Tracked certification evidence
 
-Write `.superpowers/sdd/2026-08-04-linear-provider/linear-sandbox-transcript.json`
-only after cleanup. It must have this exact closed shape (with no additional
-fields):
+The redacted [sandbox transcript](linear-provider-sandbox.json) was captured
+after a completed host run. It records marker
+`elephant-sandbox/e3232c89-f155-4439-b5be-3c820f4c9b7e`, the retained issue as
+`redacted:issue-1`, and a checkpoint attachment as
+`redacted:attachment-1`. The checkpoint SHA-256 is
+`2cda18721598e5826f1d0a7d687913168597c49aa8dbe83aecc4d7a8183f63e0` at 454
+bytes. Its closed schema has no additional fields:
 
 ```json
 {
@@ -71,23 +75,22 @@ read-back, restored relation removal/read-back, and final cancellation.
 
 ## Durable certification record
 
-After the transcript passes, record only this redacted evidence in the task or
-review note:
+The completed run established the following durable, redacted evidence:
 
 | Evidence | Value to record |
 | --- | --- |
 | Capability inventory | Exact observed tool names, in order |
-| Sandbox identity | Redacted issue/attachment/comment IDs and marker suffix |
-| Semantic evidence | Product recap and contract-link fingerprints; label/status names; relation reciprocity/read-back result |
-| Checkpoint | SHA-256 and byte count, not bytes or upload material |
-| Delivery evidence | Create/read/update/delete result and zero-match absence |
-| GitHub evidence | Native diff result or exact configuration diagnostic |
-| Cleanup | Restored anchors; no owned relations/comments/checkpoint attachments; final cleaned Canceled issue |
+| Sandbox identity | `redacted:issue-1`, `redacted:attachment-1`, `redacted:comment-1`; suffix `3c820f4c9b7e` |
+| Semantic evidence | Product recap and contract-link were written/read back; exact label replacement/read-back and parent/relation add/read/remove completed |
+| Checkpoint | `2cda18721598e5826f1d0a7d687913168597c49aa8dbe83aecc4d7a8183f63e0`, 454 bytes |
+| Delivery evidence | Comment create/read/update/delete and zero-match absence completed |
+| GitHub evidence | Exact `configuration_missing` native-diff diagnostic |
+| Cleanup | Both anchor relations restored; no owned relations/comments/checkpoint attachments; labels `[]`; parent `null`; final issue Canceled and titled `[Elephant provider certification — cleaned] 3c820f4c9b7e` |
 | Validator | `Linear provider sandbox certification passed.` |
 
 Validate the tracked JSON locally without network access:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate-linear-provider.py \
-  .superpowers/sdd/2026-08-04-linear-provider/linear-sandbox-transcript.json
+  docs/testing/linear-provider-sandbox.json
 ```

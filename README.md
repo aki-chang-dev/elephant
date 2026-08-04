@@ -159,12 +159,12 @@ and the Phase 1/2 implementation plans are present. Phase 2 packages the develop
 [`elephant:setup-workspace`](plugins/elephant/skills/setup-workspace/SKILL.md) skill and its
 canonical [setup protocol](plugins/elephant/references/workspace/setup-workspace.md). Its
 provider-neutral orchestration is fixture-certified with fake adapters. The Phase 3 Linear story
-provider is packaged with its [host protocol](plugins/elephant/references/providers/linear.md),
-but certification requires the tracked redacted sandbox transcript to pass its offline validator;
-the offline transcript model and [sandbox evidence template](docs/testing/linear-provider-sandbox.md)
-do not perform Linear calls. A host-executed certification is still required before claiming
-the provider is certified, and it does not certify a Linear setup-mutation adapter. Notion is
-not certified yet. v3
+provider is packaged with its [host protocol](plugins/elephant/references/providers/linear.md)
+and certified by the tracked redacted [sandbox transcript](docs/testing/linear-provider-sandbox.json),
+which passes its offline validator. The offline transcript model and
+[sandbox evidence](docs/testing/linear-provider-sandbox.md) do not perform Linear calls. This
+certifies the Linear story provider only; it does not certify a Linear setup-mutation adapter.
+Notion is not certified yet. v3
 `ship-story` remains inactive until Phase 5. The workspace contracts include the canonical
 [workspace registry](plugins/elephant/references/workspace/workspace-schema.md),
 [profile](plugins/elephant/references/workspace/profile-schema.md),
