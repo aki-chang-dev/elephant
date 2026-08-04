@@ -1,20 +1,23 @@
-"""Strict conversion of Linear connector evidence into immutable values."""
+"""Strict conversion of decoded Linear connector payloads into frozen evidence."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 import re
 
 from elephant_runtime.workspace_core import DriftKind
 
 from .models import (
     LinearAttachment,
+    LinearAuthorityMissing,
     LinearComment,
     LinearDiff,
     LinearDrift,
     LinearIssue,
     LinearLabel,
     LinearRelation,
+    LinearRelations,
+    LinearStateHistory,
     LinearStatus,
     LinearTeam,
     PageCursor,
@@ -61,20 +64,60 @@ def _unique_ids(name: str, values: tuple[object, ...]) -> None:
         raise ValueError(f"duplicate {name} opaque ID")
 
 
-def normalize_team(raw: object) -> LinearTeam:
+def _cursor(value: Mapping[str, object], *, seen_cursors: tuple[str, ...]) -> str | None:
+    has_next = value.get("hasNextPage")
+    if not isinstance(has_next, bool):
+        raise TypeError("hasNextPage: expected bool")
+    cursor = _optional_string("cursor", value.get("cursor"))
+    if has_next != (cursor is not None):
+        raise ValueError("cursor: must be present exactly when hasNextPage is true")
+    if not isinstance(seen_cursors, tuple) or not all(
+        isinstance(item, str) and item.strip() for item in seen_cursors
+    ):
+        raise TypeError("seen_cursors: expected tuple of nonblank strings")
+    if cursor is not None and cursor in seen_cursors:
+        raise ValueError("cursor loop")
+    return cursor
+
+
+def _collection(
+    raw: object,
+    *,
+    name: str,
+    normalizer: object,
+    seen_cursors: tuple[str, ...] = (),
+) -> PageCursor:
+    value = _mapping(name, raw)
+    normalizer_callable = normalizer
+    if not callable(normalizer_callable):
+        raise TypeError("normalizer: expected callable")
+    values = tuple(normalizer_callable(item) for item in _list(name, value.get(name)))
+    _unique_ids(name, values)
+    return PageCursor(values=values, next_cursor=_cursor(value, seen_cursors=seen_cursors))
+
+
+def normalize_team(raw: object, *, require_key: bool = False) -> LinearTeam:
     value = _mapping("team", raw)
-    members = _list("members", value.get("members", []))
-    member_ids: list[str] = []
-    for member in members:
-        member_ids.append(_string("member.id", _mapping("member", member).get("id")))
-    if len(set(member_ids)) != len(member_ids):
-        raise ValueError("duplicate member opaque ID")
+    key = _optional_string("team.key", value.get("key"))
+    if require_key and key is None:
+        raise ValueError("team.key: required for user membership")
     return LinearTeam(
         id=_string("team.id", value.get("id")),
         name=_string("team.name", value.get("name")),
-        key=_string("team.key", value.get("key")),
-        member_ids=tuple(member_ids),
+        key=key,
     )
+
+
+def normalize_teams(raw: object, *, seen_cursors: tuple[str, ...] = ()) -> PageCursor:
+    return _collection(raw, name="teams", normalizer=normalize_team, seen_cursors=seen_cursors)
+
+
+def normalize_user_teams(raw: object) -> tuple[LinearTeam, ...]:
+    value = _mapping("user", raw)
+    _string("user.id", value.get("id"))
+    teams = tuple(normalize_team(item, require_key=True) for item in _list("user.teams", value.get("teams")))
+    _unique_ids("user team", teams)
+    return teams
 
 
 def normalize_status(raw: object) -> LinearStatus:
@@ -86,21 +129,24 @@ def normalize_status(raw: object) -> LinearStatus:
     )
 
 
+def normalize_issue_statuses(raw: object) -> tuple[LinearStatus, ...]:
+    statuses = tuple(normalize_status(item) for item in _list("statuses", raw))
+    _unique_ids("status", statuses)
+    return statuses
+
+
 def normalize_label(raw: object) -> LinearLabel:
     value = _mapping("label", raw)
-    parent = value.get("parent")
-    if parent is None:
-        group_id = group_name = None
-    else:
-        parent_value = _mapping("label.parent", parent)
-        group_id = _string("label.parent.id", parent_value.get("id"))
-        group_name = _string("label.parent.name", parent_value.get("name"))
     return LinearLabel(
         id=_string("label.id", value.get("id")),
         name=_string("label.name", value.get("name")),
-        group_id=group_id,
-        group_name=group_name,
+        color=_optional_string("label.color", value.get("color")),
+        description=_optional_string("label.description", value.get("description")),
     )
+
+
+def normalize_issue_labels(raw: object, *, seen_cursors: tuple[str, ...] = ()) -> PageCursor:
+    return _collection(raw, name="labels", normalizer=normalize_label, seen_cursors=seen_cursors)
 
 
 def normalize_attachment(raw: object) -> LinearAttachment:
@@ -120,40 +166,24 @@ def normalize_comment(raw: object) -> LinearComment:
     return LinearComment(id=_string("comment.id", value.get("id")), body=body)
 
 
-def _issue_reference(name: str, raw: object) -> tuple[str | None, str | None]:
-    if raw is None:
-        return None, None
-    value = _mapping(name, raw)
-    return _string(f"{name}.id", value.get("id")), _string(
-        f"{name}.identifier", value.get("identifier")
-    )
+def normalize_comments(raw: object, *, seen_cursors: tuple[str, ...] = ()) -> PageCursor:
+    return _collection(raw, name="comments", normalizer=normalize_comment, seen_cursors=seen_cursors)
 
 
 def normalize_diff(raw: object) -> LinearDiff:
     value = _mapping("diff", raw)
-    issue_id, issue_identifier = _issue_reference("diff.issue", value.get("issue"))
     return LinearDiff(
         id=_string("diff.id", value.get("id")),
         url=_string("diff.url", value.get("url")),
-        issue_id=issue_id,
-        issue_identifier=issue_identifier,
     )
 
 
-def _normalize_relation(raw: object) -> LinearRelation:
-    value = _mapping("relation", raw)
-    issue_id, issue_identifier = _issue_reference("relation.issue", value.get("issue"))
-    assert issue_id is not None and issue_identifier is not None
-    return LinearRelation(
-        id=_string("relation.id", value.get("id")),
-        type=_string("relation.type", value.get("type")),
-        issue_id=issue_id,
-        issue_identifier=issue_identifier,
-    )
+def normalize_diffs(raw: object, *, seen_cursors: tuple[str, ...] = ()) -> PageCursor:
+    return _collection(raw, name="diffs", normalizer=normalize_diff, seen_cursors=seen_cursors)
 
 
 def parse_story_marker(description: object) -> tuple[str, str] | None:
-    """Return the unique exact marker footer, rejecting partial or repeated authority."""
+    """Return the one exact footer authority; reject malformed or repeated footers."""
     if not isinstance(description, str):
         raise TypeError("description: expected string")
     matches = tuple(_STORY_FOOTER.finditer(description))
@@ -164,104 +194,134 @@ def parse_story_marker(description: object) -> tuple[str, str] | None:
     if len(matches) != 1:
         raise ValueError("multiple Elephant story marker footers")
     match = matches[0]
-    trailing = description[match.end():]
-    if trailing not in {"", "\n"}:
+    if description[match.end():] not in {"", "\n"} or len(tuple(_MARKER_LINE.finditer(description))) != 2:
         raise ValueError("malformed Elephant story marker footer")
-    if len(tuple(_MARKER_LINE.finditer(description))) != 2:
-        raise ValueError("malformed Elephant story marker footer")
-    story_key = match.group("story")
-    recap_digest = match.group("recap")
-    if _STORY_MARKER.fullmatch(story_key) is None or _SHA256.fullmatch(recap_digest) is None:
-        raise ValueError("malformed Elephant story marker footer")
-    return story_key, recap_digest
+    return match.group("story"), match.group("recap")
+
+
+def _normalize_priority(raw: object) -> tuple[int, str] | None:
+    if raw is None:
+        return None
+    value = _mapping("priority", raw)
+    priority = value.get("value")
+    if not isinstance(priority, int) or isinstance(priority, bool):
+        raise TypeError("priority.value: expected int")
+    return priority, _string("priority.name", value.get("name"))
+
+
+def _normalize_history(raw: object) -> LinearStateHistory:
+    value = _mapping("stateHistory item", raw)
+    return LinearStateHistory(
+        state=normalize_status(value.get("state")),
+        started_at=_string("stateHistory.startedAt", value.get("startedAt")),
+        ended_at=_optional_string("stateHistory.endedAt", value.get("endedAt")),
+    )
+
+
+def _relation_values(name: str, relation_type: str, raw: object) -> tuple[LinearRelation, ...]:
+    values = tuple(
+        LinearRelation(relation_type, _string(name, item)) for item in _list(name, raw)
+    )
+    if len({value.issue_id for value in values}) != len(values):
+        raise ValueError(f"{name}: duplicate opaque ID")
+    return values
+
+
+def _normalize_relations(raw: object) -> LinearRelations:
+    value = _mapping("relations", raw)
+    required = {"blocks", "blockedBy", "relatedTo", "duplicateOf"}
+    missing = required - set(value)
+    if missing:
+        raise ValueError(f"relations.{sorted(missing)[0]}: required")
+    return LinearRelations(
+        blocks=_relation_values("relations.blocks", "blocks", value["blocks"]),
+        blocked_by=_relation_values("relations.blockedBy", "blockedBy", value["blockedBy"]),
+        related_to=_relation_values("relations.relatedTo", "relatedTo", value["relatedTo"]),
+        duplicate_of=(
+            None
+            if value["duplicateOf"] is None
+            else LinearRelation(
+                "duplicateOf",
+                _string("relations.duplicateOf", value["duplicateOf"]),
+            )
+        ),
+    )
 
 
 def normalize_issue(raw: object, *, include_relations: bool = False) -> LinearIssue:
     value = _mapping("issue", raw)
-    team = _mapping("issue.team", value.get("team"))
-    labels = tuple(normalize_label(item) for item in _list("labels", value.get("labels", [])))
-    attachments = tuple(
-        normalize_attachment(item) for item in _list("attachments", value.get("attachments", []))
-    )
-    history: list[tuple[str, str]] = []
-    for entry in _list("stateHistory", value.get("stateHistory", [])):
-        entry_value = _mapping("stateHistory item", entry)
-        history.append(
-            (
-                _string("stateHistory.id", entry_value.get("id")),
-                normalize_status(entry_value.get("state")).id,
-            )
-        )
-    if len({entry_id for entry_id, _ in history}) != len(history):
-        raise ValueError("duplicate state history opaque ID")
-    if include_relations:
-        if "relations" not in value:
-            raise ValueError("relations: required when include_relations is true")
-        relations = tuple(
-            _normalize_relation(item) for item in _list("relations", value.get("relations"))
-        )
-        _unique_ids("relation", relations)
-    elif "relations" in value:
-        relations = tuple(_normalize_relation(item) for item in _list("relations", value["relations"]))
-        _unique_ids("relation", relations)
-    else:
-        relations = None
-    priority = value.get("priority")
-    if priority is not None and (not isinstance(priority, int) or isinstance(priority, bool)):
-        raise TypeError("priority: expected int or None")
-    description = value.get("description", "")
+    description = value.get("description")
     if not isinstance(description, str):
-        raise TypeError("description: expected string")
+        raise TypeError("issue.description: expected string")
     parse_story_marker(description)
-    _unique_ids("label", labels)
-    _unique_ids("attachment", attachments)
+    labels = tuple(_string("issue.labels", item) for item in _list("issue.labels", value.get("labels")))
+    if len(set(labels)) != len(labels):
+        raise ValueError("issue.labels: duplicate name")
+    attachments = None
+    if "attachments" in value:
+        attachments = tuple(normalize_attachment(item) for item in _list("issue.attachments", value["attachments"]))
+        _unique_ids("attachment", attachments)
+    state_history = None
+    if "stateHistory" in value:
+        state_history = tuple(_normalize_history(item) for item in _list("issue.stateHistory", value["stateHistory"]))
+    if include_relations and "relations" not in value:
+        raise ValueError("relations: required when include_relations is true")
+    relations = _normalize_relations(value["relations"]) if "relations" in value else None
     return LinearIssue(
         id=_string("issue.id", value.get("id")),
-        identifier=_string("issue.identifier", value.get("identifier")),
         title=_string("issue.title", value.get("title")),
         description=description,
-        team_id=_string("issue.team.id", team.get("id")),
-        state=normalize_status(value.get("state")),
+        team_id=_string("issue.teamId", value.get("teamId")),
+        team_name=_string("issue.team", value.get("team")),
+        status_name=_string("issue.status", value.get("status")),
+        status_type=_string("issue.statusType", value.get("statusType")),
         labels=labels,
+        priority=_normalize_priority(value.get("priority")),
+        url=_optional_string("issue.url", value.get("url")),
         attachments=attachments,
-        state_history=tuple(history),
+        state_history=state_history,
         relations=relations,
-        priority=priority,
     )
 
 
-def normalize_page(
-    raw: object,
-    normalize_value: Callable[[object], object],
-    *,
-    seen_cursors: tuple[str, ...] = (),
-) -> PageCursor:
-    value = _mapping("page", raw)
-    data = _list("data", value.get("data"))
-    page_info = _mapping("pageInfo", value.get("pageInfo"))
-    has_next = page_info.get("hasNextPage")
-    if not isinstance(has_next, bool):
-        raise TypeError("pageInfo.hasNextPage: expected bool")
-    next_cursor = _optional_string("pageInfo.endCursor", page_info.get("endCursor"))
-    if has_next != (next_cursor is not None):
-        raise ValueError("pageInfo: cursor does not match hasNextPage")
-    if next_cursor is not None:
-        if not isinstance(seen_cursors, tuple) or not all(
-            isinstance(cursor, str) and cursor.strip() for cursor in seen_cursors
-        ):
-            raise TypeError("seen_cursors: expected tuple of nonblank strings")
-        if next_cursor in seen_cursors:
-            raise ValueError("cursor loop")
-    values = tuple(normalize_value(item) for item in data)
-    _unique_ids("page", values)
-    marker_values = tuple(
-        parse_story_marker(item.description)
-        for item in values
-        if isinstance(item, LinearIssue) and parse_story_marker(item.description) is not None
+def normalize_issues(raw: object, *, seen_cursors: tuple[str, ...] = ()) -> PageCursor:
+    page = _collection(raw, name="issues", normalizer=normalize_issue, seen_cursors=seen_cursors)
+    story_keys = tuple(
+        marker[0]
+        for issue in page.values
+        if isinstance(issue, LinearIssue)
+        and (marker := parse_story_marker(issue.description)) is not None
     )
-    if len(set(marker_values)) != len(marker_values):
+    if len(set(story_keys)) != len(story_keys):
         raise ValueError("duplicate stable marker")
-    return PageCursor(values=values, next_cursor=next_cursor)
+    return page
+
+
+def _configured_label_names(
+    inventory: object,
+    group_label_ids: object,
+    expected_label_id: object,
+    *,
+    name: str,
+) -> tuple[frozenset[str], str | None]:
+    if not isinstance(inventory, tuple) or not all(isinstance(item, LinearLabel) for item in inventory):
+        raise TypeError("label_inventory: expected LinearLabel tuple")
+    if not isinstance(group_label_ids, frozenset) or not all(
+        isinstance(item, str) and item.strip() for item in group_label_ids
+    ):
+        raise TypeError(f"{name}_group_label_ids: expected frozenset of IDs")
+    if expected_label_id is not None and not isinstance(expected_label_id, str):
+        raise TypeError(f"expected_{name}_label_id: expected string or None")
+    by_id = {item.id: item.name for item in inventory}
+    if len(by_id) != len(inventory) or len(set(by_id.values())) != len(by_id):
+        raise ValueError("label_inventory: duplicate ID or name")
+    if not group_label_ids <= by_id.keys():
+        raise ValueError(f"{name}_group_label_ids: unknown label ID")
+    if expected_label_id is not None and expected_label_id not in group_label_ids:
+        raise ValueError(f"expected_{name}_label_id: not in configured group")
+    return frozenset(by_id[item] for item in group_label_ids), (
+        None if expected_label_id is None else by_id[expected_label_id]
+    )
 
 
 def classify_drift(
@@ -269,45 +329,61 @@ def classify_drift(
     *,
     expected_story_key: str | None = None,
     expected_team_id: str | None = None,
+    label_inventory: tuple[LinearLabel, ...] | None = None,
+    product_group_label_ids: frozenset[str] | None = None,
+    kind_group_label_ids: frozenset[str] | None = None,
     expected_product_label_id: str | None = None,
     expected_kind_label_id: str | None = None,
-    verified_status_ids: tuple[str, ...] = (),
+    verified_status_names: tuple[str, ...] = (),
     expected_recap_digest: str | None = None,
     checkpoint_verified: bool = True,
     reciprocal_link_verified: bool = True,
-) -> LinearDrift | None:
-    """Classify deterministic evidence drift using only existing workspace-core values."""
+) -> LinearAuthorityMissing | LinearDrift | None:
+    """Classify only deterministic, safe authority drift from normalized evidence."""
     if not isinstance(matches, tuple) or not all(isinstance(item, LinearIssue) for item in matches):
         raise TypeError("matches: expected LinearIssue tuple")
+    if expected_story_key is not None and _STORY_MARKER.fullmatch(expected_story_key) is None:
+        raise ValueError("expected_story_key: expected exact story marker")
     if not matches:
-        return LinearDrift(DriftKind.DUPLICATE_AUTHORITY, "missing_authoritative_story_key")
+        return LinearAuthorityMissing(expected_story_key)
     if len(matches) != 1:
         return LinearDrift(DriftKind.DUPLICATE_AUTHORITY, "duplicate_authoritative_story_key")
     issue = matches[0]
-    if expected_story_key is not None:
-        if _STORY_MARKER.fullmatch(expected_story_key) is None:
-            raise ValueError("expected_story_key: expected exact story marker")
-        parsed = parse_story_marker(issue.description)
-        if parsed is None or parsed[0] != expected_story_key:
-            return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "story_key")
+    parsed = parse_story_marker(issue.description)
+    if expected_story_key is not None and (parsed is None or parsed[0] != expected_story_key):
+        return LinearDrift(DriftKind.APPROVED_CONTRACT_CHANGED, "story_key")
     if expected_team_id is not None and issue.team_id != _string("expected_team_id", expected_team_id):
         return LinearDrift(DriftKind.PRODUCT_ASSIGNMENT_CHANGED, "team_id")
-    expected_labels = (expected_product_label_id, expected_kind_label_id)
-    for expected_label in expected_labels:
-        if expected_label is not None and _string("expected_label_id", expected_label) not in {
-            label.id for label in issue.labels
-        }:
-            return LinearDrift(DriftKind.PRODUCT_ASSIGNMENT_CHANGED, "label_id")
-    if not isinstance(verified_status_ids, tuple) or not all(
-        isinstance(status_id, str) and status_id.strip() for status_id in verified_status_ids
+    label_configuration = (
+        label_inventory,
+        product_group_label_ids,
+        kind_group_label_ids,
+        expected_kind_label_id,
+    )
+    if any(item is not None for item in label_configuration):
+        if any(item is None for item in label_configuration):
+            raise ValueError("label authority: complete inventory, groups, and kind label are required")
+        product_names, expected_product_name = _configured_label_names(
+            label_inventory, product_group_label_ids, expected_product_label_id, name="product"
+        )
+        kind_names, expected_kind_name = _configured_label_names(
+            label_inventory, kind_group_label_ids, expected_kind_label_id, name="kind"
+        )
+        assigned_product = frozenset(name for name in issue.labels if name in product_names)
+        assigned_kind = frozenset(name for name in issue.labels if name in kind_names)
+        if assigned_product != (frozenset() if expected_product_name is None else frozenset({expected_product_name})):
+            return LinearDrift(DriftKind.PRODUCT_ASSIGNMENT_CHANGED, "product_label_assignment")
+        if assigned_kind != frozenset({expected_kind_name}):
+            return LinearDrift(DriftKind.PRODUCT_ASSIGNMENT_CHANGED, "kind_label_assignment")
+    if not isinstance(verified_status_names, tuple) or not all(
+        isinstance(name, str) and name.strip() for name in verified_status_names
     ):
-        raise TypeError("verified_status_ids: expected tuple of nonblank strings")
-    if verified_status_ids and issue.state.id not in verified_status_ids:
-        return LinearDrift(DriftKind.HUMAN_STATUS_ADVANCED, "state_id")
+        raise TypeError("verified_status_names: expected tuple of nonblank strings")
+    if verified_status_names and issue.status_name not in verified_status_names:
+        return LinearDrift(DriftKind.HUMAN_STATUS_ADVANCED, "status_name")
     if expected_recap_digest is not None:
         if _SHA256.fullmatch(expected_recap_digest) is None:
             raise ValueError("expected_recap_digest: expected lowercase SHA-256")
-        parsed = parse_story_marker(issue.description)
         if parsed is None or parsed[1] != expected_recap_digest:
             return LinearDrift(DriftKind.STALE_RECAP, "recap_sha256")
     if not isinstance(checkpoint_verified, bool) or not isinstance(reciprocal_link_verified, bool):

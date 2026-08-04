@@ -228,6 +228,26 @@ class LinearValueContractTests(unittest.TestCase):
                 verified_prior_receipts=(("upload_url", "https://example.invalid/signed"),),
             )
 
+    def test_error_allows_only_the_closed_linear_issue_identifier_receipt_format(self):
+        error = LinearProviderError(
+            capability="read_story",
+            tool=LinearTool.GET_ISSUE,
+            diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
+            operation_key=ERROR_OPERATION_KEY,
+            verified_prior_receipts=(("issue_identifier", "MAI-2"),),
+        )
+        self.assertEqual(error.verified_prior_receipts, (("issue_identifier", "MAI-2"),))
+        for invalid in ("MAI-0", "mai-2", "MAI-two", "MAI-2/token=secret"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError, "safe receipt"):
+                    LinearProviderError(
+                        capability="read_story",
+                        tool=LinearTool.GET_ISSUE,
+                        diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
+                        operation_key=ERROR_OPERATION_KEY,
+                        verified_prior_receipts=(("issue_identifier", invalid),),
+                    )
+
     def test_error_rejects_secret_content_even_under_benign_receipt_names_or_operation_key(self):
         secrets = (
             "token=super-secret",
