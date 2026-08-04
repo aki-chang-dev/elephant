@@ -1,0 +1,19 @@
+docs/superpowers/plans/2026-08-04-notion-providers.md
+  s_7c6e11e61c7ee5::t_f42a49108381e4 24,138-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "fe5293c60a2864150e65a9f846661300122f1ec5",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
