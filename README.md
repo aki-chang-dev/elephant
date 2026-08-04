@@ -158,8 +158,11 @@ The [approved workspace design](docs/superpowers/specs/2026-08-03-external-works
 and the Phase 1/2 implementation plans are present. Phase 2 packages the development-only
 [`elephant:setup-workspace`](plugins/elephant/skills/setup-workspace/SKILL.md) skill and its
 canonical [setup protocol](plugins/elephant/references/workspace/setup-workspace.md). Its
-provider-neutral orchestration is fixture-certified with fake adapters; concrete Linear and
-Notion adapters are not certified yet. The workspace contracts include the canonical
+provider-neutral orchestration is fixture-certified with fake adapters. The Phase 3 Linear story
+provider is packaged with its [host protocol](plugins/elephant/references/providers/linear.md),
+but certification requires the tracked redacted sandbox transcript to pass its offline validator;
+it does not certify a Linear setup-mutation adapter. Notion is not certified yet. v3
+`ship-story` remains inactive until Phase 5. The workspace contracts include the canonical
 [workspace registry](plugins/elephant/references/workspace/workspace-schema.md),
 [profile](plugins/elephant/references/workspace/profile-schema.md),
 [provider](plugins/elephant/references/workspace/provider-contracts.md), and

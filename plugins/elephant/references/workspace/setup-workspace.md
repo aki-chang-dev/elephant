@@ -17,6 +17,20 @@ Until those phases, a setup selecting either real provider stops before all
 external and local writes. The active shipping runtime remains v2; v3 is not an
 active shipping path.
 
+### Linear discovery boundary (Phase 3)
+
+The Linear story-provider host protocol is packaged at
+[`../providers/linear.md`](../providers/linear.md). When Linear is selected,
+discovery must list/get teams, team statuses, labels, and issue evidence before
+proposing a binding. The verified workspace locator is distinct from a Linear
+team UUID and is never invented. Readable-but-missing required statuses or
+Product/Kind labels are `configuration_missing`; unavailable team/status
+administration is an actionable nonblocking
+`connector_capability_missing` handoff followed by exact read-back on resume.
+This does not certify a Linear `SetupAdapter`: any later setup mutation adapter
+must independently preserve this document's atomicity and disposable-cleanup
+contract.
+
 ## Authority chain
 
 `ConfirmedTopology` is the only semantic input to `build_setup_manifest()`.

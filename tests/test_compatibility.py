@@ -40,6 +40,28 @@ def load_validator():
 
 
 class CompatibilityValidatorTests(unittest.TestCase):
+    def test_linear_provider_packaging_assets_are_required(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT / "plugins/elephant", root / "plugins/elephant")
+            (root / "scripts").mkdir()
+            shutil.copy2(
+                ROOT / "scripts/validate-linear-provider.py",
+                root / "scripts/validate-linear-provider.py",
+            )
+            (root / "tests").mkdir()
+            shutil.copy2(
+                ROOT / "tests/test_linear_packaging.py",
+                root / "tests/test_linear_packaging.py",
+            )
+            (root / "plugins/elephant/references/providers/linear.md").unlink()
+            self.assertIn(
+                "missing Linear provider asset: "
+                "plugins/elephant/references/providers/linear.md",
+                validator.validate_repository(root),
+            )
+
     def test_product_first_skill_assets_exist(self):
         root = ROOT / "plugins/elephant/skills"
         required = (

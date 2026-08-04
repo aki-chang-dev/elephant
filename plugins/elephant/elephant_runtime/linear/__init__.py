@@ -18,6 +18,7 @@ from .capabilities import (
     preflight_story_capabilities,
 )
 from .connector import LinearConnector
+from .host import HostAttachmentContentReader
 from .checkpoint import (
     AttachmentContentReader,
     CHECKPOINT_SCHEMA,
@@ -83,6 +84,7 @@ __all__ = [
     "DeliveryRecord",
     "HOST_RAW_SIGNED_PUT",
     "HostRawByteUploader",
+    "HostAttachmentContentReader",
     "LinearEvidenceReplay",
     "LinearCapabilityInventory",
     "LinearCapabilityPreflight",

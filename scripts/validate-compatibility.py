@@ -56,6 +56,23 @@ REQUIRED_V3_SETUP_ASSETS = (
     "elephant_runtime/workspace_setup/__init__.py",
 )
 
+REQUIRED_LINEAR_PROVIDER_ASSETS = (
+    "elephant_runtime/linear/__init__.py",
+    "elephant_runtime/linear/host.py",
+    "references/providers/linear.md",
+)
+
+REQUIRED_LINEAR_CHECKOUT_ASSETS = (
+    "scripts/validate-linear-provider.py",
+    "tests/test_linear_packaging.py",
+)
+
+ACTIVE_V2_SKILLS = (
+    "shape-story/SKILL.md",
+    "author-technical-contract/SKILL.md",
+    "ship-story/SKILL.md",
+)
+
 REQUIRED_V3_CORE_EXPORTS = frozenset({
     "CONTRACT_RUNTIME_CAPABILITIES",
     "DELIVERY_RUNTIME_CAPABILITIES",
@@ -342,6 +359,22 @@ def _validate_v3_setup_assets(root: Path, errors: list[str]) -> None:
         path = plugin_root / relative
         if not path.is_file():
             errors.append(f"missing v3 setup asset: {path.relative_to(root)}")
+
+
+def _validate_linear_provider_assets(root: Path, errors: list[str]) -> None:
+    plugin_root = root / PLUGIN
+    for relative in REQUIRED_LINEAR_PROVIDER_ASSETS:
+        path = plugin_root / relative
+        if not path.is_file():
+            errors.append(f"missing Linear provider asset: {path.relative_to(root)}")
+    for relative in REQUIRED_LINEAR_CHECKOUT_ASSETS:
+        path = root / relative
+        if not path.is_file():
+            errors.append(f"missing Linear provider asset: {relative}")
+    for relative in ACTIVE_V2_SKILLS:
+        path = plugin_root / "skills" / relative
+        if path.is_file() and "elephant_runtime.linear" in path.read_text(encoding="utf-8"):
+            errors.append(f"active v2 skill imports Linear provider: {path.relative_to(root)}")
 
 
 def _load_v3_core_oracle(root: Path, errors: list[str]):
@@ -694,6 +727,7 @@ def validate_repository(root: Path) -> list[str]:
     _validate_v3_core_assets(root, errors)
     _validate_v3_core_oracle(root, errors)
     _validate_v3_setup_assets(root, errors)
+    _validate_linear_provider_assets(root, errors)
     _validate_v3_setup_oracle(root, errors)
     return errors
 
