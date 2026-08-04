@@ -118,27 +118,26 @@ class StoryCreateRequest:
     description: str
     team_id: str
     human_status: HumanStatus
-    story_kind: str | None = None
-    product_label_id: str | None = None
-    product_label_name: str | None = None
-    kind_label_id: str | None = None
-    kind_label_name: str | None = None
-    priority: int | None = None
-    project_id: str | None = None
-    parent_id: str | None = None
-    label_inventory: tuple[LinearLabel, ...] = ()
-    product_group_label_ids: frozenset[str] = frozenset()
-    kind_group_label_ids: frozenset[str] = frozenset()
+    story_kind: str
+    product_label_id: str | None
+    product_label_name: str | None
+    kind_label_id: str
+    kind_label_name: str
+    priority: int
+    project_id: str | None
+    parent_id: str | None
+    label_inventory: tuple[LinearLabel, ...]
+    product_group_label_ids: frozenset[str]
+    kind_group_label_ids: frozenset[str]
 
     def __post_init__(self) -> None:
         if not isinstance(self.key, StoryKey):
             raise TypeError("key: expected StoryKey")
         _require_nonempty_string("title", self.title)
-        if not isinstance(self.description, str):
-            raise TypeError("description: expected string")
+        _require_nonempty_string("description", self.description)
         _require_nonempty_string("team_id", self.team_id)
         _require_enum("human_status", self.human_status, HumanStatus)
-        if self.story_kind is not None and self.story_kind not in {
+        if self.story_kind not in {
             "product-facing",
             "engineering-only",
         }:
@@ -156,10 +155,8 @@ class StoryCreateRequest:
             raise ValueError("product label: ID and name must be paired")
         if (self.kind_label_id is None) != (self.kind_label_name is None):
             raise ValueError("kind label: ID and name must be paired")
-        if self.priority is not None and (
-            not isinstance(self.priority, int) or isinstance(self.priority, bool)
-        ):
-            raise TypeError("priority: expected int or None")
+        if not isinstance(self.priority, int) or isinstance(self.priority, bool):
+            raise TypeError("priority: expected int")
         if not isinstance(self.label_inventory, tuple) or not all(
             isinstance(item, LinearLabel) for item in self.label_inventory
         ):
@@ -341,6 +338,9 @@ class LinearIssue:
     attachments: tuple[LinearAttachment, ...] | None
     state_history: tuple[LinearStateHistory, ...] | None
     relations: LinearRelations | None
+    status_id: str | None = None
+    project_id: str | None = None
+    parent_id: str | None = None
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -350,6 +350,9 @@ class LinearIssue:
         if not isinstance(self.description, str):
             raise TypeError("description: expected string")
         _require_optional_nonempty_string("url", self.url)
+        _require_optional_nonempty_string("status_id", self.status_id)
+        _require_optional_nonempty_string("project_id", self.project_id)
+        _require_optional_nonempty_string("parent_id", self.parent_id)
         _require_tuple_of_strings("labels", self.labels)
         if len(set(self.labels)) != len(self.labels):
             raise ValueError("labels: duplicate name")

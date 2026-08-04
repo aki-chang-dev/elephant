@@ -21,10 +21,21 @@ from elephant_runtime.linear import (
 from elephant_runtime.workspace_core import HumanStatus, ProductDisposition
 
 
-def _payload(issue_id: str, *, description: str, labels: tuple[str, ...], status: str = "Backlog", status_type: str = "backlog", relations: dict[str, object] | None = None, parent_id: str | None = None) -> dict[str, object]:
+_STATES = {
+    "status-backlog": ("Backlog", "backlog"),
+    "status-shaping": ("Shaping", "unstarted"),
+    "status-ready": ("Ready", "unstarted"),
+    "status-progress": ("In Progress", "started"),
+    "status-done": ("Done", "completed"),
+    "status-canceled": ("Canceled", "canceled"),
+}
+
+
+def _payload(issue_id: str, *, description: str, labels: tuple[str, ...], title: str = "Lifecycle story", state_id: str = "status-backlog", relations: dict[str, object] | None = None, parent_id: str | None = None, project_id: str | None = None) -> dict[str, object]:
+    status, status_type = _STATES[state_id]
     return {
         "id": issue_id,
-        "title": "Lifecycle story",
+        "title": title,
         "description": description,
         "teamId": "team-1",
         "team": "Team",
@@ -33,6 +44,8 @@ def _payload(issue_id: str, *, description: str, labels: tuple[str, ...], status
         "labels": list(labels),
         "priority": {"value": 3, "name": "Medium"},
         "parentId": parent_id,
+        "projectId": project_id,
+        "stateHistory": [{"state": {"id": state_id, "name": status, "type": status_type}, "startedAt": "2026-08-04T00:00:00Z", "endedAt": None}],
         "relations": relations or {"blocks": [], "blockedBy": [], "relatedTo": [], "duplicateOf": None},
     }
 
@@ -45,11 +58,16 @@ class StrictFakeConnector:
         self.issues: dict[str, dict[str, object]] = {}
         self.next_id = 1
         self.fail_after_save = False
+        self.fail_next_get = False
+        self.list_pages: dict[str | None, dict[str, object]] = {}
+        self.after_success_save = None
 
     def call(self, tool: LinearTool, arguments: tuple[tuple[str, object], ...]) -> dict[str, object]:
         self.calls.append((tool, arguments))
         values = dict(arguments)
         if tool is LinearTool.LIST_ISSUES:
+            if self.list_pages:
+                return deepcopy(self.list_pages[values.get("cursor")])
             marker = values["query"]
             return {
                 "issues": [
@@ -67,40 +85,55 @@ class StrictFakeConnector:
                 self.issues[issue_id] = _payload(
                     issue_id,
                     description=values["description"],
+                    title=values["title"],
                     labels=tuple({
                         "product-tracker": "Tracker",
                         "kind-product": "product-facing",
                         "kind-engineering": "engineering-only",
                     }[label] for label in values["labels"]),
                     parent_id=values.get("parentId"),
+                    project_id=values.get("project"),
+                    state_id=values["state"],
                 )
             else:
                 issue = self.issues[issue_id]
                 if "description" in values:
                     issue["description"] = values["description"]
                 if "state" in values:
-                    name, kind = {
-                        "status-backlog": ("Backlog", "backlog"),
-                        "status-shaping": ("Shaping", "unstarted"),
-                        "status-ready": ("Ready", "unstarted"),
-                        "status-progress": ("In Progress", "started"),
-                        "status-done": ("Done", "completed"),
-                        "status-canceled": ("Canceled", "canceled"),
-                    }[values["state"]]
+                    name, kind = _STATES[values["state"]]
                     issue["status"] = name
                     issue["statusType"] = kind
+                    issue["stateHistory"][0]["state"] = {"id": values["state"], "name": name, "type": kind}
                 for field, relation in (("blockedBy", "blockedBy"), ("blocks", "blocks"), ("relatedTo", "relatedTo")):
                     if field in values:
-                        issue["relations"][relation].append(values[field])
+                        if not isinstance(values[field], tuple):
+                            raise TypeError(f"{field}: connector expects an immutable array")
+                        issue["relations"][relation].extend(values[field])
                         reciprocal = {"blockedBy": "blocks", "blocks": "blockedBy", "relatedTo": "relatedTo"}[relation]
-                        self.issues[values[field]]["relations"][reciprocal].append(issue_id)
+                        for target_id in values[field]:
+                            self.issues[target_id]["relations"][reciprocal].append(issue_id)
+                for field, relation in (("removeBlockedBy", "blockedBy"), ("removeBlocks", "blocks"), ("removeRelatedTo", "relatedTo")):
+                    if field in values:
+                        if not isinstance(values[field], tuple):
+                            raise TypeError(f"{field}: connector expects an immutable array")
+                        for target_id in values[field]:
+                            issue["relations"][relation].remove(target_id)
+                            reciprocal = {"removeBlockedBy": "blocks", "removeBlocks": "blockedBy", "removeRelatedTo": "relatedTo"}[field]
+                            self.issues[target_id]["relations"][reciprocal].remove(issue_id)
                 if "duplicateOf" in values:
                     issue["relations"]["duplicateOf"] = values["duplicateOf"]
             if self.fail_after_save:
                 self.fail_after_save = False
                 raise TimeoutError("connector timed out after mutating")
+            if self.after_success_save is not None:
+                callback = self.after_success_save
+                self.after_success_save = None
+                callback(issue_id)
             return {"id": issue_id}
         if tool is LinearTool.GET_ISSUE:
+            if self.fail_next_get:
+                self.fail_next_get = False
+                raise TimeoutError("connector timed out before read-back")
             return deepcopy(self.issues[values["id"]])
         if tool is LinearTool.LIST_ISSUE_STATUSES:
             return [
@@ -137,6 +170,8 @@ class LinearIssueLifecycleTests(unittest.TestCase):
                 label_inventory=labels,
                 product_group_label_ids=frozenset({"product-tracker"}),
                 kind_group_label_ids=frozenset({"kind-product", "kind-engineering"}),
+                product_facing_kind_label_id="kind-product",
+                engineering_only_kind_label_id="kind-engineering",
             ),
         )
         self.request = StoryCreateRequest(
@@ -151,6 +186,8 @@ class LinearIssueLifecycleTests(unittest.TestCase):
             kind_label_id="kind-product",
             kind_label_name="product-facing",
             priority=3,
+            project_id=None,
+            parent_id=None,
             label_inventory=labels,
             product_group_label_ids=frozenset({"product-tracker"}),
             kind_group_label_ids=frozenset({"kind-product", "kind-engineering"}),
@@ -162,24 +199,25 @@ class LinearIssueLifecycleTests(unittest.TestCase):
         self.assertEqual(issue.id, "ISS-1")
         self.assertEqual(
             tuple(tool for tool, _ in self.connector.calls),
-            (LinearTool.LIST_ISSUES, LinearTool.SAVE_ISSUE, LinearTool.LIST_ISSUES, LinearTool.GET_ISSUE),
+            (LinearTool.LIST_ISSUES, LinearTool.LIST_ISSUE_STATUSES, LinearTool.SAVE_ISSUE, LinearTool.GET_ISSUE, LinearTool.LIST_ISSUES),
         )
         self.assertEqual(
             self.connector.calls[0][1],
             (("team", "team-1"), ("query", self.request.key.marker)),
         )
         self.assertEqual(
-            self.connector.calls[1][1],
+            self.connector.calls[2][1],
             (
                 ("team", "team-1"),
                 ("title", "Lifecycle story"),
                 ("description", "A concise one-line recap.\n\n---\nElephant story key: `" + self.request.key.marker + "`\nElephant recap SHA-256: `bac8d12f4905766cc9fa8c18f83fcebaf1b5606075699e12f8b8904ef4be0148`"),
                 ("labels", ("product-tracker", "kind-product")),
                 ("priority", 3),
+                ("state", "status-backlog"),
             ),
         )
         self.assertEqual(
-            self.connector.calls[-1][1],
+            self.connector.calls[-2][1],
             (("id", "ISS-1"), ("includeRelations", True)),
         )
 
@@ -215,7 +253,7 @@ class LinearIssueLifecycleTests(unittest.TestCase):
         self.assertEqual(issue.id, "ISS-1")
         self.assertEqual(
             tuple(tool for tool, _ in self.connector.calls),
-            (LinearTool.LIST_ISSUES, LinearTool.SAVE_ISSUE, LinearTool.LIST_ISSUES, LinearTool.GET_ISSUE),
+            (LinearTool.LIST_ISSUES, LinearTool.LIST_ISSUE_STATUSES, LinearTool.SAVE_ISSUE, LinearTool.LIST_ISSUES, LinearTool.GET_ISSUE),
         )
 
     def test_status_reads_configured_status_evidence_before_one_verified_mutation(self) -> None:
@@ -283,7 +321,7 @@ class LinearIssueLifecycleTests(unittest.TestCase):
 
             self.assertEqual(
                 [arguments for tool, arguments in self.connector.calls if tool is LinearTool.SAVE_ISSUE],
-                [(("id", "ISS-1"), (relation, target_id))],
+                [(("id", "ISS-1"), (relation, target_id if relation == "duplicateOf" else (target_id,)))],
             )
             self.assertEqual(issue.id, "ISS-1")
 
@@ -296,9 +334,12 @@ class LinearIssueLifecycleTests(unittest.TestCase):
             team_id="team-1",
             human_status=HumanStatus.BACKLOG,
             story_kind="engineering-only",
+            product_label_id=None,
+            product_label_name=None,
             kind_label_id="kind-engineering",
             kind_label_name="engineering-only",
             priority=3,
+            project_id=None,
             parent_id=parent.id,
             label_inventory=self.request.label_inventory,
             product_group_label_ids=self.request.product_group_label_ids,
@@ -355,13 +396,120 @@ class LinearIssueLifecycleTests(unittest.TestCase):
         )
 
         self.assertEqual(deferred.status_name, "Backlog")
-        self.provider.update_human_status(replace(shaping_request, human_status=HumanStatus.BACKLOG), HumanStatus.SHAPING)
+        deferred_body = self.connector.issues["ISS-1"]["description"]
+        self.provider.update_human_status(replace(shaping_request, human_status=HumanStatus.BACKLOG), HumanStatus.SHAPING, expected_description=deferred_body)
         rejected = self.provider.apply_disposition(
             shaping_request,
             ProductDisposition.REJECTED,
             summary="Does not meet the product outcome.",
         )
         self.assertEqual(rejected.status_name, "Canceled")
+
+    def test_create_preflights_requested_state_then_reads_receipt_before_concurrent_lookup(self) -> None:
+        issue = self.provider.create_story(self.request)
+
+        self.assertEqual(issue.id, "ISS-1")
+        self.assertEqual(
+            tuple(tool for tool, _ in self.connector.calls),
+            (LinearTool.LIST_ISSUES, LinearTool.LIST_ISSUE_STATUSES, LinearTool.SAVE_ISSUE, LinearTool.GET_ISSUE, LinearTool.LIST_ISSUES),
+        )
+        self.assertIn(("state", "status-backlog"), self.connector.calls[2][1])
+
+    def test_paginated_lookup_finds_existing_marker_before_any_create(self) -> None:
+        existing = _payload("ISS-9", description=(
+            "A concise one-line recap.\n\n---\n"
+            f"Elephant story key: `{self.request.key.marker}`\n"
+            "Elephant recap SHA-256: `bac8d12f4905766cc9fa8c18f83fcebaf1b5606075699e12f8b8904ef4be0148`"
+        ), labels=("Tracker", "product-facing"))
+        self.connector.issues["ISS-9"] = existing
+        self.connector.list_pages = {
+            None: {"issues": [], "hasNextPage": True, "cursor": "next"},
+            "next": {"issues": [existing], "hasNextPage": False},
+        }
+
+        issue = self.provider.create_story(self.request)
+
+        self.assertEqual(issue.id, "ISS-9")
+        self.assertNotIn(LinearTool.SAVE_ISSUE, tuple(tool for tool, _ in self.connector.calls))
+        self.assertEqual(self.connector.calls[1][1], (("team", "team-1"), ("query", self.request.key.marker), ("cursor", "next")))
+
+    def test_create_receipt_read_back_then_stops_for_concurrent_duplicate(self) -> None:
+        def add_duplicate(issue_id: str) -> None:
+            duplicate = deepcopy(self.connector.issues[issue_id])
+            duplicate["id"] = "ISS-2"
+            self.connector.issues["ISS-2"] = duplicate
+
+        self.connector.after_success_save = add_duplicate
+
+        result = self.provider.create_story(self.request)
+
+        self.assertEqual(result.kind.value, "duplicate_authority")
+        self.assertEqual(
+            tuple(tool for tool, _ in self.connector.calls),
+            (LinearTool.LIST_ISSUES, LinearTool.LIST_ISSUE_STATUSES, LinearTool.SAVE_ISSUE, LinearTool.GET_ISSUE, LinearTool.LIST_ISSUES),
+        )
+
+    def test_relations_use_arrays_and_removal_is_verified_without_claiming_duplicate_inverse(self) -> None:
+        self.provider.create_story(self.request)
+        self.connector.issues["OTHER-1"] = _payload("OTHER-1", description="Other", labels=())
+        self.connector.calls.clear()
+
+        linked = self.provider.link_relation(self.request, "OTHER-1", "blockedBy")
+        self.connector.fail_after_save = True
+        removed = self.provider.remove_relation(self.request, "OTHER-1", "blockedBy")
+        duplicate = self.provider.link_relation(self.request, "OTHER-1", "duplicateOf")
+
+        saves = [arguments for tool, arguments in self.connector.calls if tool is LinearTool.SAVE_ISSUE]
+        self.assertIn((("id", "ISS-1"), ("blockedBy", ("OTHER-1",))), saves)
+        self.assertIn((("id", "ISS-1"), ("removeBlockedBy", ("OTHER-1",))), saves)
+        self.assertIsNone(removed.relations.blocked_by[0] if removed.relations.blocked_by else None)
+        self.assertEqual(duplicate.relations.duplicate_of.issue_id, "OTHER-1")
+
+    def test_reuse_stops_when_normalized_authoritative_fields_change(self) -> None:
+        changes = (
+            ("title", "Changed"),
+            ("priority", {"value": 1, "name": "Urgent"}),
+            ("projectId", "project-2"),
+            ("parentId", "parent-2"),
+            ("stateHistory", [{"state": {"id": "other-status", "name": "Backlog", "type": "backlog"}, "startedAt": "2026-08-04T00:00:00Z", "endedAt": None}]),
+        )
+        for field, value in changes:
+            with self.subTest(field=field):
+                self.setUp()
+                self.provider.create_story(self.request)
+                self.connector.issues["ISS-1"][field] = value
+                if field == "stateHistory":
+                    self.connector.issues["ISS-1"]["status"] = "Backlog"
+                    self.connector.issues["ISS-1"]["statusType"] = "backlog"
+                self.connector.calls.clear()
+
+                result = self.provider.create_story(self.request)
+
+                self.assertEqual(result.kind.value, "product_assignment_changed" if field != "stateHistory" else "human_status_advanced")
+                self.assertNotIn(LinearTool.SAVE_ISSUE, tuple(tool for tool, _ in self.connector.calls))
+
+    def test_disposition_replay_after_success_before_get_does_not_append_summary_twice(self) -> None:
+        self.provider.create_story(self.request)
+        shaping = replace(self.request, human_status=HumanStatus.SHAPING)
+        self.provider.update_human_status(self.request, HumanStatus.SHAPING)
+        self.connector.after_success_save = lambda issue_id: setattr(self.connector, "fail_next_get", True)
+        with self.assertRaises(TimeoutError):
+            self.provider.apply_disposition(shaping, ProductDisposition.DEFERRED, summary="Reconsider after research.")
+        body = self.connector.issues["ISS-1"]["description"]
+
+        issue = self.provider.apply_disposition(shaping, ProductDisposition.DEFERRED, summary="Reconsider after research.")
+
+        self.assertEqual(self.connector.issues["ISS-1"]["description"], body)
+        self.assertEqual(issue.status_name, "Backlog")
+
+    def test_blank_recap_and_cross_kind_authority_are_rejected_before_save(self) -> None:
+        with self.assertRaisesRegex(ValueError, "description"):
+            replace(self.request, description="   ")
+        cross_kind = replace(self.request, kind_label_id="kind-engineering", kind_label_name="engineering-only")
+
+        with self.assertRaisesRegex(ValueError, "kind"):
+            self.provider.create_story(cross_kind)
+        self.assertEqual(self.connector.calls, [])
 
 
 if __name__ == "__main__":

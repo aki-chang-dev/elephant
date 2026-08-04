@@ -148,6 +148,7 @@ class ConnectorShapeNormalizationTests(unittest.TestCase):
                     related_to=(LinearRelation("relatedTo", "MAI-4"),),
                     duplicate_of=None,
                 ),
+                status_id="status opaque id",
             ),
         )
 
@@ -159,6 +160,13 @@ class ConnectorShapeNormalizationTests(unittest.TestCase):
         malformed = detailed_issue_payload(relations={"blocks": [], "blockedBy": [], "relatedTo": []})
         with self.assertRaisesRegex(ValueError, "duplicateOf"):
             normalize_issue(malformed, include_relations=True)
+
+    def test_detailed_issue_preserves_current_status_project_and_parent_identity(self):
+        issue = normalize_issue(detailed_issue_payload(projectId="project opaque id", parentId="parent opaque id"), include_relations=True)
+
+        self.assertEqual(issue.status_id, "status opaque id")
+        self.assertEqual(issue.project_id, "project opaque id")
+        self.assertEqual(issue.parent_id, "parent opaque id")
 
     def test_normalizes_exact_comment_and_diff_envelopes_and_rejects_cursor_loops(self):
         comments = normalize_comments({"comments": [{"id": "comment opaque id", "body": "Verified."}], "hasNextPage": False})

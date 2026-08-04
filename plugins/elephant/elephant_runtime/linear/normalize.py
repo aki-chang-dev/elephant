@@ -264,8 +264,19 @@ def normalize_issue(raw: object, *, include_relations: bool = False) -> LinearIs
     state_history = None
     if "stateHistory" in value:
         state_history = tuple(_normalize_history(item) for item in _list("issue.stateHistory", value["stateHistory"]))
+    status_id = None
+    if state_history is not None:
+        current_states = tuple(item for item in state_history if item.ended_at is None)
+        if len(current_states) != 1:
+            raise ValueError("stateHistory: expected exactly one current state")
+        current = current_states[0].state
+        if current.name != _string("issue.status", value.get("status")) or current.type != _string("issue.statusType", value.get("statusType")):
+            raise ValueError("stateHistory: current state does not match issue status")
+        status_id = current.id
     if include_relations and "relations" not in value:
         raise ValueError("relations: required when include_relations is true")
+    if include_relations and state_history is None:
+        raise ValueError("stateHistory: required for detailed issue")
     relations = _normalize_relations(value["relations"]) if "relations" in value else None
     return LinearIssue(
         id=_string("issue.id", value.get("id")),
@@ -281,6 +292,9 @@ def normalize_issue(raw: object, *, include_relations: bool = False) -> LinearIs
         attachments=attachments,
         state_history=state_history,
         relations=relations,
+        status_id=status_id,
+        project_id=_optional_string("issue.projectId", value.get("projectId")),
+        parent_id=_optional_string("issue.parentId", value.get("parentId")),
     )
 
 

@@ -24,6 +24,7 @@ from elephant_runtime.linear import (
     LinearProviderDiagnostic,
     LinearProviderError,
     LinearTool,
+    LinearLabel,
     ProductRecap,
     StoryCreateRequest,
     StoryKey,
@@ -156,6 +157,16 @@ class LinearValueContractTests(unittest.TestCase):
         self.assertRaises(ValueError, StoryKey, "", "intent")
         self.assertRaises(ValueError, StoryKey, "repo", "")
 
+    def test_story_create_request_requires_task_three_authority_at_construction(self):
+        with self.assertRaises(TypeError):
+            StoryCreateRequest(
+                key=StoryKey("repo", "intent"),
+                title="Story",
+                description="Recap",
+                team_id="team-1",
+                human_status=HumanStatus.BACKLOG,
+            )
+
     def test_all_public_values_are_frozen(self):
         snapshot = StorySnapshot(
             key=StoryKey("repo", "intent"),
@@ -172,6 +183,17 @@ class LinearValueContractTests(unittest.TestCase):
                 description="Description",
                 team_id="team-1",
                 human_status=HumanStatus.BACKLOG,
+                story_kind="engineering-only",
+                product_label_id=None,
+                product_label_name=None,
+                kind_label_id="kind",
+                kind_label_name="engineering-only",
+                priority=3,
+                project_id=None,
+                parent_id=None,
+                label_inventory=(LinearLabel("kind", "engineering-only", None, "Kind"),),
+                product_group_label_ids=frozenset(),
+                kind_group_label_ids=frozenset({"kind"}),
             ),
             ProductRecap(
                 product_key="product",
