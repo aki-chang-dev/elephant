@@ -145,14 +145,21 @@ class StorySnapshot:
         _require_enum("checkpoint_phase", self.checkpoint_phase, CheckpointPhase)
 
 
-_SAFE_OPAQUE_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
-_SAFE_OPERATION_KEY = re.compile(r"[a-z0-9]+(?:[._:-][a-z0-9]+)+\Z")
+_CANONICAL_LINEAR_UUID = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z"
+)
+_SAFE_OPERATION_KEY = re.compile(r"elephant-linear/v1/[0-9a-f]{64}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
-_SAFE_RECEIPT_NAMES = frozenset({
-    "receipt_id",
+_LINEAR_ENTITY_RECEIPT_NAMES = frozenset({
     "issue_id",
     "attachment_id",
     "comment_id",
+    "diff_id",
+    "label_id",
+    "team_id",
+    "status_id",
+})
+_DIGEST_RECEIPT_NAMES = frozenset({
     "observed_fingerprint",
 })
 
@@ -169,12 +176,12 @@ def _safe_receipts(value: object) -> tuple[tuple[str, str], ...]:
         ):
             raise ValueError("verified_prior_receipts: expected safe receipt identifiers")
         name, identifier = receipt
-        if name not in _SAFE_RECEIPT_NAMES:
-            raise ValueError("verified_prior_receipts: expected safe receipt identifiers")
-        if name == "observed_fingerprint":
+        if name in _LINEAR_ENTITY_RECEIPT_NAMES:
+            is_safe = _CANONICAL_LINEAR_UUID.fullmatch(identifier) is not None
+        elif name in _DIGEST_RECEIPT_NAMES:
             is_safe = _SHA256.fullmatch(identifier) is not None
         else:
-            is_safe = _SAFE_OPAQUE_IDENTIFIER.fullmatch(identifier) is not None
+            is_safe = False
         if not is_safe:
             raise ValueError("verified_prior_receipts: expected safe receipt identifiers")
         receipts.append((name, identifier))

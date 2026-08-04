@@ -40,6 +40,10 @@ from elephant_runtime.workspace_core import (
 )
 
 
+LINEAR_ENTITY_ID = "123e4567-e89b-12d3-a456-426614174000"
+ERROR_OPERATION_KEY = "elephant-linear/v1/" + "b" * 64
+
+
 class LinearValueContractTests(unittest.TestCase):
     def test_tool_vocabulary_and_story_capability_mapping_are_exact(self):
         self.assertEqual(
@@ -204,17 +208,23 @@ class LinearValueContractTests(unittest.TestCase):
             capability="write_checkpoint",
             tool=LinearTool.CREATE_ATTACHMENT_FROM_UPLOAD,
             diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
-            operation_key="checkpoint.story-1",
-            verified_prior_receipts=(("receipt_id", "attachment-1"),),
+            operation_key=ERROR_OPERATION_KEY,
+            verified_prior_receipts=(
+                ("attachment_id", LINEAR_ENTITY_ID),
+                ("observed_fingerprint", "a" * 64),
+            ),
         )
 
-        self.assertEqual(error.verified_prior_receipts, (("receipt_id", "attachment-1"),))
+        self.assertEqual(
+            error.verified_prior_receipts,
+            (("attachment_id", LINEAR_ENTITY_ID), ("observed_fingerprint", "a" * 64)),
+        )
         with self.assertRaisesRegex(ValueError, "safe receipt"):
             LinearProviderError(
                 capability="write_checkpoint",
                 tool=LinearTool.CREATE_ATTACHMENT_FROM_UPLOAD,
                 diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
-                operation_key="checkpoint.story-1",
+                operation_key=ERROR_OPERATION_KEY,
                 verified_prior_receipts=(("upload_url", "https://example.invalid/signed"),),
             )
 
@@ -231,8 +241,8 @@ class LinearValueContractTests(unittest.TestCase):
                         capability="write_checkpoint",
                         tool=LinearTool.CREATE_ATTACHMENT_FROM_UPLOAD,
                         diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
-                        operation_key="checkpoint.story-1",
-                        verified_prior_receipts=(("receipt_id", secret),),
+                        operation_key=ERROR_OPERATION_KEY,
+                        verified_prior_receipts=(("attachment_id", secret),),
                     )
                 self.assertNotIn(secret, str(receipt_error.exception))
                 with self.assertRaisesRegex(ValueError, "safe") as operation_error:
@@ -243,6 +253,26 @@ class LinearValueContractTests(unittest.TestCase):
                         operation_key=secret,
                     )
                 self.assertNotIn(secret, str(operation_error.exception))
+
+    def test_error_rejects_reviewer_bypasses_under_typed_receipt_and_operation_fields(self):
+        probes = ("token_supersecret", "base64_QUJDRA", "base64_qujdra")
+        for probe in probes:
+            with self.subTest(probe=probe):
+                with self.assertRaisesRegex(ValueError, "safe receipt"):
+                    LinearProviderError(
+                        capability="write_checkpoint",
+                        tool=LinearTool.CREATE_ATTACHMENT_FROM_UPLOAD,
+                        diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
+                        operation_key=ERROR_OPERATION_KEY,
+                        verified_prior_receipts=(("attachment_id", probe),),
+                    )
+                with self.assertRaisesRegex(ValueError, "safe"):
+                    LinearProviderError(
+                        capability="write_checkpoint",
+                        tool=LinearTool.CREATE_ATTACHMENT_FROM_UPLOAD,
+                        diagnostic_code=DiagnosticCode.PERMISSION_MISSING,
+                        operation_key=probe,
+                    )
 
 
 class LinearCapabilityInventoryTests(unittest.TestCase):
