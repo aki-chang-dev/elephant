@@ -1,46 +1,19 @@
-from .config import WorkspaceRouteError, resolve_profile, validate_profile, validate_workspace
-from .providers import (
-    CONTRACT_RUNTIME_CAPABILITIES,
-    DELIVERY_RUNTIME_CAPABILITIES,
-    KNOWLEDGE_RUNTIME_CAPABILITIES,
-    STORY_RUNTIME_CAPABILITIES,
-    CapabilityDiagnostic,
-    DiagnosticCode,
-    ProviderKind,
-    ProviderPreflight,
-    preflight_provider,
-)
-from .states import (
-    CheckpointPhase,
-    DriftKind,
-    HumanStatus,
-    ProductDisposition,
-    RepairAction,
-    can_transition_human_status,
-    repair_action,
-    terminal_status_for_disposition,
-)
+"""Compatibility forwarding for the plugin-shipped canonical core runtime."""
 
-__all__ = [
-    "CONTRACT_RUNTIME_CAPABILITIES",
-    "DELIVERY_RUNTIME_CAPABILITIES",
-    "KNOWLEDGE_RUNTIME_CAPABILITIES",
-    "STORY_RUNTIME_CAPABILITIES",
-    "CapabilityDiagnostic",
-    "CheckpointPhase",
-    "DiagnosticCode",
-    "DriftKind",
-    "HumanStatus",
-    "ProductDisposition",
-    "ProviderKind",
-    "ProviderPreflight",
-    "RepairAction",
-    "WorkspaceRouteError",
-    "can_transition_human_status",
-    "preflight_provider",
-    "repair_action",
-    "resolve_profile",
-    "terminal_status_for_disposition",
-    "validate_profile",
-    "validate_workspace",
-]
+from __future__ import annotations
+
+from typing import Any
+
+from scripts._elephant_runtime_forward import canonical_module
+
+
+_CANONICAL = canonical_module("elephant_runtime.workspace_core")
+__all__ = _CANONICAL.__all__
+
+
+def __getattr__(name: str) -> Any:
+    return getattr(_CANONICAL, name)
+
+
+def __dir__() -> list[str]:
+    return dir(_CANONICAL)

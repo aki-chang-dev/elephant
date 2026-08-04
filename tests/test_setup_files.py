@@ -27,6 +27,8 @@ from scripts.workspace_setup.files import (
     LocalTransactionError,
     LocalTransactionResult,
     LocalWrite,
+    LocalDocumentSlot,
+    LocalDocumentTemplate,
     WORKSPACE_PATH,
     apply_local_write,
     build_local_documents,
@@ -99,6 +101,61 @@ def verified_bindings() -> dict[str, object]:
     }
 
 
+SLOT_SPECS = {
+    "linear.workspace_id": ("linear", "binding.linear.workspace", "linear-workspace"),
+    "linear.team_id": ("linear", "binding.linear.team", "linear-team"),
+    "linear.story.sample": ("linear", "label.product.sample", "linear-label-sample"),
+    "notion.workspace_id": ("notion", "binding.notion.workspace", "notion-workspace"),
+    "notion.products_database_id": (
+        "notion",
+        "binding.notion.products",
+        "notion-products",
+    ),
+    "notion.knowledge_database_id": (
+        "notion",
+        "binding.notion.knowledge",
+        "notion-knowledge",
+    ),
+    "notion.contracts_database_id": (
+        "notion",
+        "binding.notion.contracts",
+        "notion-contracts",
+    ),
+    "notion.knowledge.sample": (
+        "notion",
+        "binding.notion.product.sample",
+        "notion-product-sample",
+    ),
+}
+
+
+def planned_bindings() -> dict[str, object]:
+    slots = {
+        slot_id: LocalDocumentSlot(slot_id, provider, stable_key)
+        for slot_id, (provider, stable_key, _) in SLOT_SPECS.items()
+    }
+    return {
+        "linear": {
+            "planned": True,
+            "values": {
+                "workspace_id": slots["linear.workspace_id"],
+                "team_id": slots["linear.team_id"],
+            },
+            "story_refs": {"sample": slots["linear.story.sample"]},
+        },
+        "notion": {
+            "planned": True,
+            "values": {
+                "workspace_id": slots["notion.workspace_id"],
+                "products_database_id": slots["notion.products_database_id"],
+                "knowledge_database_id": slots["notion.knowledge_database_id"],
+                "contracts_database_id": slots["notion.contracts_database_id"],
+            },
+            "knowledge_refs": {"sample": slots["notion.knowledge.sample"]},
+        },
+    }
+
+
 def product_settings() -> dict[str, dict[str, object]]:
     return {
         "sample": {
@@ -126,16 +183,120 @@ def engineering_settings() -> dict[str, object]:
 
 
 def build_documents() -> dict[str, str]:
-    return build_local_documents(
+    templates = build_local_documents(
         topology=confirmed_topology(),
         providers=external_provider_selection(),
-        bindings=verified_bindings(),
+        bindings=planned_bindings(),
         product_profile_settings=product_settings(),
         engineering_profile_settings=engineering_settings(),
     )
+    replacements = {
+        LocalDocumentSlot(slot_id, provider, stable_key).placeholder: external_id
+        for slot_id, (provider, stable_key, external_id) in SLOT_SPECS.items()
+    }
+
+    def materialize(value: str | LocalDocumentTemplate) -> str:
+        body = value.body if isinstance(value, LocalDocumentTemplate) else value
+        for placeholder, external_id in replacements.items():
+            body = body.replace(placeholder, external_id)
+        return body
+
+    return {
+        path: materialize(body)
+        for path, body in templates.items()
+    }
+
+
+def build_git_documents() -> dict[str, str]:
+    documents = build_local_documents(
+        topology=confirmed_topology(),
+        providers=dict.fromkeys(external_provider_selection(), "git"),
+        bindings={},
+        product_profile_settings=product_settings(),
+        engineering_profile_settings=engineering_settings(),
+    )
+    if not all(isinstance(body, str) for body in documents.values()):
+        raise AssertionError("all-git fixture unexpectedly contains local slots")
+    return documents  # type: ignore[return-value]
 
 
 class LocalDocumentTests(unittest.TestCase):
+    def test_external_documents_reject_raw_ids_even_when_marked_verified(self):
+        with self.assertRaisesRegex(ValueError, "typed.*slot"):
+            build_local_documents(
+                confirmed_topology(),
+                external_provider_selection(),
+                verified_bindings(),
+                product_settings(),
+                engineering_settings(),
+            )
+
+    def test_external_documents_can_authorize_typed_id_slots_before_creation(self):
+        slots = {
+            "linear.workspace_id": LocalDocumentSlot(
+                "linear.workspace_id", "linear", "binding.linear.workspace"
+            ),
+            "linear.team_id": LocalDocumentSlot(
+                "linear.team_id", "linear", "binding.linear.team"
+            ),
+            "linear.story.sample": LocalDocumentSlot(
+                "linear.story.sample", "linear", "label.product.sample"
+            ),
+            "notion.workspace_id": LocalDocumentSlot(
+                "notion.workspace_id", "notion", "binding.notion.workspace"
+            ),
+            "notion.products_database_id": LocalDocumentSlot(
+                "notion.products_database_id", "notion", "binding.notion.products"
+            ),
+            "notion.knowledge_database_id": LocalDocumentSlot(
+                "notion.knowledge_database_id", "notion", "binding.notion.knowledge"
+            ),
+            "notion.contracts_database_id": LocalDocumentSlot(
+                "notion.contracts_database_id", "notion", "binding.notion.contracts"
+            ),
+            "notion.knowledge.sample": LocalDocumentSlot(
+                "notion.knowledge.sample", "notion", "binding.notion.product.sample"
+            ),
+        }
+        documents = build_local_documents(
+            confirmed_topology(),
+            external_provider_selection(),
+            {
+                "linear": {
+                    "planned": True,
+                    "values": {
+                        "workspace_id": slots["linear.workspace_id"],
+                        "team_id": slots["linear.team_id"],
+                    },
+                    "story_refs": {"sample": slots["linear.story.sample"]},
+                },
+                "notion": {
+                    "planned": True,
+                    "values": {
+                        "workspace_id": slots["notion.workspace_id"],
+                        "products_database_id": slots["notion.products_database_id"],
+                        "knowledge_database_id": slots["notion.knowledge_database_id"],
+                        "contracts_database_id": slots["notion.contracts_database_id"],
+                    },
+                    "knowledge_refs": {"sample": slots["notion.knowledge.sample"]},
+                },
+            },
+            product_settings(),
+            engineering_settings(),
+        )
+
+        workspace = documents[WORKSPACE_PATH]
+        self.assertIsInstance(workspace, LocalDocumentTemplate)
+        self.assertEqual(
+            tuple(slot.slot_id for slot in workspace.slots),
+            tuple(sorted(slots)),
+        )
+        self.assertEqual(validate_workspace(load_rendered_yaml(workspace.body)), ())
+        self.assertEqual(
+            load_rendered_yaml(workspace.body)["bindings"]["linear"]["workspace_id"],
+            slots["linear.workspace_id"].placeholder,
+        )
+
     def test_external_documents_pass_phase_one_validators(self):
         documents = build_documents()
 
@@ -196,8 +357,8 @@ class LocalDocumentTests(unittest.TestCase):
         unverified = verified_bindings()
         unverified["linear"] = {**unverified["linear"], "verified": False}
         cases = (
-            (confirmed_topology(), external_provider_selection(), unverified, product_settings(), "verified binding"),
-            (confirmed_topology(), external_provider_selection(), verified_bindings(), {}, "profile settings"),
+            (confirmed_topology(), external_provider_selection(), unverified, product_settings(), "typed local document slots"),
+            (confirmed_topology(), external_provider_selection(), planned_bindings(), {}, "profile settings"),
             (
                 ConfirmedTopology(
                     "repo-sample",
@@ -205,7 +366,7 @@ class LocalDocumentTests(unittest.TestCase):
                     (ConfirmedDomain("web", "Web", ("../sample",), ("apps/web",), ("AGENTS.md",), ("check",)),),
                 ),
                 external_provider_selection(),
-                verified_bindings(),
+                planned_bindings(),
                 {"../sample": product_settings()["sample"]},
                 "product key",
             ),
@@ -222,7 +383,7 @@ class LocalDocumentTests(unittest.TestCase):
                     )
 
     def test_extra_binding_receipts_and_duplicate_confirmed_keys_are_rejected(self):
-        extra_receipt = verified_bindings()
+        extra_receipt = planned_bindings()
         extra_receipt["unused"] = {"verified": False, "values": {}}
         duplicate_products = ConfirmedTopology(
             "repo-sample",
@@ -233,7 +394,7 @@ class LocalDocumentTests(unittest.TestCase):
             confirmed_topology().domains,
         )
 
-        with self.assertRaisesRegex(ValueError, "binding receipt"):
+        with self.assertRaisesRegex(ValueError, "binding slot"):
             build_local_documents(
                 confirmed_topology(),
                 external_provider_selection(),
@@ -245,7 +406,7 @@ class LocalDocumentTests(unittest.TestCase):
             build_local_documents(
                 duplicate_products,
                 external_provider_selection(),
-                verified_bindings(),
+                planned_bindings(),
                 product_settings(),
                 engineering_settings(),
             )
@@ -288,7 +449,7 @@ class LocalDocumentTests(unittest.TestCase):
                     build_local_documents(
                         topology,
                         external_provider_selection(),
-                        verified_bindings(),
+                        planned_bindings(),
                         product_settings(),
                         engineering_settings(),
                     )
@@ -424,6 +585,76 @@ class LocalWriteSafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "hard link|unsupported"):
             fingerprint_local_container(self.root)
 
+    def test_stage_target_substitution_never_truncates_an_outside_inode(self):
+        old_body = build_git_documents()[WORKSPACE_PATH]
+        new_body = old_body.replace('"repo-sample"', '"repo-updated"')
+        target = self.root / WORKSPACE_PATH
+        target.parent.mkdir(parents=True)
+        target.write_text(old_body, encoding="utf-8")
+        outside = self.outside / "outside.txt"
+        outside.write_text("outside-safe", encoding="utf-8")
+        writes = plan_current(
+            self.root,
+            (
+                local_operation(
+                    WORKSPACE_PATH,
+                    new_body,
+                    expected_prior_fingerprint=body_fingerprint(old_body),
+                ),
+            ),
+        )
+        real_stat = os.stat
+        real_stage_write = setup_files._stage_write
+        attack = {"enabled": False, "performed": False}
+
+        def attacked_stage_write(stage_fd, write):
+            attack["enabled"] = True
+            try:
+                return real_stage_write(stage_fd, write)
+            finally:
+                attack["enabled"] = False
+
+        def substitute_after_stat(path, *args, **kwargs):
+            observed = real_stat(path, *args, **kwargs)
+            if (
+                attack["enabled"]
+                and not attack["performed"]
+                and path == "workspace.yaml"
+                and kwargs.get("follow_symlinks") is False
+                and isinstance(kwargs.get("dir_fd"), int)
+            ):
+                attack["performed"] = True
+                parent_fd = kwargs["dir_fd"]
+                os.unlink("workspace.yaml", dir_fd=parent_fd)
+                os.link(
+                    outside,
+                    "workspace.yaml",
+                    dst_dir_fd=parent_fd,
+                )
+            return observed
+
+        with mock.patch(
+            "scripts.workspace_setup.files._stage_write",
+            side_effect=attacked_stage_write,
+        ), mock.patch(
+            "scripts.workspace_setup.files._local_backend_unavailable_reason",
+            return_value=None,
+        ), mock.patch(
+            "scripts.workspace_setup.files.os.stat",
+            side_effect=substitute_after_stat,
+        ):
+            result = apply_local_write(
+                self.root,
+                writes,
+                owner_id="hard-link-substitution",
+            )
+
+        self.assertTrue(attack["performed"])
+        self.assertEqual(outside.read_text(encoding="utf-8"), "outside-safe")
+        self.assertEqual(target.read_text(encoding="utf-8"), new_body)
+        self.assertNotEqual(os.stat(outside).st_ino, os.stat(target).st_ino)
+        self.assertEqual(result.container.disposition, "replaced")
+
     def test_platform_atomic_switch_exchanges_or_creates_one_root_child(self):
         (self.root / "old").mkdir()
         (self.root / "old/value").write_text("old", encoding="utf-8")
@@ -536,6 +767,96 @@ class LocalWriteSafetyTests(unittest.TestCase):
             second.container.observed_fingerprint,
         )
 
+    def test_true_noop_preserves_root_entries_and_inodes_without_allocating_stage(self):
+        _, changed, replacement_writes = self._replacement_fixture(self.root)
+        replacement = apply_local_write(
+            self.root,
+            replacement_writes,
+            owner_id="noop-bootstrap",
+        )
+        existing_recovery = replacement.container.retained_stage_name
+        self.assertIsNotNone(existing_recovery)
+        self.assertTrue((self.root / existing_recovery).is_dir())
+
+        noop_writes = plan_current(self.root, local_operations(changed))
+        self.assertEqual({write.disposition for write in noop_writes}, {"unchanged"})
+        root_entries_before = {
+            path.name: (
+                os.stat(path, follow_symlinks=False).st_dev,
+                os.stat(path, follow_symlinks=False).st_ino,
+            )
+            for path in self.root.iterdir()
+        }
+        agents_inode_before = os.stat(
+            self.root / ".agents", follow_symlinks=False
+        ).st_ino
+        target_inodes_before = {
+            path: os.stat(self.root / path, follow_symlinks=False).st_ino
+            for path in changed
+        }
+        container_fingerprint_before = fingerprint_local_container(self.root)
+        recovery_stages_before = {
+            path.name
+            for path in self.root.iterdir()
+            if path.name.startswith(".agents.setup-stage-")
+        }
+
+        with mock.patch(
+            "scripts.workspace_setup.files._new_stage_directory",
+            wraps=setup_files._new_stage_directory,
+        ) as allocate_stage, mock.patch(
+            "scripts.workspace_setup.files.atomic_exchange",
+            wraps=setup_files.atomic_exchange,
+        ) as exchange, mock.patch(
+            "scripts.workspace_setup.files.atomic_noreplace",
+            wraps=setup_files.atomic_noreplace,
+        ) as noreplace:
+            result = apply_local_write(
+                self.root,
+                noop_writes,
+                owner_id="noop-execution",
+            )
+
+        self.assertEqual(result.container.disposition, "unchanged")
+        self.assertIsNone(result.container.retained_stage_name)
+        self.assertEqual(
+            {
+                path.name: (
+                    os.stat(path, follow_symlinks=False).st_dev,
+                    os.stat(path, follow_symlinks=False).st_ino,
+                )
+                for path in self.root.iterdir()
+            },
+            root_entries_before,
+        )
+        self.assertEqual(
+            os.stat(self.root / ".agents", follow_symlinks=False).st_ino,
+            agents_inode_before,
+        )
+        self.assertEqual(
+            {
+                path: os.stat(self.root / path, follow_symlinks=False).st_ino
+                for path in changed
+            },
+            target_inodes_before,
+        )
+        self.assertEqual(
+            fingerprint_local_container(self.root),
+            container_fingerprint_before,
+        )
+        self.assertEqual(
+            {
+                path.name
+                for path in self.root.iterdir()
+                if path.name.startswith(".agents.setup-stage-")
+            },
+            recovery_stages_before,
+        )
+        self.assertTrue((self.root / existing_recovery).is_dir())
+        allocate_stage.assert_not_called()
+        exchange.assert_not_called()
+        noreplace.assert_not_called()
+
     def test_repository_root_lock_excludes_an_independent_setup_owner(self):
         root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
         fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -641,6 +962,45 @@ class LocalWriteSafetyTests(unittest.TestCase):
             original[WORKSPACE_PATH],
         )
         self.assertNotEqual(original[WORKSPACE_PATH], changed[WORKSPACE_PATH])
+
+    def test_candidate_stage_name_swap_restores_the_approved_prior_container(self):
+        original, changed, writes = self._replacement_fixture(self.root)
+        native_exchange = setup_files.atomic_exchange
+        candidate_held: Path | None = None
+        attacked = False
+
+        def replace_candidate_name(parent_fd, first, second):
+            nonlocal candidate_held, attacked
+            if attacked:
+                return native_exchange(parent_fd, first, second)
+            attacked = True
+            candidate = self.root / second
+            candidate_held = self.root / f"{second}.candidate-held"
+            candidate.rename(candidate_held)
+            (candidate / "elephant" / "profiles").mkdir(parents=True)
+            (candidate / "elephant" / "workspace.yaml").write_text(
+                "third-tree-owner",
+                encoding="utf-8",
+            )
+            return native_exchange(parent_fd, first, second)
+
+        with mock.patch(
+            "scripts.workspace_setup.files.atomic_exchange",
+            side_effect=replace_candidate_name,
+        ):
+            with self.assertRaises(LocalTransactionError) as raised:
+                apply_local_write(self.root, writes, owner_id="candidate-name-swap")
+
+        self.assertIsNotNone(candidate_held)
+        self.assertEqual(raised.exception.container.disposition, "rolled_back")
+        self.assertEqual(
+            (self.root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+            original[WORKSPACE_PATH],
+        )
+        self.assertNotEqual(
+            (self.root / WORKSPACE_PATH).read_text(encoding="utf-8"),
+            changed[WORKSPACE_PATH],
+        )
 
     def test_rollback_evidence_uses_one_final_active_container_snapshot(self):
         original, _, writes = self._replacement_fixture(self.root)
@@ -808,6 +1168,45 @@ class LocalWriteSafetyTests(unittest.TestCase):
             (self.root / ".agents/owner.txt").read_text(encoding="utf-8"),
             "concurrent",
         )
+
+    def test_absent_candidate_name_swap_restores_approved_absence(self):
+        writes = plan_current(
+            self.root,
+            local_operations(build_documents()),
+        )
+        native_noreplace = setup_files.atomic_noreplace
+        candidate_held: Path | None = None
+        attacked = False
+
+        def replace_candidate_name(parent_fd, source, target):
+            nonlocal candidate_held, attacked
+            if attacked:
+                return native_noreplace(parent_fd, source, target)
+            attacked = True
+            candidate = self.root / source
+            candidate_held = self.root / f"{source}.candidate-held"
+            candidate.rename(candidate_held)
+            (candidate / "elephant").mkdir(parents=True)
+            (candidate / "elephant" / "workspace.yaml").write_text(
+                "third-tree-owner",
+                encoding="utf-8",
+            )
+            return native_noreplace(parent_fd, source, target)
+
+        with mock.patch(
+            "scripts.workspace_setup.files.atomic_noreplace",
+            side_effect=replace_candidate_name,
+        ):
+            with self.assertRaises(LocalTransactionError) as raised:
+                apply_local_write(
+                    self.root,
+                    writes,
+                    owner_id="absent-candidate-name-swap",
+                )
+
+        self.assertIsNotNone(candidate_held)
+        self.assertEqual(raised.exception.container.disposition, "rolled_back")
+        self.assertFalse((self.root / ".agents").exists())
 
     def test_apply_fails_closed_when_atomic_exchange_is_unsupported(self):
         original, _, writes = self._replacement_fixture(self.root)

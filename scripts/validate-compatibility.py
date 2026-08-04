@@ -51,6 +51,9 @@ REQUIRED_V3_CORE_ASSETS = (
 REQUIRED_V3_SETUP_ASSETS = (
     "skills/setup-workspace/SKILL.md",
     "references/workspace/setup-workspace.md",
+    "elephant_runtime/__init__.py",
+    "elephant_runtime/installed_smoke.py",
+    "elephant_runtime/workspace_setup/__init__.py",
 )
 
 REQUIRED_V3_CORE_EXPORTS = frozenset({
@@ -78,18 +81,22 @@ REQUIRED_V3_CORE_EXPORTS = frozenset({
 })
 
 REQUIRED_V3_SETUP_EXPORTS = frozenset({
-    "ApplyEvidence", "ApplyResult", "ApprovedManifest", "Candidate",
+    "ApplyEvidence", "ApplyResult", "ApprovedManifest", "BindingReceipt", "Candidate",
     "CapabilityLayers", "Confidence", "ConfirmedDomain", "ConfirmedProduct",
-    "ConfirmedTopology", "DeletionReceipt", "DependencyEdge", "DesiredStructure",
+    "ConfirmedTopology", "ConflictResolution", "DeletionReceipt", "DependencyEdge",
+    "DesiredRelationship", "DesiredStructure",
     "Evidence", "ExternalDiscovery", "ExternalObject", "ExternalRecord",
-    "LocalWrite", "MutationReceipt", "OperationKind", "OwnerQuestion",
-    "RepositoryDiscovery", "SETUP_MANIFEST_SCHEMA", "SetupAdapter",
+    "FingerprintDomain", "FrozenList", "FrozenMap", "LocalBackendUnavailable",
+    "LocalDocumentSlot", "LocalDocumentTemplate", "LocalWrite", "ManualHandoff",
+    "MutationReceipt", "ObservedRelationship", "OperationKind", "OwnerQuestion",
+    "ProviderSemantics", "RelationshipDeletionReceipt", "RelationshipReceipt",
+    "RepositoryDiscovery", "RepositoryLocalWriter", "SETUP_MANIFEST_SCHEMA", "SetupAdapter",
     "SetupApplyError", "SetupDiagnostic", "SetupManifest", "SetupOperation",
     "TopologyConflict", "TopologyProposal", "WORKSPACE_PATH", "WorkspaceUnit",
     "apply_local_write", "apply_setup", "approve_manifest", "build_local_documents",
-    "build_setup_manifest", "confirm_topology", "discover_repository",
+    "build_setup_manifest", "confirm_topology", "discover_repository", "fingerprint_local_container",
     "load_rendered_yaml", "manifest_fingerprint", "normalize_external_discovery",
-    "plan_local_writes", "propose_topology", "render_yaml",
+    "plan_local_writes", "propose_topology", "render_yaml", "semantics_fingerprint",
 })
 
 V3_SETUP_ENUM_VALUES = {
@@ -338,10 +345,11 @@ def _validate_v3_setup_assets(root: Path, errors: list[str]) -> None:
 
 
 def _load_v3_core_oracle(root: Path, errors: list[str]):
-    package_path = root / "scripts/workspace_core/__init__.py"
+    package_path = root / PLUGIN / "elephant_runtime/workspace_core/__init__.py"
     if not package_path.is_file():
         errors.append(
-            "missing v3 workspace core oracle: scripts/workspace_core/__init__.py"
+            "missing v3 workspace core oracle: "
+            "plugins/elephant/elephant_runtime/workspace_core/__init__.py"
         )
         return None
 
@@ -359,6 +367,8 @@ def _load_v3_core_oracle(root: Path, errors: list[str]):
     sys.modules[package_name] = module
     try:
         spec.loader.exec_module(module)
+        for export in module.__all__:
+            getattr(module, export)
     except Exception as exc:
         errors.append(
             "invalid v3 workspace core oracle: import failed: "
@@ -520,9 +530,12 @@ def _validate_v3_core_oracle(root: Path, errors: list[str]) -> None:
 
 
 def _load_v3_setup_oracle(root: Path, errors: list[str]):
-    package_path = root / "scripts/workspace_setup/__init__.py"
+    package_path = root / PLUGIN / "elephant_runtime/workspace_setup/__init__.py"
     if not package_path.is_file():
-        errors.append("missing v3 setup oracle: scripts/workspace_setup/__init__.py")
+        errors.append(
+            "missing v3 setup oracle: "
+            "plugins/elephant/elephant_runtime/workspace_setup/__init__.py"
+        )
         return None
 
     package_name = f"_elephant_workspace_setup_{abs(hash(root.resolve()))}"
@@ -537,12 +550,19 @@ def _load_v3_setup_oracle(root: Path, errors: list[str]):
 
     module = importlib.util.module_from_spec(spec)
     sys.modules[package_name] = module
-    root_string = str(root)
-    inserted_root = root_string not in sys.path
-    if inserted_root:
-        sys.path.insert(0, root_string)
+    plugin_root_string = str(root / PLUGIN)
+    displaced_runtime = {
+        name: value
+        for name, value in tuple(sys.modules.items())
+        if name == "elephant_runtime" or name.startswith("elephant_runtime.")
+    }
+    for name in displaced_runtime:
+        del sys.modules[name]
+    sys.path.insert(0, plugin_root_string)
     try:
         spec.loader.exec_module(module)
+        for export in module.__all__:
+            getattr(module, export)
     except Exception as exc:
         errors.append(
             "invalid v3 setup oracle: import failed: "
@@ -553,8 +573,10 @@ def _load_v3_setup_oracle(root: Path, errors: list[str]):
         for name in tuple(sys.modules):
             if name == package_name or name.startswith(f"{package_name}."):
                 del sys.modules[name]
-        if inserted_root:
-            sys.path.remove(root_string)
+            elif name == "elephant_runtime" or name.startswith("elephant_runtime."):
+                del sys.modules[name]
+        sys.path.remove(plugin_root_string)
+        sys.modules.update(displaced_runtime)
     return module
 
 
@@ -583,10 +605,12 @@ def _setup_fingerprint_fixture(setup):
 def _expected_setup_fingerprint() -> str:
     payload = {
         "conflicts": [],
+        "conflict_resolutions": [],
         "diagnostics": [],
         "domains": [],
         "expected_local_container_fingerprint": "0" * 64,
         "operations": [],
+        "product_evidence": [],
         "products": [],
         "profiles": [],
         "provider_selection": {
@@ -596,6 +620,7 @@ def _expected_setup_fingerprint() -> str:
             "story_store": "git",
         },
         "questions": [],
+        "repository_evidence": [],
         "registry": {"schema": "elephant.workspace/v3"},
         "repository_id": "repo-compatibility",
         "schema": V3_SETUP_MANIFEST_SCHEMA,

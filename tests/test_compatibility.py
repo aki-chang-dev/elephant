@@ -2,6 +2,8 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -10,18 +12,22 @@ ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "validate-compatibility.py"
 
 EXACT_SETUP_PUBLIC_EXPORTS = (
-    "ApplyEvidence", "ApplyResult", "ApprovedManifest", "Candidate",
+    "ApplyEvidence", "ApplyResult", "ApprovedManifest", "BindingReceipt", "Candidate",
     "CapabilityLayers", "Confidence", "ConfirmedDomain", "ConfirmedProduct",
-    "ConfirmedTopology", "DeletionReceipt", "DependencyEdge", "DesiredStructure",
+    "ConfirmedTopology", "ConflictResolution", "DeletionReceipt", "DependencyEdge",
+    "DesiredRelationship", "DesiredStructure",
     "Evidence", "ExternalDiscovery", "ExternalObject", "ExternalRecord",
-    "LocalWrite", "MutationReceipt", "OperationKind", "OwnerQuestion",
-    "RepositoryDiscovery", "SETUP_MANIFEST_SCHEMA", "SetupAdapter",
+    "FingerprintDomain", "FrozenList", "FrozenMap", "LocalBackendUnavailable",
+    "LocalDocumentSlot", "LocalDocumentTemplate", "LocalWrite", "ManualHandoff",
+    "MutationReceipt", "ObservedRelationship", "OperationKind", "OwnerQuestion",
+    "ProviderSemantics", "RelationshipDeletionReceipt", "RelationshipReceipt",
+    "RepositoryDiscovery", "RepositoryLocalWriter", "SETUP_MANIFEST_SCHEMA", "SetupAdapter",
     "SetupApplyError", "SetupDiagnostic", "SetupManifest", "SetupOperation",
     "TopologyConflict", "TopologyProposal", "WORKSPACE_PATH", "WorkspaceUnit",
     "apply_local_write", "apply_setup", "approve_manifest", "build_local_documents",
-    "build_setup_manifest", "confirm_topology", "discover_repository",
+    "build_setup_manifest", "confirm_topology", "discover_repository", "fingerprint_local_container",
     "load_rendered_yaml", "manifest_fingerprint", "normalize_external_discovery",
-    "plan_local_writes", "propose_topology", "render_yaml",
+    "plan_local_writes", "propose_topology", "render_yaml", "semantics_fingerprint",
 )
 
 
@@ -828,8 +834,13 @@ class WorkspaceCorePackagingTests(unittest.TestCase):
         validator = load_validator()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            shutil.copytree(ROOT / "scripts/workspace_core", root / "scripts/workspace_core")
-            providers = root / "scripts/workspace_core/providers.py"
+            runtime = root / "plugins/elephant/elephant_runtime"
+            runtime.mkdir(parents=True)
+            shutil.copytree(
+                ROOT / "plugins/elephant/elephant_runtime/workspace_core",
+                runtime / "workspace_core",
+            )
+            providers = runtime / "workspace_core/providers.py"
             providers.write_text(
                 providers.read_text(encoding="utf-8").replace(
                     '"approve_contract"',
@@ -848,8 +859,13 @@ class WorkspaceCorePackagingTests(unittest.TestCase):
         validator = load_validator()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            shutil.copytree(ROOT / "scripts/workspace_core", root / "scripts/workspace_core")
-            providers = root / "scripts/workspace_core/providers.py"
+            runtime = root / "plugins/elephant/elephant_runtime"
+            runtime.mkdir(parents=True)
+            shutil.copytree(
+                ROOT / "plugins/elephant/elephant_runtime/workspace_core",
+                runtime / "workspace_core",
+            )
+            providers = runtime / "workspace_core/providers.py"
             source = providers.read_text(encoding="utf-8")
             mutated = source.replace(
                 "            (\"platform_supported\", platform_supported, "
@@ -888,6 +904,11 @@ class WorkspaceCorePackagingTests(unittest.TestCase):
 
 class SetupWorkspacePackagingTests(unittest.TestCase):
     def copy_fixture(self, root: Path) -> None:
+        (root / "scripts").mkdir(parents=True)
+        shutil.copy2(
+            ROOT / "scripts/_elephant_runtime_forward.py",
+            root / "scripts/_elephant_runtime_forward.py",
+        )
         shutil.copytree(
             ROOT / "scripts/workspace_core",
             root / "scripts/workspace_core",
@@ -910,6 +931,135 @@ class SetupWorkspacePackagingTests(unittest.TestCase):
             ROOT / "plugins/elephant/references/workspace/setup-workspace.md",
         )
         self.assertEqual([path for path in required if not path.is_file()], [])
+
+    def test_marketplace_artifact_is_self_contained(self):
+        marketplace = json.loads(
+            (ROOT / ".agents/plugins/marketplace.json").read_text(encoding="utf-8")
+        )
+        source = marketplace["plugins"][0]["source"]["path"]
+        source_root = (ROOT / source).resolve()
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "artifact"
+            shutil.copytree(source_root, artifact)
+            program = (
+                "import pathlib,sys; "
+                f"root=pathlib.Path({str(artifact)!r}).resolve(); "
+                "sys.path.insert(0,str(root)); "
+                "import elephant_runtime.workspace_core as core; "
+                "import elephant_runtime.workspace_setup as setup; "
+                "assert str(pathlib.Path(core.__file__).resolve()).startswith(str(root)); "
+                "assert str(pathlib.Path(setup.__file__).resolve()).startswith(str(root)); "
+                "assert callable(setup.discover_repository); "
+                "assert callable(setup.RepositoryLocalWriter)"
+            )
+
+            completed = subprocess.run(
+                [sys.executable, "-I", "-c", program],
+                cwd=directory,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_read_only_artifact_modules_import_without_posix_backend(self):
+        marketplace = json.loads(
+            (ROOT / ".agents/plugins/marketplace.json").read_text(encoding="utf-8")
+        )
+        source = marketplace["plugins"][0]["source"]["path"]
+        source_root = (ROOT / source).resolve()
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "artifact"
+            shutil.copytree(source_root, artifact)
+            program = (
+                "import builtins,sys; "
+                f"sys.path.insert(0,{str(artifact)!r}); "
+                "original=builtins.__import__; "
+                "builtins.__import__=lambda name,*a,**k: "
+                "(_ for _ in ()).throw(ModuleNotFoundError('blocked fcntl')) "
+                "if name=='fcntl' else original(name,*a,**k); "
+                "import elephant_runtime.workspace_setup.discovery; "
+                "import elephant_runtime.workspace_setup.proposal; "
+                "import elephant_runtime.workspace_setup.dry_run"
+            )
+
+            completed = subprocess.run(
+                [sys.executable, "-I", "-c", program],
+                cwd=directory,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_compatibility_modules_alias_canonical_modules(self):
+        import scripts.workspace_setup.files as compatibility_files
+        from scripts import workspace_setup as compatibility_setup
+        import elephant_runtime.workspace_setup as canonical_setup
+        import elephant_runtime.workspace_setup.files as canonical_files
+
+        self.assertIs(compatibility_setup.SetupManifest, canonical_setup.SetupManifest)
+        self.assertIs(compatibility_setup.apply_setup, canonical_setup.apply_setup)
+        self.assertIs(compatibility_files, canonical_files)
+
+    def test_checkout_forwarder_rejects_a_stale_preloaded_runtime(self):
+        program = (
+            "import pathlib,sys,types; "
+            f"root=pathlib.Path({str(ROOT)!r}).resolve(); "
+            "sys.path.insert(0,str(root)); "
+            "stale=types.ModuleType('elephant_runtime.workspace_setup'); "
+            "stale.__file__='/tmp/stale/elephant_runtime/workspace_setup/__init__.py'; "
+            "stale.__all__=(); "
+            "sys.modules[stale.__name__]=stale; "
+            "\ntry:\n import scripts.workspace_setup\n"
+            "except ImportError as error:\n"
+            " assert 'outside the checkout plugin root' in str(error), str(error)\n"
+            "else:\n raise AssertionError('stale runtime was accepted')"
+        )
+
+        completed = subprocess.run(
+            [sys.executable, "-I", "-c", program],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_isolated_artifact_public_pipeline(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/smoke-installed-setup-workspace.py"),
+                "--root",
+                str(ROOT),
+                "--json",
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        evidence = json.loads(completed.stdout)
+        self.assertEqual(evidence["status"], "ok")
+        self.assertEqual(
+            evidence["attempt_ids"],
+            ["artifact-manual-handoff", "artifact-manual-resume"],
+        )
+        self.assertTrue(evidence["same_approval"])
+        self.assertTrue(evidence["schema_valid"])
+        self.assertEqual(evidence["local_owner"], "artifact-manual-resume")
+        self.assertTrue(
+            all(
+                key.endswith(".artifact-manual-resume")
+                for key in evidence["round_trip_keys"]
+            )
+        )
 
     def test_setup_public_exports_are_exact(self):
         from scripts import workspace_setup
@@ -936,7 +1086,10 @@ class SetupWorkspacePackagingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_fixture(root)
-            models = root / "scripts/workspace_setup/models.py"
+            models = (
+                root
+                / "plugins/elephant/elephant_runtime/workspace_setup/models.py"
+            )
             source = models.read_text(encoding="utf-8")
             mutated = source.replace('ROUND_TRIP = "round_trip"', 'ROUND_TRIP = "roundtrip"')
             self.assertNotEqual(mutated, source, "enum mutation fixture did not apply")
@@ -950,7 +1103,10 @@ class SetupWorkspacePackagingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_fixture(root)
-            models = root / "scripts/workspace_setup/models.py"
+            models = (
+                root
+                / "plugins/elephant/elephant_runtime/workspace_setup/models.py"
+            )
             source = models.read_text(encoding="utf-8")
             mutated = source.replace(
                 'hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()',

@@ -8,6 +8,9 @@ from scripts.workspace_setup import (
     ApplyEvidence,
     ApplyResult,
     ApprovedManifest,
+    FingerprintDomain,
+    FrozenList,
+    FrozenMap,
     Candidate,
     Confidence,
     ConfirmedDomain,
@@ -16,12 +19,14 @@ from scripts.workspace_setup import (
     Evidence,
     OperationKind,
     OwnerQuestion,
+    ProviderSemantics,
     SetupDiagnostic,
     SetupManifest,
     SetupOperation,
     TopologyConflict,
     approve_manifest,
     manifest_fingerprint,
+    semantics_fingerprint,
 )
 from scripts.workspace_setup.models import SETUP_MANIFEST_SCHEMA
 
@@ -32,6 +37,10 @@ class MutableValue:
 
 
 def manifest() -> SetupManifest:
+    semantics = ProviderSemantics(
+        resource_type="story",
+        fields=FrozenMap((("name", "Sample"),)),
+    )
     return SetupManifest(
         schema=SETUP_MANIFEST_SCHEMA,
         repository_id="repo-sample",
@@ -64,10 +73,13 @@ def manifest() -> SetupManifest:
                 provider="linear",
                 capability="create_story",
                 target_key="story.sample",
-                desired_fingerprint="desired",
+                desired_fingerprint=semantics_fingerprint(semantics),
                 payload=(("name", "Sample"),),
                 kind=OperationKind.CREATE,
                 runtime_required=True,
+                logical_provider=ProviderKind.STORY,
+                semantics=semantics,
+                desired_fingerprint_domain=FingerprintDomain.PROVIDER_SEMANTICS,
             ),
         ),
         diagnostics=(
@@ -102,6 +114,21 @@ def manifest() -> SetupManifest:
 
 
 class SetupManifestTests(unittest.TestCase):
+    def test_empty_mapping_and_sequence_have_distinct_canonical_fingerprints(self):
+        mapping = ProviderSemantics("schema", FrozenMap((("properties", FrozenMap(())),)))
+        sequence = ProviderSemantics("schema", FrozenMap((("properties", FrozenList(())),)))
+
+        self.assertNotEqual(
+            semantics_fingerprint(mapping),
+            semantics_fingerprint(sequence),
+        )
+
+    def test_external_operation_fingerprint_must_match_its_typed_semantics(self):
+        operation = manifest().operations[0]
+
+        with self.assertRaisesRegex(ValueError, "typed provider semantics"):
+            replace(operation, desired_fingerprint="0" * 64)
+
     def test_fingerprint_is_stable_for_equivalent_mapping_order(self):
         first = manifest()
         second = replace(
@@ -283,24 +310,39 @@ class SetupValueContractTests(unittest.TestCase):
                 "ApplyEvidence",
                 "ApplyResult",
                 "ApprovedManifest",
+                "BindingReceipt",
                 "CapabilityLayers",
                 "Candidate",
                 "Confidence",
                 "ConfirmedDomain",
                 "ConfirmedProduct",
                 "ConfirmedTopology",
+                "ConflictResolution",
                 "DeletionReceipt",
                 "DependencyEdge",
+                "DesiredRelationship",
                 "DesiredStructure",
                 "Evidence",
                 "ExternalDiscovery",
                 "ExternalObject",
                 "ExternalRecord",
+                "FingerprintDomain",
+                "FrozenList",
+                "FrozenMap",
+                "LocalBackendUnavailable",
+                "LocalDocumentSlot",
+                "LocalDocumentTemplate",
                 "LocalWrite",
+                "ManualHandoff",
                 "MutationReceipt",
+                "ObservedRelationship",
                 "OperationKind",
                 "OwnerQuestion",
+                "ProviderSemantics",
                 "RepositoryDiscovery",
+                "RelationshipDeletionReceipt",
+                "RelationshipReceipt",
+                "RepositoryLocalWriter",
                 "SetupAdapter",
                 "SetupApplyError",
                 "SetupDiagnostic",
@@ -318,12 +360,14 @@ class SetupValueContractTests(unittest.TestCase):
                 "build_setup_manifest",
                 "confirm_topology",
                 "discover_repository",
+                "fingerprint_local_container",
                 "load_rendered_yaml",
                 "manifest_fingerprint",
                 "normalize_external_discovery",
                 "plan_local_writes",
                 "propose_topology",
                 "render_yaml",
+                "semantics_fingerprint",
             },
         )
 
@@ -369,6 +413,9 @@ class SetupValueContractTests(unittest.TestCase):
             ApprovedManifest(manifest(), manifest_fingerprint(manifest())),
             ApplyEvidence("op", "target", "external", "fingerprint", "verified"),
             ApplyResult(False, (), (), ()),
+            FrozenMap((("name", "Sample"),)),
+            FrozenList(("one",)),
+            ProviderSemantics("story", FrozenMap((("name", "Sample"),))),
         )
         for value in values:
             with self.subTest(value_type=type(value).__name__):

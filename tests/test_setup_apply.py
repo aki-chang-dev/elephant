@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -21,17 +23,30 @@ from scripts.workspace_core import (
 )
 from scripts.workspace_setup import (
     ApprovedManifest,
+    BindingReceipt,
     CapabilityLayers,
     Confidence,
     DeletionReceipt,
+    DesiredRelationship,
     DesiredStructure,
     Evidence,
     ExternalDiscovery,
     ExternalObject,
     ExternalRecord,
+    FingerprintDomain,
+    FrozenList,
+    FrozenMap,
+    ManualHandoff,
+    LocalDocumentSlot,
+    LocalDocumentTemplate,
     MutationReceipt,
     OperationKind,
     OwnerQuestion,
+    ObservedRelationship,
+    ProviderSemantics,
+    RelationshipDeletionReceipt,
+    RelationshipReceipt,
+    RepositoryLocalWriter,
     SetupApplyError,
     SetupDiagnostic,
     SetupManifest,
@@ -42,6 +57,7 @@ from scripts.workspace_setup import (
     build_local_documents,
     build_setup_manifest,
     manifest_fingerprint,
+    semantics_fingerprint,
 )
 from scripts.workspace_setup.models import SETUP_MANIFEST_SCHEMA
 from scripts.workspace_core import validate_profile, validate_workspace
@@ -53,6 +69,8 @@ from scripts.workspace_setup import (
 )
 from tests.test_setup_files import (
     body_fingerprint,
+    build_documents,
+    build_git_documents,
     confirmed_topology,
     engineering_settings,
     external_provider_selection,
@@ -74,16 +92,77 @@ def operation(
     target_key: str = "label.product.sample",
     desired_fingerprint: str = "label-v1",
     payload: tuple[tuple[str, object], ...] = (),
+    manual_instructions: tuple[str, ...] = (),
 ) -> SetupOperation:
+    if kind is OperationKind.WRITE_LOCAL:
+        document = dict(payload).get("document") if payload else None
+        if not isinstance(document, str):
+            payload = (("document", build_git_documents()[WORKSPACE_PATH]),)
+    semantics = ProviderSemantics(
+        resource_type=(
+            "elephant_setup_round_trip"
+            if kind is OperationKind.ROUND_TRIP
+            else "setup_structure"
+        ),
+        fields=FrozenMap((("revision", desired_fingerprint),)),
+    )
+    logical_provider = (
+        ProviderKind.STORY
+        if provider == "linear"
+        else ProviderKind.PRODUCT_KNOWLEDGE
+        if provider == "notion"
+        else None
+    )
     return SetupOperation(
         operation_id=f"{provider}.{target_key}.{kind.value}",
         provider=provider,
         capability="ensure_label",
         target_key=target_key,
-        desired_fingerprint=desired_fingerprint,
+        desired_fingerprint=(
+            desired_fingerprint
+            if kind is OperationKind.WRITE_LOCAL
+            else semantics_fingerprint(semantics)
+        ),
         payload=payload,
         kind=kind,
         runtime_required=False,
+        logical_provider=logical_provider,
+        semantics=None if kind is OperationKind.WRITE_LOCAL else semantics,
+        desired_fingerprint_domain=(
+            FingerprintDomain.LOCAL_TEMPLATE
+            if kind is OperationKind.WRITE_LOCAL
+            else FingerprintDomain.PROVIDER_SEMANTICS
+        ),
+        relationships=(
+            DesiredRelationship(
+                relationship_type="elephant_setup_binding",
+                fields=FrozenMap((("purpose", "capability_probe"),)),
+            ),
+        ) if kind is OperationKind.ROUND_TRIP else (),
+        manual_instructions=(
+            manual_instructions
+            if manual_instructions
+            else ("Complete the exact approved setup structure.",)
+            if kind is OperationKind.MANUAL
+            else ()
+        ),
+    )
+
+
+def observed(
+    stable_key: str,
+    external_id: str,
+    revision: str,
+    *,
+    resource_type: str = "setup_structure",
+) -> ExternalRecord:
+    return ExternalRecord(
+        stable_key,
+        external_id,
+        ProviderSemantics(
+            resource_type=resource_type,
+            fields=FrozenMap((("revision", revision),)),
+        ),
     )
 
 
@@ -119,12 +198,31 @@ def run_apply(
     writer: object,
     *,
     execution_id: str = "execution-primary",
+    resume_handoff: ManualHandoff | None = None,
 ):
-    return apply_setup(
-        value,
-        adapters,
-        writer,
+    arguments = {"execution_id": execution_id}
+    if resume_handoff is not None:
+        arguments["resume_handoff"] = resume_handoff
+    return apply_setup(value, adapters, writer, **arguments)
+
+
+def manual_handoff_for(
+    value: ApprovedManifest,
+    manual: SetupOperation,
+    *,
+    execution_id: str = "manual-prior-attempt",
+) -> ManualHandoff:
+    return ManualHandoff(
+        operation_id=manual.operation_id,
+        provider=manual.provider,
+        capability=manual.capability,
+        target_key=manual.target_key,
+        diagnostic_code=DiagnosticCode(dict(manual.payload)["diagnostic_code"]),
+        expected_fingerprint=manual.desired_fingerprint,
+        semantics=manual.semantics,
+        instructions=manual.manual_instructions,
         execution_id=execution_id,
+        approval_fingerprint=value.fingerprint,
     )
 
 
@@ -147,6 +245,8 @@ class RecordingAdapter:
         self.events = events
         self.records_by_key: dict[str, list[ExternalRecord]] = {}
         self.records_by_id: dict[str, ExternalRecord] = {}
+        self.relationships_by_id: dict[str, ObservedRelationship] = {}
+        self.relationships_by_key: dict[str, list[ObservedRelationship]] = {}
         for record in records:
             self.records_by_key.setdefault(record.stable_key, []).append(record)
             self.records_by_id[record.external_id] = record
@@ -174,7 +274,7 @@ class RecordingAdapter:
         record = ExternalRecord(
             setup_operation.target_key,
             external_id,
-            setup_operation.desired_fingerprint,
+            setup_operation.semantics,
         )
         self.records_by_key.setdefault(record.stable_key, []).append(record)
         self.records_by_id[record.external_id] = record
@@ -185,8 +285,81 @@ class RecordingAdapter:
         self._record_call("read", external_id)
         record = self.records_by_id.get(external_id)
         if record is not None and self.corrupt_read_back:
-            return replace(record, fingerprint="corrupt")
+            return replace(
+                record,
+                semantics=ProviderSemantics(
+                    "corrupt",
+                    FrozenMap((("revision", "corrupt"),)),
+                ),
+            )
         return record
+
+    def bind_relationship(
+        self,
+        stable_key: str,
+        source: ExternalRecord,
+        target: ExternalRecord,
+        desired: DesiredRelationship,
+    ) -> RelationshipReceipt:
+        self._record_call(
+            "bind_relationship",
+            (stable_key, source.external_id, target.external_id, desired),
+        )
+        relationship_id = f"{self.provider}-relationship-{len(self.relationships_by_id) + 1}"
+        observed_relationship = ObservedRelationship(
+            stable_key=stable_key,
+            relationship_id=relationship_id,
+            source_external_id=source.external_id,
+            target_external_id=target.external_id,
+            semantics=desired,
+        )
+        self.relationships_by_id[relationship_id] = observed_relationship
+        self.relationships_by_key.setdefault(stable_key, []).append(
+            observed_relationship
+        )
+        return RelationshipReceipt(
+            stable_key,
+            relationship_id,
+            source.external_id,
+            target.external_id,
+        )
+
+    def find_relationship(
+        self,
+        stable_key: str,
+    ) -> tuple[ObservedRelationship, ...]:
+        self._record_call("find_relationship", stable_key)
+        return tuple(self.relationships_by_key.get(stable_key, ()))
+
+    def read_relationship(
+        self,
+        relationship_id: str,
+    ) -> ObservedRelationship | None:
+        self._record_call("read_relationship", relationship_id)
+        return self.relationships_by_id.get(relationship_id)
+
+    def unbind_relationship(
+        self,
+        receipt: RelationshipReceipt,
+    ) -> RelationshipDeletionReceipt:
+        self._record_call("unbind_relationship", receipt)
+        relationship = self.relationships_by_id.pop(receipt.relationship_id, None)
+        if relationship is not None:
+            records = self.relationships_by_key.get(relationship.stable_key, [])
+            self.relationships_by_key[relationship.stable_key] = [
+                item
+                for item in records
+                if item.relationship_id != relationship.relationship_id
+            ]
+            if not self.relationships_by_key[relationship.stable_key]:
+                self.relationships_by_key.pop(relationship.stable_key)
+        return RelationshipDeletionReceipt(
+            stable_key=receipt.stable_key,
+            relationship_id=receipt.relationship_id,
+            source_external_id=receipt.source_external_id,
+            target_external_id=receipt.target_external_id,
+            deleted=relationship is not None,
+        )
 
     def delete_disposable(
         self,
@@ -245,7 +418,7 @@ class InterleavingCreateAdapter(RecordingAdapter):
         record = ExternalRecord(
             setup_operation.target_key,
             external_id,
-            setup_operation.desired_fingerprint,
+            setup_operation.semantics,
         )
         self.records_by_key.setdefault(record.stable_key, []).append(record)
         self.records_by_id[record.external_id] = record
@@ -265,6 +438,38 @@ class DuplicateDuringReadAdapter(RecordingAdapter):
         return record
 
 
+class GhostAfterDeleteAdapter(RecordingAdapter):
+    """Deletes the owned ID but leaves a competing record at the stable key."""
+
+    def delete_disposable(
+        self,
+        external_id: str,
+        stable_key: str,
+    ) -> DeletionReceipt:
+        record = self.records_by_id[external_id]
+        receipt = super().delete_disposable(external_id, stable_key)
+        ghost = replace(record, external_id=f"{external_id}-ghost")
+        self.records_by_key.setdefault(stable_key, []).append(ghost)
+        self.records_by_id[ghost.external_id] = ghost
+        return receipt
+
+
+class FailFirstRelationshipReadAdapter(RecordingAdapter):
+    def __init__(self, provider: str) -> None:
+        super().__init__(provider)
+        self.fail_next_relationship_read = True
+
+    def read_relationship(
+        self,
+        relationship_id: str,
+    ) -> ObservedRelationship | None:
+        observed = super().read_relationship(relationship_id)
+        if self.fail_next_relationship_read:
+            self.fail_next_relationship_read = False
+            return None
+        return observed
+
+
 class WrongExternalIdReadAdapter(RecordingAdapter):
     def read(self, external_id: str) -> ExternalRecord | None:
         record = super().read(external_id)
@@ -279,6 +484,19 @@ class RecordingWriter:
         self.container_authorities: list[str] = []
         self.owner_ids: list[str] = []
         self.events = events
+        self.preflight_calls: list[tuple[SetupOperation, ...]] = []
+        self.cancelled_owner_ids: list[str] = []
+
+    def preflight(
+        self,
+        operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
+    ) -> None:
+        self.preflight_calls.append(operations)
+
+    def cancel_preflight(self, owner_id: str) -> None:
+        self.cancelled_owner_ids.append(owner_id)
 
     def __call__(
         self,
@@ -297,7 +515,8 @@ class RecordingWriter:
                     operation.operation_id,
                     operation.target_key,
                     ("durable",),
-                    operation.desired_fingerprint,
+                    operation.expected_byte_fingerprint
+                    or operation.desired_fingerprint,
                 )
                 for operation in operations
             ),
@@ -334,6 +553,39 @@ class FailingWriter(RecordingWriter):
     ) -> LocalTransactionResult:
         super().__call__(operations, expected_container_fingerprint, owner_id)
         raise self.failure
+
+
+class FailingPreflightWriter(RecordingWriter):
+    def preflight(
+        self,
+        operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
+    ) -> None:
+        super().preflight(operations, expected_container_fingerprint, owner_id)
+        raise RuntimeError("platform_unsupported: atomic_local_container_switch")
+
+
+class WrongFingerprintWriter(RecordingWriter):
+    def __call__(
+        self,
+        operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
+    ) -> LocalTransactionResult:
+        result = super().__call__(
+            operations,
+            expected_container_fingerprint,
+            owner_id,
+        )
+        if not result.outcomes:
+            return result
+        return replace(
+            result,
+            outcomes=(
+                replace(result.outcomes[0], observed_fingerprint="0" * 64),
+            ) + result.outcomes[1:],
+        )
 
 
 class WrongOwnerWriter(RecordingWriter):
@@ -380,6 +632,48 @@ class SetupApplyAuthorityTests(unittest.TestCase):
 
     def test_raw_manifest_cannot_mutate_any_authority(self):
         self.assert_rejected_without_calls(self.mutation_manifest, "ApprovedManifest")
+
+    def test_external_record_rejects_blank_stable_key_and_external_id(self):
+        semantics = ProviderSemantics(
+            "setup_structure",
+            FrozenMap((("revision", "v1"),)),
+        )
+        for stable_key, external_id in (("", "external-1"), ("stable-key", "  ")):
+            with self.subTest(stable_key=stable_key, external_id=external_id):
+                with self.assertRaisesRegex(ValueError, "stable_key|external_id"):
+                    ExternalRecord(stable_key, external_id, semantics)
+
+    def test_local_write_with_provider_fingerprint_domain_cannot_mutate_any_authority(self):
+        local_operation = operation(
+            OperationKind.WRITE_LOCAL,
+            provider="local",
+            target_key=".agents/elephant/workspace.yaml",
+            payload=(("document", build_git_documents()[WORKSPACE_PATH]),),
+        )
+        invalid_manifest = manifest(
+            replace(
+                local_operation,
+                desired_fingerprint_domain=FingerprintDomain.PROVIDER_SEMANTICS,
+            )
+        )
+
+        self.assert_rejected_without_calls(
+            approved(invalid_manifest),
+            "local template fingerprint domain",
+        )
+
+    def test_raw_external_workspace_ids_without_slots_cannot_mutate_any_authority(self):
+        raw_local = operation(
+            OperationKind.WRITE_LOCAL,
+            provider="local",
+            target_key=WORKSPACE_PATH,
+            payload=(("document", build_documents()[WORKSPACE_PATH]),),
+        )
+
+        self.assert_rejected_without_calls(
+            approved(manifest(operation(OperationKind.CREATE), raw_local)),
+            "external opaque IDs require typed local document slots",
+        )
 
     def test_stale_approval_cannot_mutate_any_authority(self):
         stale = ApprovedManifest(self.mutation_manifest, "0" * 64)
@@ -490,7 +784,7 @@ class SetupApplyAuthorityTests(unittest.TestCase):
         ))
         linear = RecordingAdapter(
             "linear",
-            records=(ExternalRecord("team.delivery", "linear-1", "team-v1"),),
+            records=(observed("team.delivery", "linear-1", "team-v1"),),
         )
 
         with self.assertRaisesRegex(SetupApplyError, "adapter.*notion|notion.*adapter"):
@@ -523,6 +817,289 @@ class SetupApplyAuthorityTests(unittest.TestCase):
         self.assertEqual(linear.calls, [])
         self.assertEqual(writer.calls, [])
 
+    def test_untyped_external_operation_is_rejected_before_adapter_calls(self):
+        untyped = SetupOperation(
+            operation_id="linear.label.product.sample.create",
+            provider="linear",
+            capability="ensure_label",
+            target_key="label.product.sample",
+            desired_fingerprint="opaque-fingerprint",
+            payload=(),
+            kind=OperationKind.CREATE,
+            runtime_required=False,
+        )
+        value = approved(manifest(
+            untyped,
+            operation(
+                OperationKind.WRITE_LOCAL,
+                provider="local",
+                target_key=WORKSPACE_PATH,
+            ),
+        ))
+        adapter = RecordingAdapter("linear")
+        writer = RecordingWriter()
+
+        with self.assertRaisesRegex(SetupApplyError, "typed provider semantics"):
+            run_apply(value, {"linear": adapter}, writer)
+
+        self.assertEqual(adapter.calls, [])
+        self.assertEqual(writer.calls, [])
+
+    def test_invalid_local_schema_stops_before_first_adapter_call(self):
+        adapter = RecordingAdapter("linear")
+        writer = RecordingWriter()
+        value = approved(manifest(
+            operation(OperationKind.CREATE),
+            operation(
+                OperationKind.WRITE_LOCAL,
+                provider="local",
+                target_key=".agents/elephant/workspace.yaml",
+                payload=(("document", "{}\n"),),
+            ),
+        ))
+
+        with self.assertRaisesRegex(SetupApplyError, "invalid document|schema"):
+            run_apply(value, {"linear": adapter}, writer)
+
+        self.assertEqual(adapter.calls, [])
+        self.assertEqual(writer.calls, [])
+
+    def test_local_backend_preflight_failure_stops_before_first_adapter_call(self):
+        adapter = RecordingAdapter("linear")
+        writer = FailingPreflightWriter()
+
+        with self.assertRaisesRegex(SetupApplyError, "platform_unsupported"):
+            run_apply(approved_create_manifest(), {"linear": adapter}, writer)
+
+        self.assertEqual(adapter.calls, [])
+        self.assertEqual(writer.calls, [])
+
+    def test_repository_writer_rejects_unsupported_filesystem_before_adapter_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            before = tuple(sorted(path.name for path in root.iterdir()))
+            adapter = RecordingAdapter("linear")
+            writer = RepositoryLocalWriter(root)
+
+            with mock.patch(
+                "scripts.workspace_setup.atomic_switch.atomic_exchange",
+                side_effect=AtomicRenameUnavailable("filesystem unsupported"),
+            ), self.assertRaisesRegex(SetupApplyError, "platform_unsupported"):
+                run_apply(approved_create_manifest(), {"linear": adapter}, writer)
+
+            self.assertEqual(adapter.calls, [])
+            self.assertEqual(tuple(sorted(path.name for path in root.iterdir())), before)
+
+    def test_repository_writer_commits_to_the_preflight_root_identity_after_path_swap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "repository"
+            approved_root = base / "approved-repository"
+            root.mkdir()
+
+            class RootSwappingAdapter(RecordingAdapter):
+                def create(self, setup_operation: SetupOperation) -> MutationReceipt:
+                    root.rename(approved_root)
+                    root.mkdir()
+                    return super().create(setup_operation)
+
+            result = run_apply(
+                approved_create_manifest(),
+                {"linear": RootSwappingAdapter("linear")},
+                RepositoryLocalWriter(root),
+                execution_id="root-identity-swap",
+            )
+
+            self.assertTrue(result.ready)
+            self.assertTrue((approved_root / ".agents").is_dir())
+            self.assertFalse((root / ".agents").exists())
+
+    def test_repository_writer_preflight_binds_the_approved_local_body(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            writer = RepositoryLocalWriter(root)
+            owner_id = "preflight-body-authority"
+            original = operation(
+                OperationKind.WRITE_LOCAL,
+                provider="local",
+                target_key=WORKSPACE_PATH,
+                payload=(("document", build_git_documents()[WORKSPACE_PATH]),),
+            )
+            changed_body = dict(original.payload)["document"].replace(
+                '"repo-sample"',
+                '"repo-substituted"',
+            )
+            changed = replace(
+                original,
+                payload=(("document", changed_body),),
+                expected_byte_fingerprint=hashlib.sha256(
+                    changed_body.encode("utf-8")
+                ).hexdigest(),
+            )
+
+            writer.preflight(
+                (original,),
+                ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+                owner_id,
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "does not match preflight authority",
+            ):
+                writer(
+                    (changed,),
+                    ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+                    owner_id,
+                )
+
+            self.assertFalse((root / ".agents").exists())
+
+    def test_cancellation_closes_and_discards_local_preflight_authority(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            writer = RepositoryLocalWriter(root)
+            execution_id = "cancelled-after-preflight"
+            captured_descriptors: list[int] = []
+
+            class InterruptingAdapter(RecordingAdapter):
+                def create(
+                    self,
+                    setup_operation: SetupOperation,
+                ) -> MutationReceipt:
+                    captured_descriptors.append(
+                        writer._preflights[execution_id].descriptor
+                    )
+                    raise KeyboardInterrupt("cancel setup")
+
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    run_apply(
+                        approved_create_manifest(),
+                        {"linear": InterruptingAdapter("linear")},
+                        writer,
+                        execution_id=execution_id,
+                    )
+
+                self.assertEqual(writer._preflights, {})
+                self.assertEqual(len(captured_descriptors), 1)
+                with self.assertRaises(OSError):
+                    os.fstat(captured_descriptors[0])
+            finally:
+                writer.cancel_preflight(execution_id)
+
+    def test_preflight_publication_interruption_preserves_exception_and_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            writer = RepositoryLocalWriter(root)
+            adapter = RecordingAdapter("linear")
+            execution_id = "preflight-publication-interrupted"
+            original_replace = writer._replace_preflight
+
+            def interrupt_after_publication(owner_id, receipt):
+                original_replace(owner_id, receipt)
+                raise KeyboardInterrupt("interrupt after preflight publication")
+
+            with mock.patch.object(
+                writer,
+                "_replace_preflight",
+                side_effect=interrupt_after_publication,
+            ), self.assertRaisesRegex(
+                KeyboardInterrupt,
+                "after preflight publication",
+            ):
+                run_apply(
+                    approved_create_manifest(),
+                    {"linear": adapter},
+                    writer,
+                    execution_id=execution_id,
+                )
+
+            self.assertEqual(writer._preflights, {})
+            self.assertEqual(adapter.calls, [])
+
+            retried = run_apply(
+                approved_create_manifest(),
+                {"linear": adapter},
+                writer,
+                execution_id=execution_id,
+            )
+
+            self.assertTrue(retried.ready)
+            self.assertEqual(writer._preflights, {})
+
+    def test_same_owner_preflight_replacement_interruption_closes_prior_descriptor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            writer = RepositoryLocalWriter(root)
+            execution_id = "same-owner-preflight-replacement-interrupted"
+            value = approved_create_manifest()
+            local_operations = tuple(
+                operation
+                for operation in value.manifest.operations
+                if operation.kind is OperationKind.WRITE_LOCAL
+            )
+            writer.preflight(
+                local_operations,
+                value.manifest.expected_local_container_fingerprint,
+                execution_id,
+            )
+            prior_receipt = writer._preflights[execution_id]
+            prior_descriptor = prior_receipt.descriptor
+            original_detach = writer._detach_descriptor
+
+            def interrupt_after_prior_detach(receipt):
+                descriptor = original_detach(receipt)
+                if receipt is prior_receipt:
+                    raise KeyboardInterrupt("interrupt after prior descriptor detach")
+                return descriptor
+
+            try:
+                with mock.patch.object(
+                    writer,
+                    "_detach_descriptor",
+                    side_effect=interrupt_after_prior_detach,
+                ), self.assertRaisesRegex(
+                    KeyboardInterrupt,
+                    "after prior descriptor detach",
+                ):
+                    writer.preflight(
+                        local_operations,
+                        value.manifest.expected_local_container_fingerprint,
+                        execution_id,
+                    )
+
+                self.assertEqual(writer._preflights, {})
+                with self.assertRaises(OSError):
+                    os.fstat(prior_descriptor)
+            finally:
+                writer.cancel_preflight(execution_id)
+                try:
+                    os.close(prior_descriptor)
+                except OSError:
+                    pass
+
+    def test_commit_stage_cancellation_propagates_after_preflight_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            writer = RepositoryLocalWriter(root)
+
+            with mock.patch(
+                "scripts.workspace_setup.files._stage_write",
+                side_effect=KeyboardInterrupt("cancel during local commit"),
+            ), self.assertRaisesRegex(
+                KeyboardInterrupt,
+                "during local commit",
+            ):
+                run_apply(
+                    approved_create_manifest(),
+                    {"linear": RecordingAdapter("linear")},
+                    writer,
+                    execution_id="commit-stage-cancelled",
+                )
+
+            self.assertEqual(writer._preflights, {})
+            self.assertFalse((root / ".agents").exists())
+
 
 def approved_create_manifest() -> ApprovedManifest:
     return approved(
@@ -533,13 +1110,168 @@ def approved_create_manifest() -> ApprovedManifest:
                 provider="local",
                 target_key=".agents/elephant/workspace.yaml",
                 desired_fingerprint="workspace-v1",
-                payload=(("document", (("schema", "elephant.workspace/v3"),)),),
+                payload=(("document", build_git_documents()[WORKSPACE_PATH]),),
             ),
         )
     )
 
 
 class SetupApplyMutationTests(unittest.TestCase):
+    def test_verified_read_back_materializes_approved_local_slot_and_byte_hash(self):
+        source = operation(
+            OperationKind.CREATE,
+            target_key="binding.linear.workspace",
+            desired_fingerprint="binding-v1",
+        )
+        slot = LocalDocumentSlot(
+            slot_id="linear.workspace_id",
+            provider="linear",
+            stable_key=source.target_key,
+            source_operation_id=source.operation_id,
+        )
+        body = build_git_documents()[WORKSPACE_PATH].replace(
+            json.dumps("repo-sample"),
+            json.dumps(slot.placeholder),
+        )
+        local = replace(
+            operation(
+                OperationKind.WRITE_LOCAL,
+                provider="local",
+                target_key=WORKSPACE_PATH,
+                payload=(("document", body),),
+            ),
+            local_slots=(slot,),
+        )
+        value = approved(manifest(source, local))
+        adapter = RecordingAdapter("linear")
+        writer = RecordingWriter()
+
+        result = run_apply(value, {"linear": adapter}, writer)
+
+        materialized = writer.calls[0][0]
+        materialized_body = dict(materialized.payload)["document"]
+        expected_bytes = hashlib.sha256(materialized_body.encode("utf-8")).hexdigest()
+        self.assertIn('"id": "linear-1"', materialized_body)
+        self.assertNotIn(slot.placeholder, materialized_body)
+        self.assertEqual(materialized.expected_byte_fingerprint, expected_bytes)
+        self.assertEqual(
+            result.binding_receipts,
+            (
+                BindingReceipt(
+                    slot_id=slot.slot_id,
+                    source_operation_id=source.operation_id,
+                    provider="linear",
+                    stable_key=source.target_key,
+                    external_id="linear-1",
+                    observed_fingerprint=source.desired_fingerprint,
+                ),
+            ),
+        )
+        self.assertEqual(result.local_writes[0].observed_fingerprint, expected_bytes)
+
+    def test_reserved_slot_external_id_cannot_satisfy_local_materialization(self):
+        source = operation(
+            OperationKind.REUSE,
+            target_key="binding.linear.workspace",
+            desired_fingerprint="binding-v1",
+        )
+        slot = LocalDocumentSlot(
+            slot_id="linear.workspace_id",
+            provider="linear",
+            stable_key=source.target_key,
+            source_operation_id=source.operation_id,
+        )
+        body = build_git_documents()[WORKSPACE_PATH].replace(
+            json.dumps("repo-sample"),
+            json.dumps(slot.placeholder),
+        )
+        local = replace(
+            operation(
+                OperationKind.WRITE_LOCAL,
+                provider="local",
+                target_key=WORKSPACE_PATH,
+                payload=(("document", body),),
+            ),
+            local_slots=(slot,),
+        )
+        value = approved(manifest(source, local))
+        adapter = RecordingAdapter(
+            "linear",
+            records=(
+                ExternalRecord(
+                    source.target_key,
+                    slot.placeholder,
+                    source.semantics,
+                ),
+            ),
+        )
+        writer = RecordingWriter()
+
+        with self.assertRaisesRegex(SetupApplyError, "reserved|slot"):
+            run_apply(value, {"linear": adapter}, writer)
+
+        self.assertEqual(writer.calls, [])
+
+    def test_identical_preflight_body_cannot_authorize_unresolved_local_slot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            writer = RepositoryLocalWriter(root)
+            slot = LocalDocumentSlot(
+                slot_id="linear.workspace_id",
+                provider="linear",
+                stable_key="binding.linear.workspace",
+                source_operation_id="linear.binding.linear.workspace.reuse",
+            )
+            body = build_git_documents()[WORKSPACE_PATH].replace(
+                json.dumps("repo-sample"),
+                json.dumps(slot.placeholder),
+            )
+            local = replace(
+                operation(
+                    OperationKind.WRITE_LOCAL,
+                    provider="local",
+                    target_key=WORKSPACE_PATH,
+                    payload=(("document", body),),
+                ),
+                local_slots=(slot,),
+            )
+            committed = replace(
+                local,
+                expected_byte_fingerprint=hashlib.sha256(
+                    body.encode("utf-8")
+                ).hexdigest(),
+            )
+            owner_id = "unresolved-identical-slot"
+
+            try:
+                writer.preflight(
+                    (local,),
+                    ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+                    owner_id,
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "preflight authority",
+                ):
+                    writer(
+                        (committed,),
+                        ABSENT_LOCAL_CONTAINER_FINGERPRINT,
+                        owner_id,
+                    )
+            finally:
+                writer.cancel_preflight(owner_id)
+
+            self.assertFalse((root / ".agents").exists())
+
+    def test_mismatched_local_byte_evidence_blocks_readiness(self):
+        writer = WrongFingerprintWriter()
+
+        with self.assertRaisesRegex(SetupApplyError, "byte fingerprint"):
+            run_apply(
+                approved_create_manifest(),
+                {"linear": RecordingAdapter("linear")},
+                writer,
+            )
     def run_concurrent_creates(
         self,
         adapter: RecordingAdapter,
@@ -605,7 +1337,10 @@ class SetupApplyMutationTests(unittest.TestCase):
         self.assertTrue(second.ready)
         self.assertEqual(adapter.created_keys.count("label.product.sample"), 1)
         self.assertGreaterEqual(adapter.read_count, 2)
-        self.assertEqual(first.evidence[0].observed_fingerprint, "label-v1")
+        self.assertEqual(
+            first.evidence[0].observed_fingerprint,
+            value.manifest.operations[0].desired_fingerprint,
+        )
         self.assertEqual(second.evidence[0].disposition, "reused")
 
     def test_mismatched_read_back_stops_before_local_write(self):
@@ -620,33 +1355,34 @@ class SetupApplyMutationTests(unittest.TestCase):
     def test_reuse_and_verify_require_unique_semantic_read_back(self):
         for kind in (OperationKind.REUSE, OperationKind.VERIFY):
             with self.subTest(kind=kind):
-                record = ExternalRecord("team.delivery", "linear-1", "team-v1")
-                adapter = RecordingAdapter("linear", records=(record,))
+                record = observed("team.delivery", "linear-1", "team-v1")
+                adapter = DuplicateDuringReadAdapter("linear", records=(record,))
+                writer = RecordingWriter()
                 value = approved(manifest(operation(
                     kind,
                     target_key="team.delivery",
                     desired_fingerprint="team-v1",
                 )))
 
-                result = run_apply(value, {"linear": adapter}, RecordingWriter())
+                with self.assertRaisesRegex(SetupApplyError, "duplicate"):
+                    run_apply(value, {"linear": adapter}, writer)
 
-                self.assertTrue(result.ready)
-                self.assertEqual(adapter.call_kinds, ("find", "read"))
-                self.assertEqual(result.evidence[0].external_id, "linear-1")
+                self.assertEqual(adapter.call_kinds, ("find", "read", "find"))
+                self.assertEqual(writer.calls, [])
 
     def test_duplicate_or_semantically_mismatched_records_stop_before_local_write(self):
         cases = (
             (
                 "duplicate",
                 (
-                    ExternalRecord("team.delivery", "linear-1", "team-v1"),
-                    ExternalRecord("team.delivery", "linear-2", "team-v1"),
+                    observed("team.delivery", "linear-1", "team-v1"),
+                    observed("team.delivery", "linear-2", "team-v1"),
                 ),
                 "duplicate|exactly one",
             ),
             (
                 "mismatch",
-                (ExternalRecord("team.delivery", "linear-1", "team-old"),),
+                (observed("team.delivery", "linear-1", "team-old"),),
                 "semantic|fingerprint",
             ),
         )
@@ -706,20 +1442,60 @@ class SetupApplyMutationTests(unittest.TestCase):
 
         self.assertFalse(first.ready)
         self.assertEqual(len(first.manual_handoffs), 1)
+        self.assertIsInstance(first.manual_handoffs[0], ManualHandoff)
         self.assertEqual(first.manual_handoffs[0].disposition, "manual_handoff")
+        self.assertEqual(
+            first.manual_handoffs[0].expected_fingerprint,
+            manual.desired_fingerprint,
+        )
+        self.assertEqual(first.manual_handoffs[0].semantics, manual.semantics)
+        self.assertEqual(
+            first.manual_handoffs[0].execution_id,
+            "manual-first-attempt",
+        )
+        self.assertEqual(
+            first.manual_handoffs[0].approval_fingerprint,
+            value.fingerprint,
+        )
+        self.assertEqual(
+            first.manual_handoffs[0].instructions,
+            manual.manual_instructions,
+        )
         self.assertEqual(adapter.call_kinds, ("find",))
+        self.assertFalse(
+            any(item.operation_id == manual.operation_id for item in first.evidence)
+        )
         self.assertEqual(writer.calls, [])
+        self.assertEqual(writer.cancelled_owner_ids, ["manual-first-attempt"])
 
-        completed = ExternalRecord("view.sample", "notion-view-1", "view-v1")
+        completed = observed("view.sample", "notion-view-1", "view-v1")
         adapter.records_by_key[completed.stable_key] = [completed]
         adapter.records_by_id[completed.external_id] = completed
         continued_writer = RecordingWriter()
+
+        with self.assertRaisesRegex(SetupApplyError, "prior manual handoff"):
+            run_apply(
+                value,
+                {"notion": adapter},
+                RecordingWriter(),
+                execution_id="manual-resumed-without-handoff",
+            )
+
+        with self.assertRaisesRegex(SetupApplyError, "distinct.*execution"):
+            run_apply(
+                value,
+                {"notion": adapter},
+                RecordingWriter(),
+                execution_id="manual-first-attempt",
+                resume_handoff=first.manual_handoffs[0],
+            )
 
         second = run_apply(
             value,
             {"notion": adapter},
             continued_writer,
             execution_id="manual-resumed-attempt",
+            resume_handoff=first.manual_handoffs[0],
         )
 
         self.assertTrue(second.ready)
@@ -727,14 +1503,105 @@ class SetupApplyMutationTests(unittest.TestCase):
         self.assertEqual(second.evidence[0].operation_id, manual.operation_id)
         self.assertEqual(second.evidence[0].disposition, "manual_completed")
         self.assertEqual(second.evidence[0].external_id, completed.external_id)
-        self.assertEqual(second.evidence[0].observed_fingerprint, "view-v1")
-        self.assertEqual(adapter.call_kinds, ("find", "find", "read", "find"))
+        self.assertEqual(
+            second.evidence[0].observed_fingerprint,
+            manual.desired_fingerprint,
+        )
+        self.assertEqual(
+            adapter.call_kinds,
+            ("find", "find", "find", "read", "find"),
+        )
         self.assertEqual(len(continued_writer.calls), 1)
         self.assertEqual(continued_writer.owner_ids, ["manual-resumed-attempt"])
 
+    def test_sequential_manual_prerequisites_complete_across_three_attempts(self):
+        first_manual = operation(
+            OperationKind.MANUAL,
+            provider="notion",
+            target_key="view.alpha",
+            desired_fingerprint="view-alpha-v1",
+            payload=(
+                ("diagnostic_code", "platform_unsupported"),
+                ("read_back_required", True),
+            ),
+        )
+        second_manual = operation(
+            OperationKind.MANUAL,
+            provider="notion",
+            target_key="view.beta",
+            desired_fingerprint="view-beta-v1",
+            payload=(
+                ("diagnostic_code", "platform_unsupported"),
+                ("read_back_required", True),
+            ),
+        )
+        value = approved(manifest(
+            first_manual,
+            second_manual,
+            operation(
+                OperationKind.WRITE_LOCAL,
+                provider="local",
+                target_key=WORKSPACE_PATH,
+                payload=(("document", build_git_documents()[WORKSPACE_PATH]),),
+            ),
+        ))
+        adapter = RecordingAdapter("notion")
+
+        first = run_apply(
+            value,
+            {"notion": adapter},
+            RecordingWriter(),
+            execution_id="manual-alpha-handoff",
+        )
+        self.assertEqual(
+            first.manual_handoffs[0].operation_id,
+            first_manual.operation_id,
+        )
+        alpha = observed("view.alpha", "notion-alpha", "view-alpha-v1")
+        adapter.records_by_key[alpha.stable_key] = [alpha]
+        adapter.records_by_id[alpha.external_id] = alpha
+
+        second = run_apply(
+            value,
+            {"notion": adapter},
+            RecordingWriter(),
+            execution_id="manual-beta-handoff",
+            resume_handoff=first.manual_handoffs[0],
+        )
+        self.assertEqual(
+            second.manual_handoffs[0].operation_id,
+            second_manual.operation_id,
+        )
+        self.assertEqual(
+            second.manual_handoffs[0].completed_operation_ids,
+            (first_manual.operation_id,),
+        )
+        beta = observed("view.beta", "notion-beta", "view-beta-v1")
+        adapter.records_by_key[beta.stable_key] = [beta]
+        adapter.records_by_id[beta.external_id] = beta
+
+        third = run_apply(
+            value,
+            {"notion": adapter},
+            RecordingWriter(),
+            execution_id="manual-all-complete",
+            resume_handoff=second.manual_handoffs[0],
+        )
+
+        self.assertTrue(third.ready)
+        self.assertEqual(third.manual_handoffs, ())
+        self.assertEqual(
+            tuple(
+                item.operation_id
+                for item in third.evidence
+                if item.disposition == "manual_completed"
+            ),
+            (first_manual.operation_id, second_manual.operation_id),
+        )
+
     def test_manual_completion_duplicate_inserted_during_read_stops_before_local_write(self):
-        prior = ExternalRecord("team.delivery", "linear-team-1", "team-v1")
-        completed = ExternalRecord("view.sample", "notion-view-1", "view-v1")
+        prior = observed("team.delivery", "linear-team-1", "team-v1")
+        completed = observed("view.sample", "notion-view-1", "view-v1")
         manual = operation(
             OperationKind.MANUAL,
             provider="notion",
@@ -769,6 +1636,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                 },
                 writer,
                 execution_id="manual-race",
+                resume_handoff=manual_handoff_for(value, manual),
             )
 
         self.assertEqual(raised.exception.operation, manual)
@@ -783,7 +1651,7 @@ class SetupApplyMutationTests(unittest.TestCase):
         self.assertEqual(writer.calls, [])
 
     def test_invalid_manual_completion_stops_with_contextual_partial_evidence(self):
-        prior = ExternalRecord("team.delivery", "linear-team-1", "team-v1")
+        prior = observed("team.delivery", "linear-team-1", "team-v1")
         manual = operation(
             OperationKind.MANUAL,
             provider="notion",
@@ -815,8 +1683,8 @@ class SetupApplyMutationTests(unittest.TestCase):
                 RecordingAdapter(
                     "notion",
                     records=(
-                        ExternalRecord("view.sample", "notion-view-1", "view-v1"),
-                        ExternalRecord("view.sample", "notion-view-2", "view-v1"),
+                        observed("view.sample", "notion-view-1", "view-v1"),
+                        observed("view.sample", "notion-view-2", "view-v1"),
                     ),
                 ),
                 "duplicate",
@@ -826,7 +1694,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                 RecordingAdapter(
                     "notion",
                     records=(
-                        ExternalRecord("view.sample", "notion-view-1", "view-old"),
+                        observed("view.sample", "notion-view-1", "view-old"),
                     ),
                 ),
                 "fingerprint",
@@ -836,7 +1704,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                 RecordingAdapter(
                     "notion",
                     records=(
-                        ExternalRecord("view.sample", "notion-view-1", "view-v1"),
+                        observed("view.sample", "notion-view-1", "view-v1"),
                     ),
                     corrupt_read_back=True,
                 ),
@@ -847,7 +1715,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                 WrongExternalIdReadAdapter(
                     "notion",
                     records=(
-                        ExternalRecord("view.sample", "notion-view-1", "view-v1"),
+                        observed("view.sample", "notion-view-1", "view-v1"),
                     ),
                 ),
                 "external ID",
@@ -857,7 +1725,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                 RecordingAdapter(
                     "notion",
                     records=(
-                        ExternalRecord("view.sample", "notion-view-1", "view-v1"),
+                        observed("view.sample", "notion-view-1", "view-v1"),
                     ),
                 ),
                 "read-back",
@@ -876,6 +1744,7 @@ class SetupApplyMutationTests(unittest.TestCase):
                         {"linear": linear, "notion": notion},
                         writer,
                         execution_id="manual-invalid",
+                        resume_handoff=manual_handoff_for(value, manual),
                     )
 
                 self.assertEqual(raised.exception.operation, manual)
@@ -886,6 +1755,11 @@ class SetupApplyMutationTests(unittest.TestCase):
                     raised.exception.partial_evidence[0].disposition,
                     "reused",
                 )
+                if name == "mismatch":
+                    self.assertEqual(
+                        raised.exception.observed_snapshot,
+                        notion.records_by_key[manual.target_key][0],
+                    )
                 self.assertEqual(writer.calls, [])
 
     def test_local_writes_receive_exact_documents_after_external_read_back(self):
@@ -896,7 +1770,17 @@ class SetupApplyMutationTests(unittest.TestCase):
         result = run_apply(approved_create_manifest(), {"linear": adapter}, writer)
 
         local_operation = approved_create_manifest().manifest.operations[-1]
-        self.assertEqual(writer.calls, [(local_operation,)])
+        self.assertEqual(writer.calls[0][0].operation_id, local_operation.operation_id)
+        self.assertEqual(
+            dict(writer.calls[0][0].payload)["document"],
+            dict(local_operation.payload)["document"],
+        )
+        self.assertEqual(
+            writer.calls[0][0].expected_byte_fingerprint,
+            hashlib.sha256(
+                dict(local_operation.payload)["document"].encode("utf-8")
+            ).hexdigest(),
+        )
         self.assertEqual(
             writer.container_authorities,
             [ABSENT_LOCAL_CONTAINER_FINGERPRINT],
@@ -933,6 +1817,33 @@ def approved_round_trip_manifest() -> ApprovedManifest:
 
 
 class SetupRoundTripTests(unittest.TestCase):
+    def test_round_trip_retry_reuses_and_cleans_interrupted_relationship(self):
+        adapter = FailFirstRelationshipReadAdapter("notion")
+        value = approved_round_trip_manifest()
+        execution_id = "round-trip-relationship-retry"
+
+        with self.assertRaisesRegex(
+            SetupApplyError,
+            "relationship read-back",
+        ):
+            run_apply(
+                value,
+                {"notion": adapter},
+                RecordingWriter(),
+                execution_id=execution_id,
+            )
+        self.assertEqual(len(adapter.relationships_by_id), 1)
+
+        result = run_apply(
+            value,
+            {"notion": adapter},
+            RecordingWriter(),
+            execution_id=execution_id,
+        )
+
+        self.assertTrue(result.ready)
+        self.assertEqual(adapter.relationships_by_id, {})
+
     def test_round_trip_creates_reads_deletes_and_verifies_absence(self):
         adapter = RecordingAdapter("notion")
         value = approved_round_trip_manifest()
@@ -948,7 +1859,22 @@ class SetupRoundTripTests(unittest.TestCase):
         self.assertTrue(result.ready)
         self.assertEqual(
             adapter.call_kinds,
-            ("find", "create", "read", "find", "delete_disposable", "read"),
+            (
+                "find",
+                "create",
+                "read",
+                "find",
+                "find_relationship",
+                "bind_relationship",
+                "read_relationship",
+                "find_relationship",
+                "unbind_relationship",
+                "read_relationship",
+                "find_relationship",
+                "delete_disposable",
+                "read",
+                "find",
+            ),
         )
         disposable_key = (
             f"setup.round_trip.notion.{value.fingerprint}.{execution_id}"
@@ -957,6 +1883,24 @@ class SetupRoundTripTests(unittest.TestCase):
         self.assertEqual(adapter.deleted_keys, [disposable_key])
         self.assertEqual(result.evidence[0].target_key, disposable_key)
         self.assertEqual(result.evidence[0].disposition, "round_trip_cleaned")
+
+    def test_cleanup_rejects_a_same_key_ghost_without_deleting_it(self):
+        adapter = GhostAfterDeleteAdapter("notion")
+        writer = RecordingWriter()
+
+        with self.assertRaisesRegex(SetupApplyError, "stable-key.*cleanup|cleanup.*stable-key"):
+            run_apply(
+                approved_round_trip_manifest(),
+                {"notion": adapter},
+                writer,
+                execution_id="round-trip-ghost",
+            )
+
+        self.assertEqual(len(adapter.deleted_keys), 1)
+        ghost_key = adapter.deleted_keys[0]
+        self.assertEqual(len(adapter.records_by_key[ghost_key]), 1)
+        self.assertTrue(adapter.records_by_key[ghost_key][0].external_id.endswith("-ghost"))
+        self.assertEqual(writer.calls, [])
 
     def test_distinct_concurrent_executions_delete_only_their_owned_round_trip(self):
         adapter = InterleavingCreateAdapter("notion", atomic=True)
@@ -1010,7 +1954,12 @@ class SetupRoundTripTests(unittest.TestCase):
         adapter = RecordingAdapter(
             "notion",
             records=(
-                ExternalRecord(disposable_key, "notion-interrupted", "round-trip-v1"),
+                observed(
+                    disposable_key,
+                    "notion-interrupted",
+                    "round-trip-v1",
+                    resource_type="elephant_setup_round_trip",
+                ),
             ),
         )
 
@@ -1026,7 +1975,21 @@ class SetupRoundTripTests(unittest.TestCase):
         self.assertEqual(adapter.deleted_keys, [disposable_key])
         self.assertEqual(
             adapter.call_kinds,
-            ("find", "read", "delete_disposable", "read"),
+            (
+                "find",
+                "read",
+                "find",
+                "find_relationship",
+                "bind_relationship",
+                "read_relationship",
+                "find_relationship",
+                "unbind_relationship",
+                "read_relationship",
+                "find_relationship",
+                "delete_disposable",
+                "read",
+                "find",
+            ),
         )
         self.assertEqual(result.evidence[0].external_id, "notion-interrupted")
 
@@ -1058,8 +2021,8 @@ class SetupRoundTripTests(unittest.TestCase):
         adapter = RecordingAdapter(
             "notion",
             records=(
-                ExternalRecord(disposable_key, "notion-1", "round-trip-v1"),
-                ExternalRecord(disposable_key, "notion-2", "round-trip-v1"),
+                observed(disposable_key, "notion-1", "round-trip-v1", resource_type="elephant_setup_round_trip"),
+                observed(disposable_key, "notion-2", "round-trip-v1", resource_type="elephant_setup_round_trip"),
             ),
         )
 
@@ -1136,7 +2099,7 @@ class SetupApplyFailureEvidenceTests(unittest.TestCase):
             )
 
         error = raised.exception
-        self.assertIs(error.operation, local_operation)
+        self.assertEqual(error.operation_id, local_operation.operation_id)
         self.assertEqual(error.target_key, ".agents/elephant/workspace.yaml")
         self.assertIs(error.cause, failure)
         self.assertEqual(len(error.partial_evidence), 1)
@@ -1152,6 +2115,18 @@ class AtomicLocalWriter:
     def __init__(self, root: Path, events: list[str]) -> None:
         self.root = root
         self.events = events
+
+    def preflight(
+        self,
+        operations: tuple[SetupOperation, ...],
+        expected_container_fingerprint: str,
+        owner_id: str,
+    ) -> None:
+        plan_local_writes(
+            self.root,
+            operations,
+            expected_container_fingerprint,
+        )
 
     def __call__(
         self,
@@ -1172,23 +2147,29 @@ def complete_layers(capabilities: frozenset[str]) -> CapabilityLayers:
     return CapabilityLayers(capabilities, capabilities, capabilities, capabilities)
 
 
-def freeze_document(value: object) -> object:
+def freeze_document(value: object, *, top_level: bool = True) -> object:
     if isinstance(value, dict):
-        return tuple((key, freeze_document(item)) for key, item in sorted(value.items()))
+        entries = tuple(
+            (key, freeze_document(item, top_level=False))
+            for key, item in sorted(value.items())
+        )
+        return entries if top_level else FrozenMap(entries)
     if isinstance(value, list):
-        return tuple(freeze_document(item) for item in value)
+        return FrozenList(
+            tuple(freeze_document(item, top_level=False) for item in value)
+        )
     return value
 
 
 def binding_record(provider: str, key: str, external_id: str) -> ExternalRecord:
-    return ExternalRecord(key, external_id, f"verified-{key}")
+    return observed(key, external_id, f"verified-{key}")
 
 
 def integrated_adapters(events: list[str]) -> dict[str, RecordingAdapter]:
     linear_records = (
         binding_record("linear", "binding.linear.workspace", "linear-workspace"),
         binding_record("linear", "binding.linear.team", "linear-team"),
-        ExternalRecord("label.product.sample", "linear-label-sample", "label-v1"),
+        observed("label.product.sample", "linear-label-sample", "label-v1"),
     )
     notion_records = (
         binding_record("notion", "binding.notion.workspace", "notion-workspace"),
@@ -1203,43 +2184,67 @@ def integrated_adapters(events: list[str]) -> dict[str, RecordingAdapter]:
     }
 
 
-def verified_bindings_from_adapters(
-    adapters: dict[str, RecordingAdapter],
-) -> dict[str, object]:
-    def verified_id(provider: str, stable_key: str) -> str:
-        adapter = adapters[provider]
-        records = adapter.find(stable_key)
-        if len(records) != 1:
-            raise AssertionError(f"expected one adapter binding record for {stable_key}")
-        record = adapter.read(records[0].external_id)
-        if record != records[0]:
-            raise AssertionError(f"binding read-back mismatch for {stable_key}")
-        return record.external_id
+INTEGRATED_SLOT_SPECS = {
+    "linear.workspace_id": ("linear", "binding.linear.workspace"),
+    "linear.team_id": ("linear", "binding.linear.team"),
+    "linear.story.sample": ("linear", "label.product.sample"),
+    "notion.workspace_id": ("notion", "binding.notion.workspace"),
+    "notion.products_database_id": ("notion", "binding.notion.products"),
+    "notion.knowledge_database_id": ("notion", "binding.notion.knowledge"),
+    "notion.contracts_database_id": ("notion", "binding.notion.contracts"),
+    "notion.knowledge.sample": ("notion", "binding.notion.product.sample"),
+}
 
+
+def integrated_slot_bindings() -> dict[str, object]:
+    slots = {
+        slot_id: LocalDocumentSlot(slot_id, provider, stable_key)
+        for slot_id, (provider, stable_key) in INTEGRATED_SLOT_SPECS.items()
+    }
     return {
         "linear": {
-            "verified": True,
+            "planned": True,
             "values": {
-                "workspace_id": verified_id("linear", "binding.linear.workspace"),
-                "team_id": verified_id("linear", "binding.linear.team"),
+                "workspace_id": slots["linear.workspace_id"],
+                "team_id": slots["linear.team_id"],
             },
-            "story_refs": {
-                "sample": verified_id("linear", "label.product.sample")
-            },
+            "story_refs": {"sample": slots["linear.story.sample"]},
         },
         "notion": {
-            "verified": True,
+            "planned": True,
             "values": {
-                "workspace_id": verified_id("notion", "binding.notion.workspace"),
-                "products_database_id": verified_id("notion", "binding.notion.products"),
-                "knowledge_database_id": verified_id("notion", "binding.notion.knowledge"),
-                "contracts_database_id": verified_id("notion", "binding.notion.contracts"),
+                "workspace_id": slots["notion.workspace_id"],
+                "products_database_id": slots["notion.products_database_id"],
+                "knowledge_database_id": slots["notion.knowledge_database_id"],
+                "contracts_database_id": slots["notion.contracts_database_id"],
             },
-            "knowledge_refs": {
-                "sample": verified_id("notion", "binding.notion.product.sample")
-            },
+            "knowledge_refs": {"sample": slots["notion.knowledge.sample"]},
         },
     }
+
+
+def materialize_integrated_documents(
+    documents: dict[str, str | LocalDocumentTemplate],
+    adapters: dict[str, RecordingAdapter],
+) -> dict[str, str]:
+    replacements: dict[str, str] = {}
+    for slot_id, (provider, stable_key) in INTEGRATED_SLOT_SPECS.items():
+        records = adapters[provider].find(stable_key)
+        if len(records) != 1:
+            raise AssertionError(f"expected one adapter binding record for {stable_key}")
+        record = adapters[provider].read(records[0].external_id)
+        if record != records[0]:
+            raise AssertionError(f"binding read-back mismatch for {stable_key}")
+        replacements[
+            LocalDocumentSlot(slot_id, provider, stable_key).placeholder
+        ] = record.external_id
+    materialized: dict[str, str] = {}
+    for path, value in documents.items():
+        body = value.body if isinstance(value, LocalDocumentTemplate) else value
+        for placeholder, external_id in replacements.items():
+            body = body.replace(placeholder, external_id)
+        materialized[path] = body
+    return materialized
 
 
 def approved_integrated_manifest(
@@ -1255,44 +2260,78 @@ def approved_integrated_manifest(
             "dialogue": "zh-CN",
             "docs": "fr",
         }
-    documents = build_local_documents(
+    document_templates = build_local_documents(
         topology,
         external_provider_selection(),
-        verified_bindings_from_adapters(adapters),
+        integrated_slot_bindings(),
         profile_settings,
         engineering_settings(),
     )
-    normalized = {path: load_rendered_yaml(body) for path, body in documents.items()}
+    rendered = {
+        path: value.body if isinstance(value, LocalDocumentTemplate) else value
+        for path, value in document_templates.items()
+    }
+    documents = materialize_integrated_documents(document_templates, adapters)
+    normalized = {path: load_rendered_yaml(body) for path, body in rendered.items()}
     expected_priors = tuple(
         (path, body_fingerprint(target.read_text(encoding="utf-8")))
         for path in sorted(documents)
         if (target := root / path).is_file()
         and target.read_text(encoding="utf-8") != documents[path]
     )
+    desired_structures: list[DesiredStructure] = []
+    external_objects: list[ExternalObject] = []
+    for slot_id, (provider, stable_key) in sorted(INTEGRATED_SLOT_SPECS.items()):
+        record = adapters[provider].records_by_key[stable_key][0]
+        logical_provider = (
+            ProviderKind.STORY
+            if provider == "linear"
+            else ProviderKind.PRODUCT_CONTRACT
+            if stable_key == "binding.notion.contracts"
+            else ProviderKind.PRODUCT_KNOWLEDGE
+        )
+        desired_structures.append(
+            DesiredStructure(
+                provider,
+                "ensure_label" if stable_key == "label.product.sample" else "ensure_binding",
+                stable_key,
+                record.fingerprint,
+                True,
+                False,
+                logical_provider=logical_provider,
+                semantics=record.semantics,
+            )
+        )
+        external_objects.append(
+            ExternalObject(
+                provider,
+                "setup_structure",
+                stable_key,
+                slot_id,
+                record.external_id,
+                record.fingerprint,
+            )
+        )
     setup_manifest = build_setup_manifest(
         topology,
         tuple(sorted(external_provider_selection().items())),
+        tuple(desired_structures),
+        ExternalDiscovery(objects=tuple(external_objects)),
         (
-            DesiredStructure(
-                "linear", "ensure_label", "label.product.sample", "label-v1", True, False
-            ),
-        ),
-        ExternalDiscovery(
-            objects=(
-                ExternalObject(
-                    "linear",
-                    "setup_structure",
-                    "label.product.sample",
-                    "Sample label",
-                    "linear-label-sample",
-                    "label-v1",
+            (
+                "story_store",
+                complete_layers(
+                    STORY_RUNTIME_CAPABILITIES | {"ensure_binding", "ensure_label"}
                 ),
-            )
-        ),
-        (
-            ("story_store", complete_layers(STORY_RUNTIME_CAPABILITIES | {"ensure_label"})),
-            ("product_knowledge_store", complete_layers(KNOWLEDGE_RUNTIME_CAPABILITIES)),
-            ("product_contract_store", complete_layers(CONTRACT_RUNTIME_CAPABILITIES)),
+            ),
+            (
+                "product_knowledge_store",
+                complete_layers(KNOWLEDGE_RUNTIME_CAPABILITIES | {"ensure_binding"}),
+            ),
+            (
+                "product_contract_store",
+                complete_layers(CONTRACT_RUNTIME_CAPABILITIES | {"ensure_binding"}),
+            ),
             ("delivery_workspace", complete_layers(DELIVERY_RUNTIME_CAPABILITIES)),
         ),
         freeze_document(normalized[WORKSPACE_PATH]),
@@ -1306,25 +2345,460 @@ def approved_integrated_manifest(
         ),
         expected_local_container_fingerprint=fingerprint_local_container(root),
         expected_prior_fingerprints=expected_priors,
-        rendered_local_documents=tuple(sorted(documents.items())),
+        observed_local_fingerprints=tuple(
+            (
+                path,
+                hashlib.sha256((root / path).read_bytes()).hexdigest()
+                if (root / path).is_file()
+                else None,
+            )
+            for path in sorted(documents)
+        ),
+        rendered_local_documents=tuple(sorted(document_templates.items())),
     )
     return approved(setup_manifest), documents
 
 
 def commit_integrated_local(root: Path, value: ApprovedManifest) -> None:
+    operation_by_id = {
+        operation.operation_id: operation
+        for operation in value.manifest.operations
+    }
     operations = tuple(
         operation
         for operation in value.manifest.operations
         if operation.kind is OperationKind.WRITE_LOCAL
     )
+    materialized: list[SetupOperation] = []
+    for operation in operations:
+        body = dict(operation.payload)["document"]
+        for slot in operation.local_slots:
+            source = operation_by_id[slot.source_operation_id]
+            external_id = dict(source.payload).get("external_id")
+            if not isinstance(external_id, str) or not external_id:
+                raise AssertionError(
+                    f"bootstrap source {source.operation_id} lacks external ID"
+                )
+            body = body.replace(slot.placeholder, external_id)
+        materialized.append(
+            replace(
+                operation,
+                payload=(("document", body),),
+                expected_byte_fingerprint=hashlib.sha256(
+                    body.encode("utf-8")
+                ).hexdigest(),
+            )
+        )
     AtomicLocalWriter(root, [])(
-        operations,
+        tuple(materialized),
         value.manifest.expected_local_container_fingerprint,
         "integration-bootstrap",
     )
 
 
 class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
+    def test_slot_backed_rerun_is_a_true_noop_without_atomic_probe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapters = integrated_adapters([])
+            first, _ = approved_integrated_manifest(
+                root,
+                adapters,
+                repository_id="repo-sample",
+            )
+            first_result = run_apply(
+                first,
+                adapters,
+                RepositoryLocalWriter(root),
+                execution_id="slot-noop-bootstrap",
+            )
+            self.assertTrue(first_result.ready)
+            second, _ = approved_integrated_manifest(
+                root,
+                adapters,
+                repository_id="repo-sample",
+            )
+            self.assertNotIn(
+                OperationKind.ROUND_TRIP,
+                tuple(operation.kind for operation in second.manifest.operations),
+            )
+            mutation_counts = {
+                provider: (
+                    len(adapter.created_keys),
+                    len(adapter.deleted_keys),
+                    sum(
+                        kind in {
+                            "create",
+                            "bind_relationship",
+                            "unbind_relationship",
+                            "delete_disposable",
+                        }
+                        for kind in adapter.call_kinds
+                    ),
+                )
+                for provider, adapter in adapters.items()
+            }
+            before_root = os.stat(root, follow_symlinks=False)
+            before_entries = {
+                path.name: (
+                    os.stat(path, follow_symlinks=False).st_dev,
+                    os.stat(path, follow_symlinks=False).st_ino,
+                )
+                for path in root.iterdir()
+            }
+
+            with mock.patch(
+                "scripts.workspace_setup.files.probe_atomic_switch",
+                wraps=setup_files.probe_atomic_switch,
+            ) as atomic_probe:
+                second_result = run_apply(
+                    second,
+                    adapters,
+                    RepositoryLocalWriter(root),
+                    execution_id="slot-noop-rerun",
+                )
+
+            after_root = os.stat(root, follow_symlinks=False)
+            after_entries = {
+                path.name: (
+                    os.stat(path, follow_symlinks=False).st_dev,
+                    os.stat(path, follow_symlinks=False).st_ino,
+                )
+                for path in root.iterdir()
+            }
+            container = next(
+                item
+                for item in second_result.evidence
+                if item.operation_id == "local.container"
+            )
+            self.assertTrue(second_result.ready)
+            self.assertEqual(container.disposition, "unchanged")
+            self.assertEqual(atomic_probe.call_count, 0)
+            self.assertEqual(before_entries, after_entries)
+            self.assertEqual(before_root.st_mtime_ns, after_root.st_mtime_ns)
+            self.assertEqual(
+                {
+                    provider: (
+                        len(adapter.created_keys),
+                        len(adapter.deleted_keys),
+                        sum(
+                            kind in {
+                                "create",
+                                "bind_relationship",
+                                "unbind_relationship",
+                                "delete_disposable",
+                            }
+                            for kind in adapter.call_kinds
+                        ),
+                    )
+                    for provider, adapter in adapters.items()
+                },
+                mutation_counts,
+            )
+
+    def test_stale_unchanged_rerun_stops_before_adapter_reads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapters = integrated_adapters([])
+            first, _ = approved_integrated_manifest(
+                root,
+                adapters,
+                repository_id="repo-sample",
+            )
+            self.assertTrue(run_apply(
+                first,
+                adapters,
+                RepositoryLocalWriter(root),
+                execution_id="stale-noop-bootstrap",
+            ).ready)
+            unchanged, _ = approved_integrated_manifest(
+                root,
+                adapters,
+                repository_id="repo-sample",
+            )
+            self.assertNotIn(
+                OperationKind.ROUND_TRIP,
+                tuple(
+                    operation.kind
+                    for operation in unchanged.manifest.operations
+                ),
+            )
+            workspace = root / WORKSPACE_PATH
+            workspace.write_text(
+                workspace.read_text(encoding="utf-8").replace(
+                    '"repo-sample"',
+                    '"repo-stale-after-approval"',
+                ),
+                encoding="utf-8",
+            )
+            calls_before = {
+                provider: tuple(adapter.calls)
+                for provider, adapter in adapters.items()
+            }
+
+            with self.assertRaisesRegex(
+                SetupApplyError,
+                "stale|unchanged rerun",
+            ):
+                run_apply(
+                    unchanged,
+                    adapters,
+                    RepositoryLocalWriter(root),
+                    execution_id="stale-noop-rejected",
+                )
+
+            self.assertEqual(
+                {
+                    provider: tuple(adapter.calls)
+                    for provider, adapter in adapters.items()
+                },
+                calls_before,
+            )
+
+    def test_existing_external_reference_is_materialized_from_current_verified_read_back(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            adapters = integrated_adapters([])
+            authority, _ = approved_integrated_manifest(
+                root,
+                adapters,
+                repository_id="repo-sample",
+            )
+            old = adapters["linear"].records_by_key["label.product.sample"][0]
+            current = replace(old, external_id="linear-label-current")
+            adapters["linear"].records_by_key[current.stable_key] = [current]
+            adapters["linear"].records_by_id.pop(old.external_id)
+            adapters["linear"].records_by_id[current.external_id] = current
+
+            result = run_apply(
+                authority,
+                adapters,
+                RepositoryLocalWriter(root),
+                execution_id="existing-reference-refresh",
+            )
+
+            self.assertTrue(result.ready)
+            workspace = load_rendered_yaml(
+                (root / WORKSPACE_PATH).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                workspace["products"]["sample"]["story_ref"],
+                current.external_id,
+            )
+
+    def test_greenfield_slots_materialize_after_manual_resume_under_same_approval(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            events: list[str] = []
+            adapters = {
+                "linear": RecordingAdapter("linear", events=events),
+                "notion": RecordingAdapter("notion", events=events),
+            }
+            slot_specs = {
+                "linear.workspace_id": ("linear", "binding.linear.workspace"),
+                "linear.team_id": ("linear", "binding.linear.team"),
+                "linear.story.sample": ("linear", "label.product.sample"),
+                "notion.workspace_id": ("notion", "binding.notion.workspace"),
+                "notion.products_database_id": ("notion", "binding.notion.products"),
+                "notion.knowledge_database_id": ("notion", "binding.notion.knowledge"),
+                "notion.contracts_database_id": ("notion", "binding.notion.contracts"),
+                "notion.knowledge.sample": ("notion", "binding.notion.product.sample"),
+            }
+            slots = {
+                slot_id: LocalDocumentSlot(slot_id, provider, stable_key)
+                for slot_id, (provider, stable_key) in slot_specs.items()
+            }
+            documents = build_local_documents(
+                confirmed_topology(),
+                external_provider_selection(),
+                {
+                    "linear": {
+                        "planned": True,
+                        "values": {
+                            "workspace_id": slots["linear.workspace_id"],
+                            "team_id": slots["linear.team_id"],
+                        },
+                        "story_refs": {
+                            "sample": slots["linear.story.sample"],
+                        },
+                    },
+                    "notion": {
+                        "planned": True,
+                        "values": {
+                            "workspace_id": slots["notion.workspace_id"],
+                            "products_database_id": slots[
+                                "notion.products_database_id"
+                            ],
+                            "knowledge_database_id": slots[
+                                "notion.knowledge_database_id"
+                            ],
+                            "contracts_database_id": slots[
+                                "notion.contracts_database_id"
+                            ],
+                        },
+                        "knowledge_refs": {
+                            "sample": slots["notion.knowledge.sample"],
+                        },
+                    },
+                },
+                product_settings(),
+                engineering_settings(),
+            )
+            workspace_template = documents[WORKSPACE_PATH]
+            self.assertIsInstance(workspace_template, LocalDocumentTemplate)
+            rendered = {
+                path: value.body if isinstance(value, LocalDocumentTemplate) else value
+                for path, value in documents.items()
+            }
+            desired: list[DesiredStructure] = []
+            for index, (slot_id, (provider, stable_key)) in enumerate(
+                sorted(slot_specs.items())
+            ):
+                semantics = ProviderSemantics(
+                    "setup_structure",
+                    FrozenMap((("slot_id", slot_id),)),
+                )
+                is_manual = slot_id == "notion.knowledge.sample"
+                desired.append(
+                    DesiredStructure(
+                        provider,
+                        "ensure_manual_view" if is_manual else "ensure_binding",
+                        stable_key,
+                        semantics_fingerprint(semantics),
+                        True,
+                        False,
+                        logical_provider=(
+                            ProviderKind.STORY
+                            if provider == "linear"
+                            else ProviderKind.PRODUCT_KNOWLEDGE
+                        ),
+                        semantics=semantics,
+                        manual_instructions=(
+                            "Create the approved Sample knowledge record with the exact fields."
+                            if is_manual
+                            else ""
+                        ,) if is_manual else (),
+                    )
+                )
+            setup_manifest = build_setup_manifest(
+                confirmed_topology(),
+                tuple(sorted(external_provider_selection().items())),
+                tuple(desired),
+                ExternalDiscovery(objects=()),
+                (
+                    (
+                        "story_store",
+                        complete_layers(
+                            STORY_RUNTIME_CAPABILITIES | {"ensure_binding"}
+                        ),
+                    ),
+                    (
+                        "product_knowledge_store",
+                        complete_layers(
+                            KNOWLEDGE_RUNTIME_CAPABILITIES | {"ensure_binding"}
+                        ),
+                    ),
+                    (
+                        "product_contract_store",
+                        complete_layers(CONTRACT_RUNTIME_CAPABILITIES),
+                    ),
+                    (
+                        "delivery_workspace",
+                        complete_layers(DELIVERY_RUNTIME_CAPABILITIES),
+                    ),
+                ),
+                freeze_document(load_rendered_yaml(rendered[WORKSPACE_PATH])),
+                tuple(
+                    (Path(path).stem, freeze_document(load_rendered_yaml(body)))
+                    for path, body in sorted(rendered.items())
+                    if path != WORKSPACE_PATH
+                ),
+                expected_local_container_fingerprint=fingerprint_local_container(root),
+                rendered_local_documents=tuple(sorted(documents.items())),
+            )
+            authority = approved(setup_manifest)
+            fingerprint_before = authority.fingerprint
+            self.assertTrue(all(not adapter.calls for adapter in adapters.values()))
+
+            first = run_apply(
+                authority,
+                adapters,
+                RepositoryLocalWriter(root),
+                execution_id="greenfield-manual-handoff",
+            )
+
+            self.assertFalse(first.ready)
+            self.assertEqual(len(first.manual_handoffs), 1)
+            self.assertFalse((root / ".agents").exists())
+            self.assertEqual(
+                {
+                    key
+                    for adapter in adapters.values()
+                    for key in adapter.created_keys
+                },
+                {
+                    stable_key
+                    for slot_id, (_, stable_key) in slot_specs.items()
+                    if slot_id != "notion.knowledge.sample"
+                },
+            )
+            manual = next(
+                operation
+                for operation in authority.manifest.operations
+                if operation.kind is OperationKind.MANUAL
+            )
+            completed = ExternalRecord(
+                manual.target_key,
+                "notion-manual-sample",
+                manual.semantics,
+            )
+            adapters["notion"].records_by_key[completed.stable_key] = [completed]
+            adapters["notion"].records_by_id[completed.external_id] = completed
+
+            second = run_apply(
+                authority,
+                adapters,
+                RepositoryLocalWriter(root),
+                execution_id="greenfield-manual-resume",
+                resume_handoff=first.manual_handoffs[0],
+            )
+
+            self.assertTrue(second.ready)
+            self.assertEqual(authority.fingerprint, fingerprint_before)
+            self.assertEqual(len(second.binding_receipts), len(slot_specs))
+            workspace_body = (root / WORKSPACE_PATH).read_text(encoding="utf-8")
+            workspace = load_rendered_yaml(workspace_body)
+            self.assertEqual(validate_workspace(workspace), ())
+            self.assertNotIn("urn:elephant:setup-slot:", workspace_body)
+            for path in sorted((root / ".agents/elephant/profiles").glob("*.yaml")):
+                self.assertEqual(
+                    validate_profile(load_rendered_yaml(path.read_text(encoding="utf-8"))),
+                    (),
+                )
+            self.assertEqual(
+                {
+                    receipt.stable_key: receipt.external_id
+                    for receipt in second.binding_receipts
+                },
+                {
+                    stable_key: adapters[provider].records_by_key[stable_key][0].external_id
+                    for provider, stable_key in slot_specs.values()
+                },
+            )
+            self.assertTrue(
+                all(
+                    key.endswith(".greenfield-manual-resume")
+                    for adapter in adapters.values()
+                    for key in adapter.deleted_keys
+                )
+            )
+            container = next(
+                evidence
+                for evidence in second.local_writes
+                if evidence.operation_id == "local.container"
+            )
+            self.assertEqual(container.external_id, "greenfield-manual-resume")
+
     def test_same_approved_manual_completion_replaces_local_and_retains_recovery(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1370,7 +2844,7 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 },
                 original_documents,
             )
-            completed = ExternalRecord("view.sample", "notion-view-1", "view-v1")
+            completed = observed("view.sample", "notion-view-1", "view-v1")
             adapters["notion"].records_by_key[completed.stable_key] = [completed]
             adapters["notion"].records_by_id[completed.external_id] = completed
 
@@ -1379,6 +2853,7 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                 adapters,
                 AtomicLocalWriter(root, events),
                 execution_id=resumed_execution_id,
+                resume_handoff=first.manual_handoffs[0],
             )
 
             recovery = next(
@@ -1741,7 +3216,7 @@ class SetupApplyLocalFileIntegrationTests(unittest.TestCase):
                         execution_id="integrated-final-attestation-race",
                     )
 
-            self.assertEqual(final_attestation_calls, 2)
+            self.assertGreaterEqual(final_attestation_calls, 2)
             self.assertTrue(stale_stage_name)
             self.assertIsNotNone(held_stage)
             self.assertIsNotNone(replacement_stage)

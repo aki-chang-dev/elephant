@@ -1,96 +1,19 @@
-from .models import (
-    ApplyEvidence,
-    ApplyResult,
-    ApprovedManifest,
-    Candidate,
-    Confidence,
-    ConfirmedDomain,
-    ConfirmedProduct,
-    ConfirmedTopology,
-    DependencyEdge,
-    Evidence,
-    ExternalDiscovery,
-    ExternalObject,
-    OperationKind,
-    OwnerQuestion,
-    SetupDiagnostic,
-    SetupManifest,
-    SetupOperation,
-    SETUP_MANIFEST_SCHEMA,
-    TopologyConflict,
-    TopologyProposal,
-    WorkspaceUnit,
-    approve_manifest,
-    manifest_fingerprint,
-)
-from .discovery import (
-    RepositoryDiscovery,
-    discover_repository,
-    normalize_external_discovery,
-)
-from .proposal import confirm_topology, propose_topology
-from .dry_run import CapabilityLayers, DesiredStructure, build_setup_manifest
-from .apply import (
-    DeletionReceipt,
-    ExternalRecord,
-    MutationReceipt,
-    SetupAdapter,
-    SetupApplyError,
-    apply_setup,
-)
-from .files import (
-    LocalWrite,
-    WORKSPACE_PATH,
-    apply_local_write,
-    build_local_documents,
-    load_rendered_yaml,
-    plan_local_writes,
-    render_yaml,
-)
+"""Compatibility forwarding for the plugin-shipped canonical setup runtime."""
 
-__all__ = [
-    "ApplyEvidence",
-    "ApplyResult",
-    "ApprovedManifest",
-    "CapabilityLayers",
-    "Candidate",
-    "Confidence",
-    "ConfirmedDomain",
-    "ConfirmedProduct",
-    "ConfirmedTopology",
-    "DependencyEdge",
-    "DesiredStructure",
-    "DeletionReceipt",
-    "Evidence",
-    "ExternalDiscovery",
-    "ExternalObject",
-    "ExternalRecord",
-    "LocalWrite",
-    "MutationReceipt",
-    "OperationKind",
-    "OwnerQuestion",
-    "RepositoryDiscovery",
-    "SETUP_MANIFEST_SCHEMA",
-    "SetupDiagnostic",
-    "SetupAdapter",
-    "SetupApplyError",
-    "SetupManifest",
-    "SetupOperation",
-    "TopologyConflict",
-    "TopologyProposal",
-    "WorkspaceUnit",
-    "WORKSPACE_PATH",
-    "apply_local_write",
-    "approve_manifest",
-    "apply_setup",
-    "build_local_documents",
-    "build_setup_manifest",
-    "confirm_topology",
-    "discover_repository",
-    "load_rendered_yaml",
-    "manifest_fingerprint",
-    "normalize_external_discovery",
-    "plan_local_writes",
-    "propose_topology",
-    "render_yaml",
-]
+from __future__ import annotations
+
+from typing import Any
+
+from scripts._elephant_runtime_forward import canonical_module
+
+
+_CANONICAL = canonical_module("elephant_runtime.workspace_setup")
+__all__ = _CANONICAL.__all__
+
+
+def __getattr__(name: str) -> Any:
+    return getattr(_CANONICAL, name)
+
+
+def __dir__() -> list[str]:
+    return dir(_CANONICAL)

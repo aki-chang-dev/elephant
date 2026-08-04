@@ -1,5 +1,12 @@
 # Setup Workspace Implementation Plan
 
+> Final-fix packaging adjudication (2026-08-04): the plan's original
+> `scripts/workspace_core/` and `scripts/workspace_setup/` task paths are now
+> compatibility-forwarding paths. The sole canonical executable lives in the
+> installed artifact under `plugins/elephant/elephant_runtime/`; all behavior
+> and public API changes apply there. This supersedes the original file-location
+> instructions without creating a second maintained runtime.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the provider-neutral `setup-workspace` discovery, proposal, dry-run, approved provisioning, read-back, round-trip, and local-config pipeline without activating the v3 shipping runtime.
@@ -16,11 +23,19 @@
 - Discovery is read-only. No local or external mutation may occur before approval of the exact dry-run fingerprint.
 - Selected providers fail strictly. No unavailable provider falls back to Git or another provider.
 - Every external mutation requires stable-key idempotency and read-back evidence.
-- Disposable round-trip records are removed and their absence is verified before workspace readiness.
+- Every external opaque ID in local output, including an already observed ID, is a typed manifest-bound slot materialized from its approved operation's current unique read-back; raw strings and caller-asserted verification never bypass apply-time equality.
+- Disposable round-trip relationships and records on a changing setup have attempt-scoped stable keys, reuse exact interrupted-attempt matches, and are removed with ID/key absence verified before workspace readiness. An exact unchanged rerun emits and executes no round trip.
 - Unsupported administrative operations produce one-time manual handoffs with exact diagnostics; missing runtime capabilities always block readiness.
+- A manual handoff pauses the exact approved manifest. Continuation reuses the same `ApprovedManifest` and fingerprint, passes the returned `ManualHandoff` as `resume_handoff`, and uses a distinct nonblank `execution_id` for each attempt. The handoff binds the prior execution ID, approval fingerprint, exact operation, semantics, instructions, and the approval-ordered prefix of earlier MANUAL prerequisites already verified; each prior completion is re-read on later attempts. A new execution ID alone grants no continuation authority. Continuation never regenerates the completed operation as `REUSE`/`VERIFY` or asks for a second routine approval.
 - A rerun produces a diff and may repair only non-semantic omissions. It never silently renames, moves, merges, or deletes user-owned external structures.
 - `.agents/elephant/workspace.yaml` and `.agents/elephant/profiles/*.yaml` are the only local setup outputs. They contain no story records, Product Contracts, Technical Contracts, plans, or checkpoints.
-- Local writes resolve paths against the repository root, reject symlink escape, and use atomic replacement.
+- Repository discovery and local preflight/commit each stay bound to one root descriptor identity; local writes reject symlink escape and use atomic container replacement.
+- The confirmed registry and profile payloads are the sole semantic source for canonical local YAML. Optional rendered templates may carry typed slots only when their exact paths and bodies match that derived projection.
+- Local preflight binds the complete approved template payload before adapter calls; slot-backed bytes are then resolved by read-only unique read-back before external mutation, and commit permits only typed-slot scalar materialization plus its exact final byte hash. Reserved slot-namespace read-back IDs and unresolved placeholders fail closed even for byte-identical candidates. Descriptor ownership transfers before receipt publication; identity-specific idempotent discard handles publication and same-owner replacement interruption. An exact rerun supplies every observed local byte fingerprint, skips provider mutations plus the mutating probe/stage/commit, and cancellation or any `BaseException` closes and discards the execution-owned preflight authority while non-`Exception` cancellation propagates unchanged.
+- Changed staged files are written to new exclusive single-link siblings and renamed into place; no existing target is opened with truncation, including when an attacker substitutes a hard link.
+- The local switch attests the candidate stage name, descriptor, and final fingerprint immediately before commit. A failed final attestation restores the approved prior container or approved absence and retains unexpected trees as non-authoritative evidence.
+- Phase 2 local mutation is supported only on Darwin/Linux POSIX hosts when the target filesystem provides the required native atomic rename primitive. Read-only discovery and dry-run remain importable where practical; an unsupported host or filesystem emits `platform_unsupported` during local-backend preflight before any external mutation.
+- Phase 2 proves complete old-or-new visibility across process death. Retrying the same approval after death immediately following the atomic switch remains explicitly deferred to Phase 5; Phase 2 must not claim crash-resume support for that window.
 - Phase 2 performs no real Linear or Notion API calls. Host-specific adapters and sandbox certification belong to Phases 3 and 4.
 - Tests assert executable data and behavior, not fixed Markdown phrases.
 
@@ -453,7 +468,7 @@ For each desired structure:
 - several matches or one differing fingerprint → semantic `TopologyConflict`, never update/delete;
 - platform/connector/permission administrative gap → `MANUAL` with the exact diagnostic and required read-back evidence;
 - missing configuration for a runtime-required structure → blocking diagnostic;
-- every selected external physical provider → one disposable `ROUND_TRIP` operation;
+- every selected external physical provider on a changing setup → one disposable `ROUND_TRIP` operation; an exact REUSE/VERIFY and observed-local-byte rerun → none;
 - local registry/profile payloads → `WRITE_LOCAL` operations placed last.
 
 Sort operations by phase (`reuse`, `create`, `manual`, `verify`, `round_trip`, `write_local`), then provider/capability/stable key. A repeated call with identical inputs produces byte-identical canonical payload and fingerprint.
@@ -486,7 +501,7 @@ git commit -m "feat: build setup dry run"
 
 **Interfaces:**
 - Consumes: `ApprovedManifest`, ordered `SetupOperation` values, and the local-writer callable introduced as a narrow protocol in this task.
-- Produces: `ExternalRecord`, `MutationReceipt`, `DeletionReceipt`, `SetupAdapter` protocol, `SetupApplyError`, and `apply_setup(approved, adapters, write_local)`.
+- Produces: `ExternalRecord`, `MutationReceipt`, `DeletionReceipt`, `SetupAdapter` protocol, `SetupApplyError`, and `apply_setup(approved, adapters, write_local, *, execution_id)`.
 
 - [ ] **Step 1: Write the no-write-before-approval tests**
 
@@ -498,7 +513,10 @@ class SetupApplyAuthorityTests(unittest.TestCase):
         adapter = RecordingAdapter("linear")
         writes: list[tuple[str, str]] = []
         with self.assertRaisesRegex(TypeError, "ApprovedManifest"):
-            apply_setup(manifest(), {"linear": adapter}, writes.append)
+            apply_setup(
+                manifest(), {"linear": adapter}, writes.append,
+                execution_id="raw-manifest-attempt",
+            )
         self.assertEqual(adapter.calls, [])
         self.assertEqual(writes, [])
 
@@ -506,7 +524,10 @@ class SetupApplyAuthorityTests(unittest.TestCase):
         adapter = RecordingAdapter("linear")
         approved = approve_manifest(blocked_manifest(), manifest_fingerprint(blocked_manifest()))
         with self.assertRaisesRegex(SetupApplyError, "blocking"):
-            apply_setup(approved, {"linear": adapter}, lambda path, body: None)
+            apply_setup(
+                approved, {"linear": adapter}, lambda path, body: None,
+                execution_id="blocked-manifest-attempt",
+            )
         self.assertEqual(adapter.calls, [])
 ```
 
@@ -539,7 +560,7 @@ class SetupAdapter(Protocol):
         raise NotImplementedError
 ```
 
-`apply_setup()` first requires an `ApprovedManifest`, recomputes its fingerprint, rejects stale approval, conflicts, unresolved owner questions, and blocking runtime diagnostics, and verifies every required provider adapter exists. Nothing calls an adapter or local writer until this gate completes.
+`apply_setup()` first requires an `ApprovedManifest`, recomputes its fingerprint, rejects stale approval, conflicts, unresolved owner questions, and blocking runtime diagnostics, and verifies every required provider adapter exists. The read-only local-backend preflight then validates every local operation and the Darwin/Linux POSIX/native-atomic capability before the first external mutation. An unsupported host or target filesystem stops with `platform_unsupported`; no adapter mutation or local commit occurs. Read-only discovery and dry-run do not depend on importing the POSIX mutation backend.
 
 - [ ] **Step 4: Write failing idempotency and read-back tests**
 
@@ -550,8 +571,14 @@ class SetupApplyMutationTests(unittest.TestCase):
     def test_create_is_stable_key_idempotent_and_read_back_verified(self):
         adapter = RecordingAdapter("linear")
         approved = approved_create_manifest()
-        first = apply_setup(approved, {"linear": adapter}, recording_writer())
-        second = apply_setup(approved, {"linear": adapter}, recording_writer())
+        first = apply_setup(
+            approved, {"linear": adapter}, recording_writer(),
+            execution_id="create-first-attempt",
+        )
+        second = apply_setup(
+            approved, {"linear": adapter}, recording_writer(),
+            execution_id="create-second-attempt",
+        )
         self.assertTrue(first.ready)
         self.assertTrue(second.ready)
         self.assertEqual(adapter.created_keys.count("label.product.sample"), 1)
@@ -561,7 +588,10 @@ class SetupApplyMutationTests(unittest.TestCase):
         adapter = RecordingAdapter("linear", corrupt_read_back=True)
         writes = recording_writer()
         with self.assertRaisesRegex(SetupApplyError, "read-back"):
-            apply_setup(approved_create_manifest(), {"linear": adapter}, writes)
+            apply_setup(
+                approved_create_manifest(), {"linear": adapter}, writes,
+                execution_id="read-back-failure-attempt",
+            )
         self.assertEqual(writes.calls, [])
 ```
 
@@ -569,9 +599,9 @@ class SetupApplyMutationTests(unittest.TestCase):
 
 - [ ] **Step 5: Implement operation execution without destructive repair**
 
-For `REUSE` and `VERIFY`, find exactly one stable-key record and verify its fingerprint. For `CREATE`, find first so interruption/rerun reuses a previously created object; create only when absent, then read by returned external ID and compare stable key plus fingerprint. Several records or semantic mismatch stops. Normal setup never calls delete.
+For `REUSE` and `VERIFY`, find exactly one stable-key record and verify its fingerprint. For `CREATE`, find first so interruption/rerun reuses a previously created object; create only when absent, then read by returned external ID and compare stable key plus fingerprint. Several records or semantic mismatch stops. Stable keys and external IDs must both be nonblank. Normal setup never calls delete.
 
-`MANUAL` operations produce structured handoff evidence and return `ready=False` until a subsequent manifest sees the structure and emits `REUSE`/`VERIFY`. Local writes do not occur in that result.
+An absent `MANUAL` operation produces structured handoff evidence and returns `ready=False` with no local writes. After the human completes the exact approved operation, call `apply_setup()` again with the same `ApprovedManifest` object and fingerprint, pass `first.manual_handoffs[0]` as `resume_handoff`, and use a distinct nonblank `execution_id` for the new attempt. The engine first proves that the handoff's prior execution ID, approval fingerprint, exact operation, semantics, instructions, and ordered prefix of earlier verified MANUAL operations match, then the adapter re-queries every earlier completion and the current approved stable key, reads back exactly one matching structure for each, performs guarded uniqueness re-queries, emits `manual_completed`, and resumes the remaining operations. If another MANUAL prerequisite is absent, its new handoff carries the verified prefix forward to a third distinct attempt. It must not build a subsequent manifest, replace `MANUAL` with `REUSE`/`VERIFY`, transfer approval, or request a second routine approval.
 
 - [ ] **Step 6: Write failing disposable round-trip and cleanup tests**
 
@@ -579,7 +609,10 @@ For `REUSE` and `VERIFY`, find exactly one stable-key record and verify its fing
 class SetupRoundTripTests(unittest.TestCase):
     def test_round_trip_creates_reads_deletes_and_verifies_absence(self):
         adapter = RecordingAdapter("notion")
-        result = apply_setup(approved_round_trip_manifest(), {"notion": adapter}, recording_writer())
+        result = apply_setup(
+            approved_round_trip_manifest(), {"notion": adapter}, recording_writer(),
+            execution_id="round-trip-success-attempt",
+        )
         self.assertTrue(result.ready)
         self.assertEqual(
             adapter.call_kinds,
@@ -590,11 +623,14 @@ class SetupRoundTripTests(unittest.TestCase):
         adapter = RecordingAdapter("notion", retain_deleted=True)
         writes = recording_writer()
         with self.assertRaisesRegex(SetupApplyError, "disposable cleanup"):
-            apply_setup(approved_round_trip_manifest(), {"notion": adapter}, writes)
+            apply_setup(
+                approved_round_trip_manifest(), {"notion": adapter}, writes,
+                execution_id="round-trip-cleanup-failure-attempt",
+            )
         self.assertEqual(writes.calls, [])
 ```
 
-Round-trip target keys include the manifest fingerprint so concurrent/repeated setup runs do not collide. Deletion authority exists only on an operation whose kind is `ROUND_TRIP`, and only for the external ID created or reused under that disposable key. Verify absence after deletion.
+Round-trip target keys include the manifest fingerprint and execution ID so concurrent setup attempts do not collide. The relationship has its own derived stable key: query before binding, reuse an exact interrupted-attempt relationship, read it back, and prove stable-key uniqueness before unbinding. Verify relationship absence by both ID and stable key before deleting the disposable record. Deletion authority exists only on an operation whose kind is `ROUND_TRIP`, and only for the external ID created or reused under that disposable key. Verify record absence after deletion.
 
 - [ ] **Step 7: Apply local writes last and return evidence**
 
@@ -674,7 +710,7 @@ The renderer supports only mappings with string keys, lists/tuples, strings, boo
 - one `.agents/elephant/profiles/<product-key>.yaml` per product with `kind: product` and the supplied seven required settings mappings;
 - `.agents/elephant/profiles/engineering.yaml` with `product: null` and `behavior_preservation_required: true`.
 
-Reject product keys that cannot safely form a basename, unverified binding receipts, missing profile settings, and any document that fails the Phase 1 validators before rendering.
+Reject product keys that cannot safely form a basename, missing or raw external binding slots, missing profile settings, and any document that fails the Phase 1 validators before rendering. Every external binding/reference, including an existing observed ID, remains a typed slot until apply-time unique read-back materializes the final value.
 
 - [ ] **Step 4: Write failing confinement and overwrite tests**
 
@@ -707,6 +743,8 @@ class LocalWriteSafetyTests(unittest.TestCase):
 `plan_local_writes()` allows exactly `WORKSPACE_PATH` and direct `.yaml` children of the profile directory. Resolve the root and every existing parent; reject symlink components or resolved targets outside root. For each target, classify `create`, `unchanged`, or `replace`. `replace` requires the manifest operation's expected prior SHA-256 fingerprint; absent/stale fingerprints stop instead of clobbering semantic content.
 
 `apply_local_write()` rechecks the prior fingerprint immediately before mutation, creates missing directories inside the confined root, writes a sibling temporary file, flushes and `fsync()`s it, then uses `os.replace()`. It never deletes unrelated files. A rerun of unchanged content performs no replacement.
+
+The local mutation backend supports Darwin/Linux POSIX hosts only and requires the target filesystem's native atomic rename primitive. Its read-only preflight runs before any external mutation and reports `platform_unsupported` when the host or filesystem cannot provide that primitive; writer-side revalidation remains mandatory for TOCTOU defense. The public repository writer retains the preflighted root descriptor and device/inode identity through commit, so rebinding the lexical root cannot redirect approved writes. Immediately before the switch, attest that the candidate stage name still resolves to the constructed descriptor and desired final fingerprint. On failed final attestation, restore the approved prior container or approved absence and retain the unexpected tree as non-authoritative evidence. A process death may expose only the complete old or complete new container. Recognizing the new container as an already committed same-approval retry after death immediately following the switch is not part of Phase 2 and remains deferred to Phase 5.
 
 - [ ] **Step 6: Integrate the local writer with Task 4**
 
@@ -870,7 +908,7 @@ After all six task reviews are clean:
 ## Self-Review Checklist
 
 - Spec coverage: discovery, independent topology, provenance/confidence/conflicts/questions, complete dry run, one approval authority, exact diagnostics, idempotent reuse/create, manual handoff, read-back, disposable round trip and cleanup, local config last, rerun diff, and readiness are each owned by a task.
-- Deferred correctly: real Linear/Notion adapters, provider sandbox cleanup, Product Contract semantics, v3 shipping, failpoint resume, migration, Maio topology, and legacy cutover are not implemented here.
+- Deferred correctly: real Linear/Notion adapters, provider sandbox cleanup, Product Contract semantics, v3 shipping, same-approval retry after process death immediately following the atomic switch, other Phase 5 failpoint resume, migration, Maio topology, and legacy cutover are not implemented here.
 - No placeholders: every task names exact files, interfaces, RED/GREEN commands, behaviors, and commit scope.
 - Type consistency: `SetupManifest → ApprovedManifest → apply_setup()` is the single authority chain; `ConfirmedTopology` is the only semantic topology input to dry run; `WRITE_LOCAL` remains last.
 - Test quality: contract behavior is asserted through Python values and controlled fixtures, not Markdown phrases or source-string snapshots.
