@@ -44,6 +44,25 @@ def _call(
 def valid_transcript() -> dict[str, object]:
     marker = "elephant-sandbox/7eea5a9e-346e-4d95-aa1f-3490fd099ab3"
     digest = sha256(b"canonical checkpoint").hexdigest()
+    cleanup = {
+        "anchors": {
+            "anchor_1": {
+                "id": "redacted:anchor-1",
+                "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0},
+                "restored": True,
+            },
+            "anchor_2": {
+                "id": "redacted:anchor-2",
+                "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0},
+                "restored": True,
+            },
+        },
+        "attachments": {
+            "checkpoint": "redacted:attachment-1",
+            "contract_link": "redacted:attachment-2",
+            "pr_link": "redacted:attachment-3",
+        },
+    }
     calls = [
         _call(tool, "discovery", "capability_inventory")
         for tool in (
@@ -65,6 +84,10 @@ def valid_transcript() -> dict[str, object]:
     ))
     for operation in ("status", "labels", "parent", "relation_add", "relation_remove", "recap", "contract_link"):
         issue_mutation(operation)
+    calls[22] = _call(
+        "mcp__codex_apps__linear_get_issue", "read_back", "relation_remove",
+        {"parent": None, "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0}, "anchors": cleanup["anchors"]},
+    )
     calls.extend((
         _call("mcp__codex_apps__linear_list_issues", "lookup", "checkpoint", {"matches": 1}),
         _call("mcp__codex_apps__linear_prepare_attachment_upload", "prepare", "checkpoint"),
@@ -86,13 +109,15 @@ def valid_transcript() -> dict[str, object]:
     calls.extend((
         _call("mcp__codex_apps__linear_list_diffs", "diagnostic", "pr_diff", {"code": "configuration_missing"}),
         _call("mcp__codex_apps__linear_list_issues", "lookup", "attachment_cleanup", {"matches": 1}),
-        _call("mcp__codex_apps__linear_delete_attachment", "mutation", "attachment_cleanup"),
-        _call("mcp__codex_apps__linear_get_issue", "absence", "attachment_cleanup"),
+        _call("mcp__codex_apps__linear_delete_attachment", "mutation", "checkpoint_cleanup", arguments={"id": "redacted:attachment-1"}),
+        _call("mcp__codex_apps__linear_delete_attachment", "mutation", "contract_link_cleanup", arguments={"id": "redacted:attachment-2"}),
+        _call("mcp__codex_apps__linear_delete_attachment", "mutation", "pr_link_cleanup", arguments={"id": "redacted:attachment-3"}),
+        _call("mcp__codex_apps__linear_get_issue", "absence", "attachment_cleanup", {"attachments": 0, "absent": list(cleanup["attachments"].values())}),
     ))
     issue_mutation("final_cancel")
     calls[-1] = _call(
         "mcp__codex_apps__linear_get_issue", "read_back", "final_cancel",
-        {"id": "redacted:issue-1", "title": "[Elephant provider certification — cleaned] 7eea5a9e", "status": "Canceled"},
+        {"id": "redacted:issue-1", "title": "[Elephant provider certification — cleaned] 3490fd099ab3", "status": "Canceled", "labels": [], "parent": None, "attachments": 0, "comments": 0, "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0}},
     )
     return {
         "schema": "elephant.linear-sandbox/v1",
@@ -108,6 +133,7 @@ def valid_transcript() -> dict[str, object]:
             ],
         },
         "checkpoint": {"id": "redacted:attachment-1", "sha256": digest, "size": 20},
+        "cleanup": cleanup,
         "calls": calls,
     }
 
@@ -235,6 +261,51 @@ class LinearProviderPackagingTests(unittest.TestCase):
         transcript["calls"][0]["operation"] = "dG9rZW4"
         errors = load_validator().validate_transcript(transcript)
         self.assertTrue(any("secret/base64" in error for error in errors), errors)
+
+    def test_validator_rejects_a_dirty_final_issue_snapshot(self):
+        transcript = valid_transcript()
+        transcript["calls"][-1]["result"].update({
+            "labels": ["still-owned"],
+            "parent": "redacted:parent-1",
+            "attachments": 1,
+            "comments": 1,
+            "relations": {"blocks": 1, "blocked_by": 0, "related_to": 0, "duplicate_of": 0},
+        })
+
+        self.assertTrue(load_validator().validate_transcript(transcript))
+
+    def test_validator_binds_the_cleaned_title_suffix_to_the_marker(self):
+        transcript = valid_transcript()
+        transcript["calls"][-1]["result"]["title"] = (
+            "[Elephant provider certification — cleaned] wrong-suffix"
+        )
+
+        self.assertTrue(load_validator().validate_transcript(transcript))
+
+    def test_validator_binds_the_checkpoint_to_its_cleanup_delete(self):
+        transcript = valid_transcript()
+        transcript["calls"][49]["arguments"]["id"] = "redacted:attachment-9"
+
+        self.assertTrue(load_validator().validate_transcript(transcript))
+
+    def test_validator_requires_relation_remove_anchor_restoration(self):
+        transcript = valid_transcript()
+        transcript["calls"][22]["result"] = {
+            "parent": None,
+            "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0},
+        }
+
+        self.assertTrue(load_validator().validate_transcript(transcript))
+
+    def test_validator_rejects_boolean_cleanup_counts(self):
+        transcript = valid_transcript()
+        transcript["calls"][-1]["result"].update({
+            "attachments": False,
+            "comments": False,
+            "relations": {"blocks": False, "blocked_by": False, "related_to": False, "duplicate_of": False},
+        })
+
+        self.assertTrue(load_validator().validate_transcript(transcript))
 
 
 if __name__ == "__main__":

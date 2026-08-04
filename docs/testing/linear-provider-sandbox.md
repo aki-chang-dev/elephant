@@ -45,7 +45,9 @@ after a completed host run. It records marker
 `redacted:issue-1`, and a checkpoint attachment as
 `redacted:attachment-1`. The checkpoint SHA-256 is
 `2cda18721598e5826f1d0a7d687913168597c49aa8dbe83aecc4d7a8183f63e0` at 454
-bytes. Its closed schema has no additional fields:
+bytes. Its closed schema has no additional fields. The `cleanup` object
+contains exactly two redacted, empty/restored anchor snapshots and the three
+owned attachment identities (checkpoint, contract link, and PR link).
 
 ```json
 {
@@ -60,6 +62,17 @@ bytes. Its closed schema has no additional fields:
     "sha256": "<64 lowercase hex>",
     "size": 1
   },
+  "cleanup": {
+    "anchors": {
+      "anchor_1": {"id": "redacted:<anchor-id>", "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0}, "restored": true},
+      "anchor_2": {"id": "redacted:<anchor-id>", "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0}, "restored": true}
+    },
+    "attachments": {
+      "checkpoint": "redacted:<attachment-id>",
+      "contract_link": "redacted:<attachment-id>",
+      "pr_link": "redacted:<attachment-id>"
+    }
+  },
   "calls": ["<exact tool/phase/operation sequence from the validator>"]
 }
 ```
@@ -67,11 +80,16 @@ bytes. Its closed schema has no additional fields:
 Each call is a minimal object containing `tool`, `phase`, and `operation`.
 Only the validator-permitted call results are retained: exact lookup counts,
 checkpoint `id`/`sha256`/`size`, comment absence counts, the native-diff
-diagnostic code, and the final issue's redacted `id`, cleaned title, and
-`Canceled` status. The comment delete call has exactly one redacted `id`
-argument. Cleanup proof is call-derived: the transcript includes the owned
-comment delete plus zero-match list, attachment delete plus zero-match issue
-read-back, restored relation removal/read-back, and final cancellation.
+diagnostic code, relation-removal's empty source/anchor restoration snapshot,
+owned attachment absence, and the final cleaned snapshot. The comment delete
+call has exactly one redacted `id` argument. Each of the three attachment
+deletes has exactly its owned redacted `id` argument; the checkpoint delete is
+bound to `checkpoint.id`. Cleanup proof is call-derived: the transcript
+includes the owned comment delete plus zero-match list, all three attachment
+deletes plus absence/read-back, restored relation removal/read-back, and final
+cancellation. The exact final title suffix is the marker UUID's final 12
+characters; labels, parent, attachments, comments, and relation counts must
+all be empty.
 
 ## Durable certification record
 

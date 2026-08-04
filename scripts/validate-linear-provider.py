@@ -31,6 +31,12 @@ _CLEANUP = (
     "mcp__codex_apps__linear_delete_comment",
     "mcp__codex_apps__linear_delete_attachment",
 )
+_EMPTY_RELATIONS = {
+    "blocks": 0,
+    "blocked_by": 0,
+    "related_to": 0,
+    "duplicate_of": 0,
+}
 
 
 def _step(tool: str, phase: str, operation: str) -> tuple[str, str, str]:
@@ -70,7 +76,9 @@ _EXPECTED = (
     + (
         _step("mcp__codex_apps__linear_list_diffs", "diagnostic", "pr_diff"),
         _step("mcp__codex_apps__linear_list_issues", "lookup", "attachment_cleanup"),
-        _step("mcp__codex_apps__linear_delete_attachment", "mutation", "attachment_cleanup"),
+        _step("mcp__codex_apps__linear_delete_attachment", "mutation", "checkpoint_cleanup"),
+        _step("mcp__codex_apps__linear_delete_attachment", "mutation", "contract_link_cleanup"),
+        _step("mcp__codex_apps__linear_delete_attachment", "mutation", "pr_link_cleanup"),
         _step("mcp__codex_apps__linear_get_issue", "absence", "attachment_cleanup"),
     )
     + _issue_operation("final_cancel")
@@ -82,7 +90,7 @@ def validate_transcript(value: object) -> tuple[str, ...]:
     _secrets(value, errors)
     if not isinstance(value, Mapping):
         return ("transcript must be an object", *errors)
-    _closed_fields(value, {"schema", "marker", "capabilities", "checkpoint", "calls"}, "transcript", errors)
+    _closed_fields(value, {"schema", "marker", "capabilities", "checkpoint", "cleanup", "calls"}, "transcript", errors)
     if value.get("schema") != SCHEMA:
         errors.append("unsupported transcript schema")
     marker = value.get("marker")
@@ -90,7 +98,8 @@ def validate_transcript(value: object) -> tuple[str, ...]:
         errors.append("invalid sandbox marker")
     _capabilities(value.get("capabilities"), errors)
     checkpoint = _checkpoint(value.get("checkpoint"), errors)
-    _calls(value.get("calls"), checkpoint, errors)
+    cleanup = _cleanup(value.get("cleanup"), checkpoint, errors)
+    _calls(value.get("calls"), marker, checkpoint, cleanup, errors)
     return tuple(errors)
 
 
@@ -98,6 +107,14 @@ def _closed_fields(value: Mapping[object, object], allowed: set[str], path: str,
     for key in value:
         if not isinstance(key, str) or key not in allowed:
             errors.append(f"{path}: unknown field")
+
+
+def _empty_relations(value: object) -> bool:
+    return isinstance(value, Mapping) and set(value) == set(_EMPTY_RELATIONS) and all(
+        isinstance(value.get(name), int) and not isinstance(value.get(name), bool)
+        and value[name] == 0
+        for name in _EMPTY_RELATIONS
+    )
 
 
 def _secrets(value: object, errors: list[str], path: str = "transcript") -> None:
@@ -155,7 +172,53 @@ def _checkpoint(value: object, errors: list[str]) -> tuple[str, str, int] | None
     return attachment_id, digest, size
 
 
-def _calls(value: object, checkpoint: tuple[str, str, int] | None, errors: list[str]) -> None:
+def _cleanup(
+    value: object, checkpoint: tuple[str, str, int] | None, errors: list[str]
+) -> dict[str, object] | None:
+    if not isinstance(value, Mapping):
+        errors.append("cleanup must be an object")
+        return None
+    _closed_fields(value, {"anchors", "attachments"}, "cleanup", errors)
+    anchors = value.get("anchors")
+    attachments = value.get("attachments")
+    if not isinstance(anchors, Mapping):
+        errors.append("cleanup.anchors must be an object")
+    else:
+        _closed_fields(anchors, {"anchor_1", "anchor_2"}, "cleanup.anchors", errors)
+        for name in ("anchor_1", "anchor_2"):
+            anchor = anchors.get(name)
+            if not isinstance(anchor, Mapping):
+                errors.append(f"cleanup.anchors.{name} must be an object")
+                continue
+            _closed_fields(anchor, {"id", "relations", "restored"}, f"cleanup.anchors.{name}", errors)
+            if not isinstance(anchor.get("id"), str) or _REDACTED.fullmatch(anchor["id"]) is None:
+                errors.append(f"cleanup.anchors.{name} has invalid redacted identity")
+            if not _empty_relations(anchor.get("relations")) or anchor.get("restored") is not True:
+                errors.append(f"cleanup.anchors.{name} is not restored and empty")
+        if isinstance(anchors.get("anchor_1"), Mapping) and isinstance(anchors.get("anchor_2"), Mapping) and anchors["anchor_1"].get("id") == anchors["anchor_2"].get("id"):
+            errors.append("cleanup anchors must be distinct")
+    if not isinstance(attachments, Mapping):
+        errors.append("cleanup.attachments must be an object")
+        return None
+    _closed_fields(attachments, {"checkpoint", "contract_link", "pr_link"}, "cleanup.attachments", errors)
+    for name in ("checkpoint", "contract_link", "pr_link"):
+        attachment_id = attachments.get(name)
+        if not isinstance(attachment_id, str) or _REDACTED.fullmatch(attachment_id) is None:
+            errors.append(f"cleanup.attachments.{name} has invalid redacted identity")
+    if checkpoint is not None and attachments.get("checkpoint") != checkpoint[0]:
+        errors.append("cleanup checkpoint identity does not match checkpoint evidence")
+    if len({attachments.get(name) for name in ("checkpoint", "contract_link", "pr_link")}) != 3:
+        errors.append("cleanup attachment identities must be distinct")
+    return {"anchors": anchors, "attachments": attachments}
+
+
+def _calls(
+    value: object,
+    marker: object,
+    checkpoint: tuple[str, str, int] | None,
+    cleanup: dict[str, object] | None,
+    errors: list[str],
+) -> None:
     if not isinstance(value, list):
         errors.append("calls must be an array")
         return
@@ -169,25 +232,54 @@ def _calls(value: object, checkpoint: tuple[str, str, int] | None, errors: list[
             errors.append(f"calls[{index}] must be an object")
             continue
         allowed = {"tool", "phase", "operation"}
-        if expected[2] in {"checkpoint", "comment_create", "comment_update", "comment_delete", "create_story", "attachment_cleanup", "final_cancel"} or expected[1] in {"lookup", "diagnostic", "absence", "read_back"}:
+        if expected[2] in {"checkpoint", "comment_create", "comment_update", "comment_delete", "create_story", "attachment_cleanup", "final_cancel", "relation_remove"} or expected[1] in {"lookup", "diagnostic", "absence", "read_back"}:
             allowed.add("result")
-        if expected == _step("mcp__codex_apps__linear_delete_comment", "mutation", "comment_delete"):
+        if expected == _step("mcp__codex_apps__linear_delete_comment", "mutation", "comment_delete") or expected[1] == "mutation" and expected[0] == "mcp__codex_apps__linear_delete_attachment":
             allowed.add("arguments")
         _closed_fields(call, allowed, f"calls[{index}]", errors)
         if tuple(call.get(field) for field in ("tool", "phase", "operation")) != expected:
             errors.append(f"calls[{index}] violates certification order")
-        _result(call.get("result"), expected, index, checkpoint, errors)
+        _result(call.get("result"), expected, index, marker, checkpoint, cleanup, errors)
         if expected[2] == "comment_delete" and expected[1] == "mutation":
             arguments = call.get("arguments")
             if not isinstance(arguments, Mapping) or set(arguments) != {"id"} or not isinstance(arguments.get("id"), str) or _REDACTED.fullmatch(arguments["id"]) is None:
                 errors.append("comment delete requires one redacted id argument")
+        if expected[1] == "mutation" and expected[0] == "mcp__codex_apps__linear_delete_attachment":
+            attachment_key = {
+                "checkpoint_cleanup": "checkpoint",
+                "contract_link_cleanup": "contract_link",
+                "pr_link_cleanup": "pr_link",
+            }[expected[2]]
+            attachments = cleanup.get("attachments") if cleanup is not None else None
+            arguments = call.get("arguments")
+            if not isinstance(attachments, Mapping) or not isinstance(arguments, Mapping) or set(arguments) != {"id"} or arguments.get("id") != attachments.get(attachment_key):
+                errors.append(f"calls[{index}] does not delete its owned {attachment_key} attachment")
     if value and len(value) == len(_EXPECTED):
         final = value[-1].get("result") if isinstance(value[-1], Mapping) else None
-        if not isinstance(final, Mapping) or final.get("status") != "Canceled" or not isinstance(final.get("title"), str) or not final["title"].startswith("[Elephant provider certification — cleaned]") or not isinstance(final.get("id"), str) or _REDACTED.fullmatch(final["id"]) is None:
-            errors.append("final issue read-back is not cleaned and Canceled")
+        suffix = marker.rsplit("/", 1)[-1][-12:] if isinstance(marker, str) else None
+        expected_final = {
+            "id": "redacted:issue-1",
+            "title": f"[Elephant provider certification — cleaned] {suffix}",
+            "status": "Canceled",
+            "labels": [],
+            "parent": None,
+            "attachments": 0,
+            "comments": 0,
+            "relations": _EMPTY_RELATIONS,
+        }
+        if final != expected_final or not _exact_final_counts(final):
+            errors.append("final issue read-back is not an exact cleaned snapshot")
 
 
-def _result(value: object, expected: tuple[str, str, str], index: int, checkpoint: tuple[str, str, int] | None, errors: list[str]) -> None:
+def _result(
+    value: object,
+    expected: tuple[str, str, str],
+    index: int,
+    marker: object,
+    checkpoint: tuple[str, str, int] | None,
+    cleanup: dict[str, object] | None,
+    errors: list[str],
+) -> None:
     tool, phase, operation = expected
     if phase == "lookup":
         wanted = 0 if operation in {"create_story", "comment_create"} else 1
@@ -203,6 +295,24 @@ def _result(value: object, expected: tuple[str, str, str], index: int, checkpoin
     elif operation == "pr_diff":
         if not isinstance(value, Mapping) or set(value) != {"code"} or value.get("code") not in {"configuration_missing", "connector_capability_missing"}:
             errors.append(f"calls[{index}] has invalid native diff evidence")
+    elif operation == "relation_remove" and phase == "read_back":
+        anchors = cleanup.get("anchors") if cleanup is not None else None
+        expected_result = {"parent": None, "relations": _EMPTY_RELATIONS, "anchors": anchors}
+        if value != expected_result or not isinstance(value, Mapping) or not _empty_relations(value.get("relations")):
+            errors.append(f"calls[{index}] does not prove restored empty relations")
+    elif operation == "attachment_cleanup" and phase == "absence":
+        attachments = cleanup.get("attachments") if cleanup is not None else None
+        absent = list(attachments.values()) if isinstance(attachments, Mapping) else None
+        if value != {"attachments": 0, "absent": absent} or not isinstance(value, Mapping) or not isinstance(value.get("attachments"), int) or isinstance(value.get("attachments"), bool):
+            errors.append(f"calls[{index}] does not prove owned attachment absence")
+
+
+def _exact_final_counts(value: object) -> bool:
+    return isinstance(value, Mapping) and all(
+        isinstance(value.get(name), int) and not isinstance(value.get(name), bool)
+        and value[name] == 0
+        for name in ("attachments", "comments")
+    ) and _empty_relations(value.get("relations"))
 
 
 def main() -> int:

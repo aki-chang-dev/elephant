@@ -33,9 +33,11 @@ from .checkpoint import (
 from .provider import LinearStoryProvider, LinearStoryProviderConfig
 from .sandbox import (
     SANDBOX_TRANSCRIPT_SCHEMA,
+    SandboxAnchor,
     LinearSandboxTranscript,
     SandboxCall,
     SandboxCheckpoint,
+    SandboxCleanup,
     verify_linear_sandbox,
 )
 from .models import (
@@ -119,8 +121,10 @@ __all__ = [
     "PRODUCT_KIND_LABELS_CAPABILITY",
     "SANDBOX_CLEANUP_CAPABILITY",
     "SANDBOX_TRANSCRIPT_SCHEMA",
+    "SandboxAnchor",
     "SandboxCall",
     "SandboxCheckpoint",
+    "SandboxCleanup",
     "ProductRecap",
     "PageCursor",
     "READ_ONLY_DISCOVERY_TOOLS",

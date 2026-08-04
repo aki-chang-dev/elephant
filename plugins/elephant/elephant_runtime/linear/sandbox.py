@@ -28,6 +28,12 @@ _CLEANUP = (
     "mcp__codex_apps__linear_delete_comment",
     "mcp__codex_apps__linear_delete_attachment",
 )
+_EMPTY_RELATIONS = {
+    "blocks": 0,
+    "blocked_by": 0,
+    "related_to": 0,
+    "duplicate_of": 0,
+}
 
 
 def _step(tool: str, phase: str, operation: str) -> tuple[str, str, str]:
@@ -73,7 +79,9 @@ _EXPECTED = (
     + (
         _step("mcp__codex_apps__linear_list_diffs", "diagnostic", "pr_diff"),
         _step("mcp__codex_apps__linear_list_issues", "lookup", "attachment_cleanup"),
-        _step("mcp__codex_apps__linear_delete_attachment", "mutation", "attachment_cleanup"),
+        _step("mcp__codex_apps__linear_delete_attachment", "mutation", "checkpoint_cleanup"),
+        _step("mcp__codex_apps__linear_delete_attachment", "mutation", "contract_link_cleanup"),
+        _step("mcp__codex_apps__linear_delete_attachment", "mutation", "pr_link_cleanup"),
         _step("mcp__codex_apps__linear_get_issue", "absence", "attachment_cleanup"),
     )
     + _issue_operation("final_cancel")
@@ -84,6 +92,14 @@ def _nonblank(name: str, value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name}: expected nonblank string")
     return value
+
+
+def _empty_relations(value: object) -> bool:
+    return isinstance(value, Mapping) and set(value) == set(_EMPTY_RELATIONS) and all(
+        isinstance(value.get(name), int) and not isinstance(value.get(name), bool)
+        and value[name] == 0
+        for name in _EMPTY_RELATIONS
+    )
 
 
 @dataclass(frozen=True)
@@ -139,11 +155,59 @@ class SandboxCall:
 
 
 @dataclass(frozen=True)
+class SandboxAnchor:
+    """A redacted anchor proven restored to an empty relation snapshot."""
+
+    id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str) or _REDACTED.fullmatch(self.id) is None:
+            raise ValueError("id: expected redacted anchor identity")
+
+    def to_value(self) -> dict[str, object]:
+        return {"id": self.id, "relations": dict(_EMPTY_RELATIONS), "restored": True}
+
+
+@dataclass(frozen=True)
+class SandboxCleanup:
+    """Owned attachment identities and restored relation anchors for cleanup."""
+
+    anchor_1: SandboxAnchor
+    anchor_2: SandboxAnchor
+    checkpoint_id: str
+    contract_link_id: str
+    pr_link_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.anchor_1, SandboxAnchor) or not isinstance(self.anchor_2, SandboxAnchor):
+            raise TypeError("anchors: expected SandboxAnchor values")
+        if self.anchor_1.id == self.anchor_2.id:
+            raise ValueError("anchors: expected distinct identities")
+        for name in ("checkpoint_id", "contract_link_id", "pr_link_id"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or _REDACTED.fullmatch(value) is None:
+                raise ValueError(f"{name}: expected redacted attachment identity")
+        if len({self.checkpoint_id, self.contract_link_id, self.pr_link_id}) != 3:
+            raise ValueError("attachment identities: expected distinct values")
+
+    def to_value(self) -> dict[str, object]:
+        return {
+            "anchors": {"anchor_1": self.anchor_1.to_value(), "anchor_2": self.anchor_2.to_value()},
+            "attachments": {
+                "checkpoint": self.checkpoint_id,
+                "contract_link": self.contract_link_id,
+                "pr_link": self.pr_link_id,
+            },
+        }
+
+
+@dataclass(frozen=True)
 class LinearSandboxTranscript:
     """The exact, closed transcript accepted by the offline validator."""
 
     marker: str
     checkpoint: SandboxCheckpoint
+    cleanup: SandboxCleanup
     calls: tuple[SandboxCall, ...]
 
     def __post_init__(self) -> None:
@@ -151,6 +215,10 @@ class LinearSandboxTranscript:
             raise ValueError("marker: expected sandbox UUID marker")
         if not isinstance(self.checkpoint, SandboxCheckpoint):
             raise TypeError("checkpoint: expected SandboxCheckpoint")
+        if not isinstance(self.cleanup, SandboxCleanup):
+            raise TypeError("cleanup: expected SandboxCleanup")
+        if self.cleanup.checkpoint_id != self.checkpoint.id:
+            raise ValueError("cleanup checkpoint identity must match checkpoint")
         if not isinstance(self.calls, tuple) or not all(isinstance(call, SandboxCall) for call in self.calls):
             raise TypeError("calls: expected SandboxCall tuple")
 
@@ -161,6 +229,7 @@ class LinearSandboxTranscript:
             "marker": self.marker,
             "capabilities": {"read_only": list(_DISCOVERY), "sandbox_cleanup": list(_CLEANUP)},
             "checkpoint": self.checkpoint.to_value(),
+            "cleanup": self.cleanup.to_value(),
             "calls": [call.to_value() for call in self.calls],
         }
 
@@ -181,8 +250,9 @@ def verify_linear_sandbox(transcript: LinearSandboxTranscript) -> tuple[str, ...
         return tuple(errors)
     _verify_authority(calls, errors)
     _verify_checkpoint(calls, transcript.checkpoint, errors)
-    _verify_cleanup(calls, errors)
-    _verify_final_issue(calls, errors)
+    _verify_relation_cleanup(calls, transcript.cleanup, errors)
+    _verify_cleanup(calls, transcript.cleanup, errors)
+    _verify_final_issue(calls, transcript.marker, errors)
     return tuple(errors)
 
 
@@ -203,18 +273,58 @@ def _verify_checkpoint(
         errors.append("checkpoint read-back does not match its observed digest")
 
 
-def _verify_cleanup(calls: tuple[SandboxCall, ...], errors: list[str]) -> None:
+def _verify_relation_cleanup(
+    calls: tuple[SandboxCall, ...], cleanup: SandboxCleanup, errors: list[str]
+) -> None:
+    relation = next(call for call in calls if call.operation == "relation_remove" and call.phase == "read_back")
+    if dict(relation.result or {}) != {
+        "parent": None,
+        "relations": _EMPTY_RELATIONS,
+        "anchors": cleanup.to_value()["anchors"],
+    } or not _empty_relations((relation.result or {}).get("relations")):
+        errors.append("relation cleanup is not an empty restored snapshot")
+
+
+def _verify_cleanup(
+    calls: tuple[SandboxCall, ...], cleanup: SandboxCleanup, errors: list[str]
+) -> None:
     comment_delete = next(call for call in calls if call.operation == "comment_delete" and call.phase == "mutation")
     comment_absence = next(call for call in calls if call.operation == "comment_delete" and call.phase == "absence")
     if dict(comment_delete.arguments or {}) != {"id": "redacted:comment-1"} or dict(comment_absence.result or {}) != {"matches": 0}:
         errors.append("comment cleanup is not call-derived")
-    attachment_delete = next(call for call in calls if call.operation == "attachment_cleanup" and call.phase == "mutation")
     attachment_absence = next(call for call in calls if call.operation == "attachment_cleanup" and call.phase == "absence")
-    if attachment_delete.tool != "mcp__codex_apps__linear_delete_attachment" or attachment_absence.tool != "mcp__codex_apps__linear_get_issue" or dict(attachment_absence.result or {}) != {"matches": 0}:
+    attachment_keys = (
+        ("checkpoint_cleanup", cleanup.checkpoint_id),
+        ("contract_link_cleanup", cleanup.contract_link_id),
+        ("pr_link_cleanup", cleanup.pr_link_id),
+    )
+    deletes = [
+        next(call for call in calls if call.operation == operation and call.phase == "mutation")
+        for operation, _ in attachment_keys
+    ]
+    if any(delete.tool != "mcp__codex_apps__linear_delete_attachment" or dict(delete.arguments or {}) != {"id": attachment_id} for delete, (_, attachment_id) in zip(deletes, attachment_keys)) or attachment_absence.tool != "mcp__codex_apps__linear_get_issue" or dict(attachment_absence.result or {}) != {"attachments": 0, "absent": [attachment_id for _, attachment_id in attachment_keys]} or not isinstance((attachment_absence.result or {}).get("attachments"), int) or isinstance((attachment_absence.result or {}).get("attachments"), bool):
         errors.append("attachment cleanup is not call-derived")
 
 
-def _verify_final_issue(calls: tuple[SandboxCall, ...], errors: list[str]) -> None:
+def _verify_final_issue(calls: tuple[SandboxCall, ...], marker: str, errors: list[str]) -> None:
     final = calls[-1].result
-    if not isinstance(final, Mapping) or final.get("status") != "Canceled" or not isinstance(final.get("id"), str) or _REDACTED.fullmatch(final["id"]) is None or not isinstance(final.get("title"), str) or not final["title"].startswith("[Elephant provider certification — cleaned]"):
-        errors.append("final issue is not a retained cleaned Canceled issue")
+    expected = {
+        "id": "redacted:issue-1",
+        "title": f"[Elephant provider certification — cleaned] {marker.rsplit('/', 1)[-1][-12:]}",
+        "status": "Canceled",
+        "labels": [],
+        "parent": None,
+        "attachments": 0,
+        "comments": 0,
+        "relations": _EMPTY_RELATIONS,
+    }
+    if final != expected or not isinstance(final, Mapping) or not _exact_final_counts(final):
+        errors.append("final issue is not an exact retained cleaned snapshot")
+
+
+def _exact_final_counts(value: Mapping[object, object]) -> bool:
+    return all(
+        isinstance(value.get(name), int) and not isinstance(value.get(name), bool)
+        and value[name] == 0
+        for name in ("attachments", "comments")
+    ) and _empty_relations(value.get("relations"))

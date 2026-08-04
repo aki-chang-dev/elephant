@@ -19,6 +19,25 @@
     "sha256": "2cda18721598e5826f1d0a7d687913168597c49aa8dbe83aecc4d7a8183f63e0",
     "size": 454
   },
+  "cleanup": {
+    "anchors": {
+      "anchor_1": {
+        "id": "redacted:anchor-1",
+        "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0},
+        "restored": true
+      },
+      "anchor_2": {
+        "id": "redacted:anchor-2",
+        "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0},
+        "restored": true
+      }
+    },
+    "attachments": {
+      "checkpoint": "redacted:attachment-1",
+      "contract_link": "redacted:attachment-2",
+      "pr_link": "redacted:attachment-3"
+    }
+  },
   "calls": [
     {"tool": "mcp__codex_apps__linear_list_teams", "phase": "discovery", "operation": "capability_inventory"},
     {"tool": "mcp__codex_apps__linear_get_team", "phase": "discovery", "operation": "capability_inventory"},
@@ -42,7 +61,7 @@
     {"tool": "mcp__codex_apps__linear_get_issue", "phase": "read_back", "operation": "relation_add"},
     {"tool": "mcp__codex_apps__linear_list_issues", "phase": "lookup", "operation": "relation_remove", "result": {"matches": 1}},
     {"tool": "mcp__codex_apps__linear_save_issue", "phase": "mutation", "operation": "relation_remove"},
-    {"tool": "mcp__codex_apps__linear_get_issue", "phase": "read_back", "operation": "relation_remove"},
+    {"tool": "mcp__codex_apps__linear_get_issue", "phase": "read_back", "operation": "relation_remove", "result": {"parent": null, "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0}, "anchors": {"anchor_1": {"id": "redacted:anchor-1", "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0}, "restored": true}, "anchor_2": {"id": "redacted:anchor-2", "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0}, "restored": true}}}},
     {"tool": "mcp__codex_apps__linear_list_issues", "phase": "lookup", "operation": "recap", "result": {"matches": 1}},
     {"tool": "mcp__codex_apps__linear_save_issue", "phase": "mutation", "operation": "recap"},
     {"tool": "mcp__codex_apps__linear_get_issue", "phase": "read_back", "operation": "recap"},
@@ -69,10 +88,12 @@
     {"tool": "mcp__codex_apps__linear_get_issue", "phase": "read_back", "operation": "pr_link"},
     {"tool": "mcp__codex_apps__linear_list_diffs", "phase": "diagnostic", "operation": "pr_diff", "result": {"code": "configuration_missing"}},
     {"tool": "mcp__codex_apps__linear_list_issues", "phase": "lookup", "operation": "attachment_cleanup", "result": {"matches": 1}},
-    {"tool": "mcp__codex_apps__linear_delete_attachment", "phase": "mutation", "operation": "attachment_cleanup"},
-    {"tool": "mcp__codex_apps__linear_get_issue", "phase": "absence", "operation": "attachment_cleanup", "result": {"matches": 0}},
+    {"tool": "mcp__codex_apps__linear_delete_attachment", "phase": "mutation", "operation": "checkpoint_cleanup", "arguments": {"id": "redacted:attachment-1"}},
+    {"tool": "mcp__codex_apps__linear_delete_attachment", "phase": "mutation", "operation": "contract_link_cleanup", "arguments": {"id": "redacted:attachment-2"}},
+    {"tool": "mcp__codex_apps__linear_delete_attachment", "phase": "mutation", "operation": "pr_link_cleanup", "arguments": {"id": "redacted:attachment-3"}},
+    {"tool": "mcp__codex_apps__linear_get_issue", "phase": "absence", "operation": "attachment_cleanup", "result": {"attachments": 0, "absent": ["redacted:attachment-1", "redacted:attachment-2", "redacted:attachment-3"]}},
     {"tool": "mcp__codex_apps__linear_list_issues", "phase": "lookup", "operation": "final_cancel", "result": {"matches": 1}},
     {"tool": "mcp__codex_apps__linear_save_issue", "phase": "mutation", "operation": "final_cancel"},
-    {"tool": "mcp__codex_apps__linear_get_issue", "phase": "read_back", "operation": "final_cancel", "result": {"id": "redacted:issue-1", "title": "[Elephant provider certification — cleaned] 3c820f4c9b7e", "status": "Canceled"}}
+    {"tool": "mcp__codex_apps__linear_get_issue", "phase": "read_back", "operation": "final_cancel", "result": {"id": "redacted:issue-1", "title": "[Elephant provider certification — cleaned] 3c820f4c9b7e", "status": "Canceled", "labels": [], "parent": null, "attachments": 0, "comments": 0, "relations": {"blocks": 0, "blocked_by": 0, "related_to": 0, "duplicate_of": 0}}}
   ]
 }
