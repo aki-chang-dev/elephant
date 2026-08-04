@@ -3,6 +3,7 @@ from enum import Enum
 import unittest
 
 import scripts.workspace_setup as workspace_setup
+from scripts._elephant_runtime_forward import canonical_module
 from scripts.workspace_core import DiagnosticCode, ProviderKind
 from scripts.workspace_setup import (
     ApplyEvidence,
@@ -292,6 +293,14 @@ class SetupApprovalTests(unittest.TestCase):
 
 
 class SetupValueContractTests(unittest.TestCase):
+    def test_canonical_runtime_declares_the_linear_provider_module(self):
+        runtime = canonical_module("elephant_runtime")
+
+        self.assertEqual(
+            runtime.__all__,
+            ["workspace_core", "workspace_setup", "linear"],
+        )
+
     def test_serialized_vocabulary_is_exact(self):
         self.assertEqual(SETUP_MANIFEST_SCHEMA, "elephant.setup-manifest/v1")
         self.assertEqual(
