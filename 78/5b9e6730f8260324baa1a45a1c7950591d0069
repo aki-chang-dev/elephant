@@ -1,0 +1,54 @@
+tests/test_notion_packaging.py
+  s_7c6e11e61c7ee5::t_1be6284738f1c8 663-665
+  s_7c6e11e61c7ee5::t_b86c04e5204500 490,492-500
+  s_7c6e11e61c7ee5::t_73a34acd543584 289-292,457-485
+  s_7c6e11e61c7ee5::t_ade33718069b3d 188-206,208-254
+  s_7c6e11e61c7ee5::t_477b3985f1c5e8 51-69
+  s_7c6e11e61c7ee5::t_63d102fdb4d743 660-662,678-730
+  s_7c6e11e61c7ee5::t_f46029a5809c33 739-740
+  s_7c6e11e61c7ee5::t_a4aed49280b9b7 87,89,91,93,95,97,99-101,103,105,107,109-111,113,115,117,119,121-122,124,126,128-130,132,134-135,137-138,140-141,143,146,149,153
+tests/test_notion_setup_adapter.py
+  s_7c6e11e61c7ee5::t_aa3afa089f89d8 286,297
+  s_7c6e11e61c7ee5::t_bcb54b655faaa4 380,474,476
+  s_7c6e11e61c7ee5::t_ccd123d612cacb 335-347,356-359
+  s_7c6e11e61c7ee5::t_27aabf29b62a0f 41,89-92
+  s_7c6e11e61c7ee5::t_99f96dc53bf2c5 693,697-700,703-704
+  s_7c6e11e61c7ee5::t_5d8b7246a7bca6 348-355
+  s_7c6e11e61c7ee5::t_e5f13e5cfe8a0e 259
+  s_7c6e11e61c7ee5::t_bc3ae0d173c6be 49-51,115-132,271-285,287-295,298-333
+docs/testing/notion-provider-sandbox.json
+  s_7c6e11e61c7ee5::t_063768de6a4dcd 7-36,300,303-304,341-365,378-403,416-441,454-479,492-517,530-555,568-643,656-681,694-720,733-758,771-773,782-787,789,791,796-891,899-924,937-962,975-1000,1013-1063,1076-1101,1114-1139,1152-1179,1188,1191-1192,1202-1227,1240-1265,1278-1328,1341-1391,1404-1454,1467-1492,1505,1518-1543,1556,1569-1594,1607,1620,1633-1658,1671,1689,1702,1715,1728,1741,1754,1767,1780,1793,1806,1819,1832,1845
+plugins/elephant/elephant_runtime/notion/capabilities.py
+  s_7c6e11e61c7ee5::t_4d32ab8049b75f 34-35
+plugins/elephant/elephant_runtime/notion/sandbox.py
+  s_7c6e11e61c7ee5::t_2a040730d0dbf1 8,81,83,85,87,89,91,93-95,97,99,101,103-105,107,109,111,113,115-116,118,120,122-124,126,128-129,131-132,134-135,137,140,143,147
+  s_7c6e11e61c7ee5::t_2847581842b606 180-209,211-257
+  s_7c6e11e61c7ee5::t_44f5dca9533a46 295,305,314,334-342,405,538,556,569-570
+  s_7c6e11e61c7ee5::t_962f0b0e6d134a 577-581
+docs/testing/notion-provider-sandbox.md
+  s_7c6e11e61c7ee5::t_6366dd92abff5c 5-6,8-9
+plugins/elephant/references/providers/notion.md
+  s_7c6e11e61c7ee5::t_6366dd92abff5c 93-114,155-162
+plugins/elephant/elephant_runtime/notion/setup_adapter.py
+  s_7c6e11e61c7ee5::t_d6d646a74d25c8 272,282-286,292-296
+  s_7c6e11e61c7ee5::t_d92b27e8975b22 273-281,287-289,300-301,303-304,307-308,311-312,314-315,322-351
+plugins/elephant/elephant_runtime/notion/host.py
+  s_7c6e11e61c7ee5::t_4d32ab8049b75f 77,79-87
+  s_7c6e11e61c7ee5::t_202d297198ecb8 6,11-25,70-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "785b9e6730f8260324baa1a45a1c7950591d0069",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
