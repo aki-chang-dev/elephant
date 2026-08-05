@@ -1,6 +1,0 @@
-{
-  "name": "@fixture/alpha",
-  "dependencies": {
-    "@fixture/beta": "workspace:*"
-  }
-}

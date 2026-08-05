@@ -1,3 +1,3 @@
-"""Canonical executable runtime shipped inside the Elephant plugin artifact."""
+"""Minimal executable runtime shipped with Elephant."""
 
-__all__ = ["workspace_core", "workspace_setup", "linear", "workspace_map"]
+__all__ = ["workspace_map"]
