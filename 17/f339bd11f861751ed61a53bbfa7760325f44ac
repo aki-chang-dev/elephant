@@ -1,0 +1,23 @@
+tests/test_notion_knowledge.py
+  s_7c6e11e61c7ee5::t_cdb39bd76cb752 193,211,236,274,347-365
+tests/test_notion_knowledge_failpoints.py
+  s_7c6e11e61c7ee5::t_cdb39bd76cb752 60,71,88,105,118,125-156
+plugins/elephant/elephant_runtime/notion/knowledge.py
+  s_7c6e11e61c7ee5::t_a971a069c6fa74 183,200-204,206-208,214,239,624-628,632
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "17f339bd11f861751ed61a53bbfa7760325f44ac",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
