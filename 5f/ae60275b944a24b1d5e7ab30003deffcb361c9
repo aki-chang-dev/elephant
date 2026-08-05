@@ -1,0 +1,48 @@
+plugins/elephant/skills/ship-story/SKILL.md
+  s_7c6e11e61c7ee5::t_1886bf854a287a 22-23
+  s_7c6e11e61c7ee5::t_538cf5d7ca9ef7 3,6-21,24-34,37-38,41-140,143-153,157-169
+  s_7c6e11e61c7ee5::t_ea4779c0a7d671 141-142,154-156
+plugins/elephant/skills/author-product-spec/SKILL.md
+  s_7c6e11e61c7ee5::t_fe0912813018af 3,6,8,10-12,14,16-18,20,22-23,25-28,30-32,34,36,38-43,45-48,50,52,54-61,63-65,67-69,71,73-123
+scripts/validate-compatibility.py
+  s_7c6e11e61c7ee5::t_48fe7fadf2f368 75-83,87-88,410-415
+  s_7c6e11e61c7ee5::t_2714a65fbe445c 84-86,89
+plugins/elephant/skills/kickoff/SKILL.md
+  s_7c6e11e61c7ee5::t_1886bf854a287a 22-23,88
+  s_7c6e11e61c7ee5::t_5c503f02992be9 3,8,10-13,15,17-20,25,27-29,31-33,35,37-43,45-47,49,51,53-60,62-68,72,74-78,80,82,84-87,89-90
+README.md
+  s_7c6e11e61c7ee5::t_2714a65fbe445c 3-4,6-11,16-25,30-36,38,41,44-46,48,50-52,54-55,57,59-62,64,66,68,75,82-84,86
+plugins/elephant/skills/decompose-roadmap/SKILL.md
+  s_7c6e11e61c7ee5::t_1996ec763d602d 3,6,8,10-13,15,17-19,21,23-25,27-29,31,33-35,37,39-44,46-48,50,52-58,60-62,64,66,68-75,77-79,81-115
+docs/testing/native-information-coordination-pressure-tests.md
+  s_7c6e11e61c7ee5::t_e5afa5f2548108 159-181
+  s_7c6e11e61c7ee5::t_d628b25fd19090 233-251
+  s_7c6e11e61c7ee5::t_1996ec763d602d 199-215
+  s_7c6e11e61c7ee5::t_538cf5d7ca9ef7 139-158
+  s_7c6e11e61c7ee5::t_56c5a81dfa3a65 252-262
+  s_7c6e11e61c7ee5::t_5c503f02992be9 182-198
+  s_7c6e11e61c7ee5::t_fe0912813018af 216-232
+plugins/elephant/skills/ship-story/reviewers/implementation-conformance.md
+  s_7c6e11e61c7ee5::t_538cf5d7ca9ef7 3-4,9-12,16-19,21-24,26-27,29,34,42-43
+tests/test_information_coordination.py
+  s_7c6e11e61c7ee5::t_48933094cf22be 28-35,39-40,76-87
+  s_7c6e11e61c7ee5::t_2714a65fbe445c 36-38,41
+plugins/elephant/skills/author-technical-contract/SKILL.md
+  s_7c6e11e61c7ee5::t_61df4a881262b9 19,21-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "5fae60275b944a24b1d5e7ab30003deffcb361c9",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
