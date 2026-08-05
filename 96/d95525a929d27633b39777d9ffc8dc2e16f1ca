@@ -1,0 +1,38 @@
+tests/test_notion_setup_adapter.py
+  s_7c6e11e61c7ee5::t_42766613aedb1d 461,471,475,477,570,612
+  s_7c6e11e61c7ee5::t_605d63d825a856 360,362,366-372
+  s_7c6e11e61c7ee5::t_f81d0375139f23 361,376-378
+  s_7c6e11e61c7ee5::t_767b30d19279a8 23-29,156,218,330,356,401-406,413,452,459,468-470,472-473,589,614
+  s_7c6e11e61c7ee5::t_b524f622f1ce44 519-553
+plugins/elephant/elephant_runtime/notion/setup_adapter.py
+  s_7c6e11e61c7ee5::t_31a285943cb312 716-748,750-753,766-767,775-789
+  s_7c6e11e61c7ee5::t_1167989906e3f9 455-491,495-500,521-551,570-583,585-588,833-849
+  s_7c6e11e61c7ee5::t_7ba2f70c511043 64
+  s_7c6e11e61c7ee5::t_07402da4240f19 16,74
+plugins/elephant/elephant_runtime/workspace_setup/apply.py
+  s_7c6e11e61c7ee5::t_dd1cb7dd1b0be9 103-106
+.superpowers/sdd/2026-08-04-notion-providers/task-2-report.md
+  s_7c6e11e61c7ee5::t_cb7fee0c82b5d6 300-418
+docs/superpowers/plans/2026-08-04-notion-providers.md
+  s_7c6e11e61c7ee5::t_dd1cb7dd1b0be9 24,140
+plugins/elephant/references/workspace/provider-contracts.md
+  s_7c6e11e61c7ee5::t_dd1cb7dd1b0be9 91-96
+plugins/elephant/references/workspace/setup-workspace.md
+  s_7c6e11e61c7ee5::t_dd1cb7dd1b0be9 203-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "96d95525a929d27633b39777d9ffc8dc2e16f1ca",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
