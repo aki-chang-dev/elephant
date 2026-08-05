@@ -21,6 +21,7 @@
 - Do not merge or port `feat/notion-providers`.
 - Preserve the active v2 path until the coordinated skill cutover task passes; after cutover, remove v2/v3 compatibility rather than adding a converter or dual reader.
 - Every task follows TDD where executable behavior changes, runs `git diff --check`, and ends in one Conventional Commit.
+- Skill edits follow `superpowers:writing-skills`: run an agent pressure scenario against the old skill first, record the failure, edit one skill, then rerun the same scenario before editing the next skill. Python tests never grep prose as a proxy for agent behavior.
 
 ---
 
@@ -39,8 +40,8 @@
 | `plugins/elephant/skills/ship-story/SKILL.md` | Native Linear/GitHub delivery, routine state maintenance, transient artifact cleanup |
 | `plugins/elephant/skills/{kickoff,decompose-roadmap}/SKILL.md` | Native planning bootstrap and setup orchestration |
 | `tests/test_workspace_map.py` | Pure workspace-map validation/routing tests |
-| `tests/test_information_coordination.py` | Packaged skill/reference product-contract assertions |
-| `tests/test_coordination_scenarios.py` | Deterministic operation-trace and temporary-Git scenario fixtures |
+| `tests/test_information_coordination.py` | Executable packaging, installed-smoke, and validator behavior |
+| `docs/testing/native-information-coordination-pressure-tests.md` | RED/GREEN agent pressure scenarios and concise outcomes for skill behavior |
 | `scripts/validate-compatibility.py` | Validate the new minimal shipped surface and forbid superseded assets |
 | `README.md` | Current user workflow only |
 
@@ -162,30 +163,15 @@ git commit -m "feat: add minimal workspace map"
 - Produces: one shared routing protocol consumed by setup, shaping, technical authoring, and delivery.
 - Produces: one human-readable setup proposal and optional `pending-application.md`; no Python connector/provider interface.
 
-- [ ] **Step 1: Add failing package/content assertions**
+- [ ] **Step 1: Add failing executable packaging assertions**
 
-Create tests that read all four assets and assert:
+Extend the compatibility validator's required-asset list to the three new references and make its installed-smoke path call the Task 1 workspace-map API. The test invokes `validate_repository()` on a temporary plugin missing each asset and asserts the returned missing-asset error; it does not assert source wording.
 
-```python
-for phrase in (
-    "Planning/progress starts in Linear",
-    "Product meaning/decision starts in Notion",
-    "Executable behavior starts in Git",
-    "A stale projection never substitutes",
-):
-    self.assertIn(phrase, routing)
-
-for forbidden in ("fingerprint", "checkpoint", "replay token", "Notion database"):
-    self.assertNotIn(forbidden, setup.lower())
-```
-
-Also assert exact presence of single/multi-Product rules, `Related Objective`, Product Home descendant containment, one approval, generated-value projection, pending-note cleanup, browser pre-scope proof, and human recovery-message slots.
-
-- [ ] **Step 2: Run the tests and confirm missing assets fail**
+- [ ] **Step 2: Run the package test and confirm it fails**
 
 Run: `python3 -m unittest tests.test_information_coordination -v`
 
-Expected: FAIL because the three references do not exist and setup still requires manifest fingerprints.
+Expected: FAIL because the validator and three packaged references do not exist yet.
 
 - [ ] **Step 3: Write `information-routing.md`**
 
@@ -199,20 +185,28 @@ Define Workspace=company, one Team default, Product=implicit or labels/views, Ob
 
 Define Company Knowledge → Product Home → lazy Decisions/Knowledge categories and Knowledge Map. Specify exact-parent-plus-title identity, zero/one/multiple behavior, Decision and Knowledge human sections, living update/supersession behavior, Shared Knowledge root, and no roadmap/status duplication.
 
-- [ ] **Step 6: Rewrite `setup-workspace`**
+- [ ] **Step 6: RED pressure-test the current `setup-workspace`**
+
+Give a fresh agent a one-sentence request to initialize a single-Product repository with Linear and Notion available, time pressure, and an explicit request not to build provider infrastructure. Record whether it still proposes manifests, fingerprints, certification, databases, or multiple owner gates in `docs/testing/native-information-coordination-pressure-tests.md`.
+
+- [ ] **Step 7: Rewrite `setup-workspace`**
 
 The skill flow is: read repository/integration context → discover Products and engineering domains separately → display one human proposal and config projection → approve once → create/publish operation branch note → direct connector/browser operations with read-back → write config last → config-only integration → remote verification → cleanup. Include single→multi inventory and fresh pre-promotion inventory. Do not import or mention `workspace_setup`, provider certification, transactions, fingerprints, hashes, bearer tokens, or databases.
 
-- [ ] **Step 7: Run the focused tests**
+- [ ] **Step 8: GREEN pressure-test `setup-workspace`**
+
+Run the same scenario with the rewritten skill and references available. It passes only if the agent produces read-only discovery, the minimal human proposal, one approval, native create/reuse/read-back, config-last behavior, and no provider/database/transaction design. Add multi-Product, wrong-tenant browser, interrupted write, and single→multi variants before proceeding.
+
+- [ ] **Step 9: Run the focused executable tests**
 
 Run: `python3 -m unittest tests.test_workspace_map tests.test_information_coordination -v`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add plugins/elephant/references plugins/elephant/skills/setup-workspace/SKILL.md tests/test_information_coordination.py
+git add plugins/elephant/references plugins/elephant/skills/setup-workspace/SKILL.md tests/test_information_coordination.py docs/testing/native-information-coordination-pressure-tests.md
 git commit -m "feat: define native workspace setup"
 ```
 
@@ -226,31 +220,29 @@ git commit -m "feat: define native workspace setup"
 - Modify: `plugins/elephant/skills/author-technical-contract/SKILL.md`
 - Modify: `plugins/elephant/skills/author-technical-contract/technical-contract-template.md`
 - Modify: `plugins/elephant/skills/author-technical-contract/reviewers/{architecture,domain-data,security-operations,product-conformance,test,technical-adjudicator}.md`
-- Create: `tests/test_coordination_scenarios.py`
 - Modify: `tests/test_information_coordination.py`
+- Modify: `docs/testing/native-information-coordination-pressure-tests.md`
 
 **Interfaces:**
 - Consumes: Task 2 routing/planning/knowledge references.
 - Produces: an approved Linear Story plus optional Notion Decision/Knowledge pages; no permanent Git Product Contract.
 - Produces: a transient Technical Contract binding exact Linear/Notion source IDs/URLs and a stable contract-basis marker.
 
-- [ ] **Step 1: Add failing shaping trace fixtures**
+- [ ] **Step 1: RED pressure-test the current `shape-story`**
 
-Use a small `Trace` fake that records semantic operations such as `linear.read_issue`, `linear.search_product`, `notion.search_descendants`, `linear.save_issue`, and `notion.create_page`. Assert one-sentence input, dependencies/conflicts/priority/roadmap consequences (including `none`), `linear_only|decision|knowledge|decision_and_knowledge`, one approval, direct Objective link, and no Notion page for a simple Story.
+Give a fresh agent a one-sentence Product idea plus linked Linear/Notion context. Score observable behavior: context route, user-only product discussion, dependency/conflict/priority/roadmap assessment, all four knowledge dispositions, one recap approval, native apply, and no permanent Git Product Contract. Record the baseline failure verbatim.
 
-- [ ] **Step 2: Add failing recovery/source-binding fixtures**
-
-Cover applied/unapplied/unconfirmed recovery copy, unchanged pending-note resume, cold-device read-only behavior, changed product meaning returning to shaping, and Technical Contract source binding that records current Linear/Notion URLs while rejecting a stale requirement snapshot.
-
-- [ ] **Step 3: Run the focused scenarios and confirm failure**
-
-Run: `python3 -m unittest tests.test_coordination_scenarios -v`
-
-Expected: FAIL because current skills require file Product Contracts and do not describe native apply behavior.
-
-- [ ] **Step 4: Rewrite `shape-story` output/apply boundary**
+- [ ] **Step 2: Rewrite `shape-story` output/apply boundary**
 
 Keep the existing product-only conversation and both critics. Replace permanent file output with a human recap held in the operation branch only until Linear/Notion read-back. Require planning placement, dependencies, conflicts, priority/roadmap impact, and knowledge disposition. One recap approval authorizes the displayed native changes; no data-entry review follows.
+
+- [ ] **Step 3: GREEN pressure-test `shape-story`**
+
+Rerun the original scenario plus direct-Objective, simple-Story/no-Notion, interrupted-write, and changed-product-meaning variants. Do not edit another skill until all variants follow the approved flow.
+
+- [ ] **Step 4: RED pressure-test `author-technical-contract`**
+
+Give a fresh agent a Linear Story plus linked Notion pages and no repository Product Contract. Record whether it incorrectly blocks, invents product meaning, skips a source, or requests owner technical review.
 
 - [ ] **Step 5: Rewrite technical authoring source binding**
 
@@ -260,16 +252,20 @@ Make Linear Story plus linked Notion pages the approved product source bundle. T
 
 Every reviewer accepts either the current external product-source bundle or, during migration only, an explicit behavior-preservation source. Product-conformance must compare all current source requirements. No prompt may ask for routine owner review or treat an external URL as sufficient without fetched content.
 
-- [ ] **Step 7: Run focused tests**
+- [ ] **Step 7: GREEN pressure-test `author-technical-contract`**
 
-Run: `python3 -m unittest tests.test_information_coordination tests.test_coordination_scenarios -v`
+Rerun the source-bundle scenario plus stale-source, missing-authority, product-decision-return, and technical-review variants. It passes only with complete fetched-source mapping, no invented product choice, independent reviewers, a stable basis marker, and no routine owner gate.
+
+- [ ] **Step 8: Run focused executable tests**
+
+Run: `python3 -m unittest tests.test_information_coordination -v`
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add plugins/elephant/skills/shape-story plugins/elephant/skills/author-technical-contract tests/test_information_coordination.py tests/test_coordination_scenarios.py
+git add plugins/elephant/skills/shape-story plugins/elephant/skills/author-technical-contract tests/test_information_coordination.py docs/testing/native-information-coordination-pressure-tests.md
 git commit -m "feat: coordinate product shaping natively"
 ```
 
@@ -284,46 +280,52 @@ git commit -m "feat: coordinate product shaping natively"
 - Rewrite: `plugins/elephant/skills/decompose-roadmap/SKILL.md`
 - Delete: `plugins/elephant/skills/init-profile/`
 - Modify: `plugins/elephant/skills/author-product-spec/SKILL.md`
-- Modify: `tests/test_coordination_scenarios.py`
 - Modify: `tests/test_information_coordination.py`
+- Modify: `docs/testing/native-information-coordination-pressure-tests.md`
 
 **Interfaces:**
 - Consumes: workspace map and native source bundle from Tasks 1–3.
 - Produces: branch/PR names containing the Linear Issue ID, routine native state updates, meaningful updates/comments, and no merged transient contract/plan.
 - Produces: `kickoff` = product foundation when needed → native Linear roadmap → `setup-workspace`; there is no delivery-profile phase.
 
-- [ ] **Step 1: Add failing delivery traces**
+- [ ] **Step 1: RED pressure-test the current `ship-story`**
 
-Assert native GitHub integration present/absent, issue ID in branch and PR, start/block/split/defer/cancel/complete effects, meaningful Project/Initiative update, standalone Issue comment, unchanged suppression, `Related Objective` reconciliation, source-change invalidation, and transient Technical Contract/plan deletion before integration.
-
-- [ ] **Step 2: Run focused delivery tests and confirm failure**
-
-Run: `python3 -m unittest tests.test_coordination_scenarios -v`
-
-Expected: FAIL because `ship-story` still loads `delivery-profile.md` and persistent dual-contract paths.
+Give a fresh agent a ready Linear Story with linked Notion context and a repository workspace map. Record whether it asks for a delivery profile/design gate, persists contracts/plans, misses the Linear ID in Git delivery, or produces checkpoint evidence.
 
 - [ ] **Step 3: Rewrite `ship-story`**
 
 Load `.agents/elephant/workspace.yaml`, current Linear Story, linked Notion sources, repository instructions, and the shared references. Keep worktree isolation, writing-plans, implementation/code/conformance reviewers, repository verification, and configured Git integration. Remove the legacy-mixed branch, design gate, delivery-profile reader, mixed-spec templates, checkpoint/evidence attachments, and permanent contract/plan retention.
 
-- [ ] **Step 4: Rewrite kickoff and roadmap decomposition**
+- [ ] **Step 4: GREEN pressure-test `ship-story`**
 
-`kickoff` resumes the first incomplete product outcome: product foundation only when absent, Linear roadmap only when useful, then `setup-workspace`. `decompose-roadmap` writes Initiatives/Projects/Milestones/Stories directly to Linear after one approved roadmap recap and creates no Git roadmap document. `author-product-spec` produces durable Notion Overview/Knowledge only when it has future value.
+Rerun native GitHub present/absent, standalone Story, Project/Initiative, block/split/defer/cancel/complete, unchanged update, source-change, and closeout variants. Do not edit another skill until all pass.
 
-- [ ] **Step 5: Remove `init-profile`**
+- [ ] **Step 5: RED pressure-test and rewrite `kickoff`**
+
+Baseline a one-sentence product with partial existing Linear/Notion structure. Then rewrite only `kickoff` so it resumes the first incomplete product outcome and calls `setup-workspace` instead of `init-profile`; rerun the same scenario before proceeding.
+
+- [ ] **Step 6: RED pressure-test and rewrite `decompose-roadmap`**
+
+Baseline a foundation that needs only some planning levels. Then rewrite only `decompose-roadmap` to propose useful Initiatives/Projects/Milestones/Stories, approve once, write directly to Linear, and create no Git roadmap. Rerun direct-backlog and multi-level variants before proceeding.
+
+- [ ] **Step 7: RED pressure-test and rewrite `author-product-spec`**
+
+Baseline an existing product with partial durable knowledge. Then rewrite only `author-product-spec` to update Product Home Overview/Knowledge when future value exists and avoid mandatory Git spec systems or blank Notion categories. Rerun empty, existing, and no-durable-value variants before proceeding.
+
+- [ ] **Step 8: Remove `init-profile`**
 
 Delete the skill and its delivery-profile schema assets. Update all skill links and tests to direct setup callers to `elephant:setup-workspace`.
 
-- [ ] **Step 6: Run focused coordination tests**
+- [ ] **Step 9: Run focused executable tests**
 
-Run: `python3 -m unittest tests.test_information_coordination tests.test_coordination_scenarios -v`
+Run: `python3 -m unittest tests.test_information_coordination -v`
 
 Expected: PASS with no active skill referencing `delivery-profile.md`, legacy-mixed, the design gate, workspace providers, or permanent story plans.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add plugins/elephant/skills tests/test_information_coordination.py tests/test_coordination_scenarios.py
+git add plugins/elephant/skills tests/test_information_coordination.py docs/testing/native-information-coordination-pressure-tests.md
 git commit -m "feat: cut over native story delivery"
 ```
 
@@ -419,9 +421,9 @@ git commit -m "refactor: remove provider orchestration runtime"
 - Consumes: completed implementation and tests.
 - Produces: a current install/use guide and redacted generic pilot outcome; no connector-call transcript.
 
-- [ ] **Step 1: Add README/metadata assertions**
+- [ ] **Step 1: Add executable metadata validation**
 
-Extend `tests/test_compatibility.py` to require setup-first/native-integration descriptions and reject `delivery-profile.md`, `Workspace v3 development`, provider certification, Notion databases, and design-gate workflow from current README/metadata.
+Extend `tests/test_compatibility.py` to load both plugin manifests and marketplace JSON, validate their schema and matching version/name/capabilities, and exercise the installed skill inventory. Human README prose is reviewed directly and is not protected by source-text assertions.
 
 - [ ] **Step 2: Rewrite current user documentation**
 
