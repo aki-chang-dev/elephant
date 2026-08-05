@@ -675,4 +675,8 @@ technical review/fix/recheck rounds.
   skills require setup proposal, one-recap shaping, knowledge disposition, and the mapped starting
   routes: Linear for planning, Notion for product meaning, and Git for executable behavior. It
   performed no external writes and retained no raw connector payloads or external IDs.
-- Integration and closeout evidence: pending final commit, merge, worktree cleanup, and push.
+- Integration and closeout evidence: plugin manifests publish `0.4.0`; both final independent
+  rechecks reported `PASS`; main was fast-forwarded after deterministic verification; and the
+  superseded provider plus completed feature worktrees/branches were removed. Final main-branch
+  verification and the release push are reported in the operator handoff rather than asserted by
+  this self-referential commit.
