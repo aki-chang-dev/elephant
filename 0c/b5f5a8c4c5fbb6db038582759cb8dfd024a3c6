@@ -1,0 +1,22 @@
+docs/superpowers/plans/2026-08-05-native-information-coordination.md
+  s_7c6e11e61c7ee5::t_3408fc7361aae9 224,231,233,237,241,245,256-257,261,268
+  s_7c6e11e61c7ee5::t_3a4cd91d8bfca5 424,426
+  s_7c6e11e61c7ee5::t_c07301d567167c 235,239,243,255,259,265,284,291,293,295,297,299,301,303,305,307,309-315,319,321,325,328
+  s_7c6e11e61c7ee5::t_b483cc13c22ae5 24,43-44,166,168,170,174,188-192,196-200,206,209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "0cb5f5a8c4c5fbb6db038582759cb8dfd024a3c6",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
