@@ -1,77 +1,90 @@
 ---
 name: kickoff
-description: Use when bootstrapping a project so it becomes ready for ship-story delivery — turning a product idea into a spec foundation, a roadmap, and a delivery-profile — or resuming a half-set-up project. Triggers on "/kickoff", "bootstrap this project", "set up a new product for delivery", "get this repo ship-story-ready".
+description: Use when a one-sentence product idea or partially initialized repository needs the minimum product foundation, native Linear planning, and workspace map required for ship-story.
 ---
 
 # Kickoff
 
-## Overview
+## Purpose
 
-Single entry that bootstraps a project until it's **ship-story-ready** — it has `global_specs` + a roadmap + `.agents/elephant/delivery-profile.md`. Orchestrates the three inception phases: A `elephant:author-product-spec` → B `elephant:decompose-roadmap` → C `elephant:init-profile`.
+Bootstrap or resume a product until current product meaning is navigable in Notion, current/future
+work is navigable in Linear, and `.agents/elephant/workspace.yaml` connects those entry points to the
+repository. Kickoff is a thin semantic orchestrator: it detects the first incomplete product result
+and delegates it without recreating another skill's conversation or write protocol.
 
-**Core principle: kickoff is a THIN orchestrator — it produces nothing itself.** It detects which phase the project is at, dispatches the right sub-skill, carries each phase's output path to the next, and stops at phase boundaries. It does NOT reimplement any phase.
+Required skills, in outcome order:
 
-**REQUIRED SUB-SKILLS:** invoke the canonical skills `elephant:author-product-spec` (A), `elephant:decompose-roadmap` (B), and `elephant:init-profile` (C). Do not reimplement them.
+1. `elephant:author-product-spec` — establish or refresh only the durable product foundation that is
+   currently useful;
+2. `elephant:decompose-roadmap` — create or refresh the useful native Linear planning structure;
+3. `elephant:setup-workspace` — validate and persist the final Product/domain entry-point map.
 
-## Preflight
+There is no extra project-profile phase and no Git spec-system or roadmap-file completion
+requirement.
 
-Before producing artifacts:
+## Discover current outcomes without writes
 
-1. Read `../../references/runtime-compatibility.md`.
-2. Confirm the three Elephant sub-skills above and their declared Superpowers dependencies are installed.
-3. If any dependency is missing, STOP and give installation guidance for the active host.
+Accept the owner's one-sentence idea without requiring Product or planning fields. Read repository
+instructions and context, available Linear/Notion/Git integrations, an existing workspace map when
+present, and the narrowest native structures related to the idea.
 
-## Step 0 — Detect phase, resume the first that's missing
+Keep product identity separate from engineering domains. When no workspace map exists, carry the
+verified Linear workspace/Team, Notion root/Product Home, repository, and Product candidate as
+in-session discovery context; `setup-workspace` owns the final proposal and config.
 
-Evaluate top-to-bottom; resume at the FIRST missing artifact; short-circuit. The digraph below is **present/absent only** — completeness/approval is judged separately (see the note under the table), because approval is a conversation event, not a file marker.
+Evaluate these outcomes in order:
 
-```dot
-digraph kickoff_detect {
-  "spec system exists?" [shape=diamond];
-  "roadmap exists?" [shape=diamond];
-  "delivery-profile exists?" [shape=diamond];
-  "spec system exists?" -> "Phase A: author-product-spec" [label="no"];
-  "spec system exists?" -> "roadmap exists?" [label="yes"];
-  "roadmap exists?" -> "Phase B: decompose-roadmap" [label="no"];
-  "roadmap exists?" -> "delivery-profile exists?" [label="yes"];
-  "delivery-profile exists?" -> "Phase C: init-profile" [label="no"];
-  "delivery-profile exists?" -> "DONE: ship-story-ready" [label="yes"];
-}
-```
+1. **Product foundation:** Is there sufficient current Product Home/Overview and linked durable
+   meaning to explain the product, audience, problem, outcomes, boundaries, and important rules?
+2. **Planning map:** Can Linear show the current useful backlog and any justified Objectives,
+   Projects, Milestones, dependencies, priorities, and roadmap direction for this Product?
+3. **Workspace entry points:** Does a valid workspace-v4 map resolve the repository, Product,
+   engineering domains, Linear Team/planning/backlog, and Notion root/Product Home without stale or
+   wrong-scope anchors?
 
-Look under Elephant's standard layout `docs/elephant/<product>/` first; fall back to a wider `docs/**` scan for projects that predate the convention (a non-`docs/` location → ask rather than assume absence).
+Existing but partial native content is the current phase, not absence and not completion. Determine
+what it already answers, what remains materially missing, and pass both to the owning skill. Do not
+ask the owner whether an artifact “looks complete” when native content can answer the question.
 
-| Check | Mechanical detection |
-|---|---|
-| spec system | a `master-spec*` file AND an `object-model*` file-or-dir (e.g. `10-object-model/`) — Elephant default `docs/elephant/<product>/spec/` |
-| roadmap | a `*roadmap*` file with a phase-overview heading + slice tables — Elephant default `docs/elephant/<product>/roadmap.md` (NOT a master-spec's "object-model overview" section) |
-| delivery-profile | `.agents/elephant/delivery-profile.md` exists |
-| all three | announce **ship-story-ready** and stop |
+## Resume the first incomplete outcome
 
-**Detection is binary only for "absent vs present"; completeness is the sub-skill's job.** A present-but-incomplete artifact (e.g. a master-spec with no AD/ED yet, or a roadmap written but not yet user-approved) counts as **the current phase, not a finished one**: dispatch that phase's sub-skill and let its own completeness/resume logic continue it. Do NOT advance past an incomplete artifact. When unsure whether an artifact is complete, dispatch its phase and let the sub-skill decide — never skip a phase on a fuzzy "looks present." **Because approval/completeness isn't on disk, when an artifact is present ask the user "is this complete & approved, or should I resume it?" before advancing** — don't infer "done" from file existence alone.
+Dispatch only the first incomplete outcome:
 
-## Orchestration
+- incomplete product foundation → `elephant:author-product-spec` with the one-sentence idea,
+  discovered Product context, and existing Product Home/Knowledge content;
+- sufficient foundation but incomplete planning map → `elephant:decompose-roadmap` with the current
+  product sources and existing scoped Linear planning;
+- sufficient foundation/planning but missing or stale entry-point map →
+  `elephant:setup-workspace` with the verified in-session scopes and outputs;
+- all three complete → report ready for `elephant:ship-story` with direct Product, Linear backlog/
+  planning, and Notion Product Home links.
 
-1. **Dispatch** the current phase's sub-skill. Each sub-skill owns its internal checkpoints (incl. its final review) — kickoff does NOT add or duplicate them.
-2. **🛑 Boundary = the sub-skill's own final checkpoint. Do NOT fire a second stop.** When the user approves a phase's final review (author-product-spec CHECKPOINT 3 / decompose-roadmap CHECKPOINT 2 / init-profile's confirm), in that same beat ask whether to proceed to the next phase. One stop per seam, not two. **Resume:** the user proceeds by saying go-ahead, or by re-invoking `/kickoff` (Step 0 re-detects and continues). Never auto-flow into the next phase without that go-ahead.
-3. **Carry paths forward (in-session chain):**
-   - Pass Phase A's resolved spec-dir to Phase B → B's locate uses its "Phase A in-session output" branch directly (no repo scan / no asking).
-   - Phase C (`init-profile`) **derives** `roadmap_path` by scanning, not from a passed value — so surface Phase B's roadmap path to C as a **confirm-time hint** (especially if B wrote outside `docs/**`, where C's scan would miss it). Don't claim C consumes it directly.
-   - Across sessions (not chained), Step 0's detection re-locates the artifacts.
+After a delegated skill completes its own approved native apply/read-back, immediately re-read the
+next outcome and continue within the same kickoff request. Do not add a seam checkpoint, a written
+artifact review, or a “proceed to the next phase?” question. Owner attention remains inside each
+sub-skill only where product meaning actually needs approval.
+
+Carry native identities and links forward in-session. Across sessions, rediscover them from the
+workspace map and authoritative systems rather than relying on prior chat or Git inception files.
 
 ## Completion
 
-When all three artifacts exist, announce the project is **ship-story-ready**: deliver stories with `ship-story <ID>`.
+Kickoff is complete only when:
 
-## Red flags — STOP
+- current durable product meaning is findable from Product Home;
+- current/future work and backlog are findable from Product-scoped Linear planning;
+- workspace v4 resolves Product and engineering domains plus verified Linear/Notion/Git entry
+  points;
+- no blank future planning levels or knowledge categories were created merely for completeness.
 
-- Writing spec docs / a roadmap / a profile yourself → dispatch the sub-skill; kickoff produces nothing.
-- Skipping a boundary stop and auto-flowing A→B→C → each transition needs the user's go-ahead.
-- Adding extra checkpoints inside a phase → the sub-skill owns those.
-- Re-running a phase whose artifact is already COMPLETE → Step 0 detects it; skip to the next. (Incomplete artifact = resume that phase via its sub-skill, don't restart from scratch.)
-- Advancing past a present-but-incomplete artifact because it "looks present" → dispatch its phase; the sub-skill judges completeness.
+Return those direct links and the first useful next Story. Do not create or retain a kickoff log.
 
-## Common mistakes
+## Red flags
 
-- **Starting at Phase A on a project that already has specs.** Always run Step 0 detection first; a half-kicked-off project resumes mid-pipeline.
-- **Not handing the path forward.** In a chained run, pass A's spec-dir to B directly; surface B's roadmap path to C as a confirm-time hint (C still derives by scanning).
+- Git document presence substitutes for reading current Linear/Notion truth.
+- An existing Product Home or Linear hierarchy is ignored and rebuilt.
+- Kickoff authors product content, roadmap objects, or workspace config itself instead of
+  dispatching the owner skill.
+- An obsolete project-specific delivery workflow or compatibility mode appears.
+- Another approval is requested between completed native outcomes.
+- Completion is declared without a valid workspace map and resolvable native entry points.

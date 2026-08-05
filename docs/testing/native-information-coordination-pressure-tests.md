@@ -136,3 +136,127 @@ Observed behavior:
 
 GREEN verdict: passed all variants. These are skill pressure scenarios rather than Python prose
 assertions; executable tests cover asset packaging and the workspace-map runtime.
+
+## ship-story — RED baseline
+
+Scenario: deliver a ready Linear Story with linked Notion context and a ready Technical Contract in
+a workspace-v4 repository with native GitHub integration.
+
+Observed current-skill behavior:
+
+- stopped before reading Linear because `.agents/elephant/delivery-profile.md` was absent;
+- retained design-gate and legacy-mixed branches, local roadmap authority, and Git Product Contract
+  pairing;
+- used a generic roadmap ID rather than requiring the actual Linear Issue identifier in branch/PR;
+- kept Product/Technical Contracts, plans, and accumulated delivery evidence as permanent Git
+  resume state;
+- did not maintain native Linear Story, Project, or Initiative status/updates for start, block,
+  split, defer, cancel, or completion, and therefore had no meaningful-change suppression;
+- did not re-fetch Linear/Notion product sources during delivery or verify the native GitHub link.
+
+RED verdict: failed. Delivery was orchestrated around a local compatibility state machine rather
+than the current Story and native product relationships.
+
+## ship-story — GREEN
+
+The rewritten skill and conformance reviewer were tested across native GitHub present/absent,
+standalone and Project/Initiative Stories, block/split/defer/cancel/complete, unchanged polling,
+source change, and closeout.
+
+Observed behavior:
+
+- used workspace v4 and current Linear/Notion sources to select the resume phase;
+- required the exact Linear Issue identifier in branch and pull-request identity, then verified the
+  native GitHub relation or wrote an ordinary fallback link;
+- wrote concise progress/risk/next-direction updates only for meaningful Project/Initiative phase
+  changes, or one equivalent-reconciled Issue comment for a standalone Story;
+- applied factual state automatically while returning changed outcomes, acceptance, Product
+  ownership, or strategic priority to shaping;
+- invalidated technical, plan, implementation, review, and conformance work when current source
+  meaning changed;
+- removed the Story-scoped Technical Contract and plan before integration and created no checkpoint
+  attachment, duplicate roadmap, or delivery log.
+
+GREEN verdict: passed all variants with no delivery-profile, design-gate, legacy-mixed, or routine
+owner-review path.
+
+## kickoff — RED baseline
+
+Scenario: bootstrap from one sentence when partial Linear planning and a Notion Product
+Home/Overview already exist, but legacy Git inception files do not.
+
+Observed current-skill behavior:
+
+- ignored native product results and restarted from missing Git master-spec/object-model files;
+- treated a Git roadmap file and delivery profile as later completion criteria;
+- called `init-profile` instead of `setup-workspace` and never required workspace v4;
+- could not resume the first incomplete product outcome in existing Linear/Notion structures;
+- added explicit proceed approvals between phases and asked the owner to judge whether discovered
+  files were complete.
+
+RED verdict: failed. Kickoff orchestrated artifact production rather than completing the minimum
+native product foundation, planning map, and workspace entry points.
+
+## decompose-roadmap — RED baseline
+
+Scenario: extend an existing Product foundation and partial Linear backlog where some Stories stay
+standalone, one real workstream needs Project/Milestones, and one long-term goal needs an Initiative.
+
+Observed current-skill behavior:
+
+- required repository `global_specs` and ignored current Linear/Notion authority;
+- duplicated existing Linear work as Git roadmap slices instead of reusing native objects;
+- forced every Story into phases with phase DoD/transition structure and a custom ID-prefix legend;
+- used multiple phase/slice/final-document checkpoints;
+- wrote a permanent Git roadmap before final approval and performed no Linear create/read-back;
+- could not accept Product + Backlog + Stories as complete for a small product.
+
+RED verdict: failed. Valuable vertical-slice and dependency thinking was coupled to a mandatory
+document hierarchy rather than progressive native planning.
+
+## author-product-spec — RED baseline
+
+Scenario: complete a partial Product Home/Overview with two existing valuable Knowledge pages,
+without planning or technical design.
+
+Observed current-skill behavior:
+
+- ignored current Notion content and restarted product meaning in Git;
+- required master-spec, object model/entities/field contracts, glossary, AD/ED, technical
+  constraints, and cross-reference structure;
+- used three owner checkpoints and had no native Notion create/update/read-back;
+- duplicated even a complete Notion foundation when canonical Git files were absent;
+- had no future-value test or no-op path when discussion produced nothing durable.
+
+RED verdict: failed. Product definition was forced into a comprehensive engineering-shaped spec
+system instead of maintaining the smallest useful durable product meaning.
+
+## decompose-roadmap — GREEN
+
+The rewritten skill passed partial-native, backlog-only, full Initiative/Project/Milestone/Story,
+direct-Objective, multi-Product, existing/conflicting object, and interrupted-write scenarios.
+
+It reused native planning truth, created only meaningful levels, handled priority/dependencies/
+conflicts/consequences in one recap approval, verified every native result, and produced no Git
+roadmap, phase table, change log, parallel Story registry, or custom ID scheme.
+
+## author-product-spec — GREEN
+
+The rewritten skill passed partial, empty, already-complete, no-durable-value, duplicate-title, and
+indeterminate-create scenarios.
+
+It kept conversation product-only, applied a future-value test, reused ordinary pages by exact
+parent/title, created categories and Knowledge Map lazily, used one recap approval only when writes
+were needed, verified native results, and produced no repository spec system or technical/planning
+content.
+
+## kickoff — final chain GREEN
+
+After the native Product-foundation and roadmap rewrites, kickoff was rerun against partial
+Linear/Notion with no map, complete foundation/partial planning, complete planning/stale map, fully
+complete, and empty-product scenarios.
+
+All passed the real chain `Notion foundation → Linear planning → workspace v4`: partial native truth
+was reused, the first incomplete outcome alone was dispatched, completed outcomes were skipped,
+sub-skill approvals were not duplicated at seams, and no Git inception document or obsolete
+project-profile phase was created.

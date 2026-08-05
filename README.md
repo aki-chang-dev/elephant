@@ -1,182 +1,89 @@
 # 🐘 Elephant
 
-A [Superpowers](https://github.com/obra/superpowers)-based delivery harness for **Claude Code and Codex**. Elephant turns a raw product idea into a spec foundation and roadmap, then delivers one vertical story at a time using the repository's own conventions and gates.
+Elephant is a product-first coordination plugin for Claude Code and Codex. It helps one owner work
+with agents across three authoritative homes:
 
-Elephant is a thin orchestration layer. Superpowers supplies atomic workflows such as writing plans, worktree isolation, implementation, review, and branch completion. Elephant composes them into a resumable product-delivery pipeline.
+- Linear owns live planning, priority, dependencies, and progress.
+- Notion owns durable product meaning and decisions.
+- Git/GitHub owns executable behavior and delivery.
+
+Elephant remains a thin router. It uses each product's native objects and relationships instead of
+building another project-management database or copying roadmap state into the repository.
 
 ## Workflow
 
 ```text
-kickoff
-├── author-product-spec   idea → cross-referenced product spec system
-├── decompose-roadmap     specs → phased, dependency-aware roadmap
-└── init-profile          repo → .agents/elephant/delivery-profile.md
+one-sentence idea
+→ kickoff
+   → author-product-spec    minimum useful Notion product foundation
+   → decompose-roadmap      progressive native Linear planning
+   → setup-workspace        repository/Product/domain entry-point map
 
-ship-story STORY-ID
-└── story seed → shape-story → Product Contract → existing design gate?
-    → Technical Contract + specialist review → writing-plans → implementation + code review
-    → contract conformance → integration + closeout
+Linear Story
+→ shape-story               product-only discussion + one recap approval
+→ author-technical-contract transient technical design + specialist review
+→ ship-story                plan, worktree, implementation, review, PR, native closeout
 ```
 
 | Skill | Role |
 |---|---|
-| `elephant:kickoff` | Detect and run the first incomplete inception phase. |
-| `elephant:author-product-spec` | Define product scope, object model, glossary, and decisions. |
-| `elephant:decompose-roadmap` | Build a vertical, demoable, dependency-aware delivery sequence. |
-| `elephant:init-profile` | Discover repository conventions and write the neutral delivery profile. |
-| `elephant:shape-story` | Shape a product-facing story into an approved Product Contract. |
-| `elephant:author-technical-contract` | Create and independently review a Technical Contract before planning. |
-| `elephant:ship-story` | Deliver or resume one roadmap story through the dual-contract or legacy path. |
+| `elephant:kickoff` | Resume the first incomplete product foundation, planning, or setup outcome. |
+| `elephant:author-product-spec` | Establish or refresh valuable Product Home/Overview/Knowledge. |
+| `elephant:decompose-roadmap` | Create the smallest useful native Linear planning structure. |
+| `elephant:setup-workspace` | Discover Products/domains and write the verified workspace map. |
+| `elephant:shape-story` | Turn one sentence into an approved user outcome and native planning/knowledge action. |
+| `elephant:author-technical-contract` | Bind current product sources to reviewed technical choices. |
+| `elephant:ship-story` | Deliver or resume one Linear Story through integration and native closeout. |
 
-Every project-specific path, gate, check, integration rule, and language convention lives in:
-
-```text
-.agents/elephant/delivery-profile.md
-```
-
-This is the only supported profile path in both hosts.
-
-## Story Delivery
-
-New profiles use the dual-contract workflow:
+The only durable repository coordination file is:
 
 ```text
-story seed → shape-story → product contract → existing design gate?
-→ technical contract + specialist review → writing-plans → implementation + code review
-→ product/technical conformance → integration + closeout
+.agents/elephant/workspace.yaml
 ```
 
-`elephant:ship-story` first triages a story. Product-facing stories run
-`elephant:shape-story` in the main conversation and produce an approved Product Contract before
-any technical design. Engineering-only stories may bypass shaping and use
-`product_contract: null` only when user and business outcomes are demonstrably unchanged.
+Technical Contracts and implementation plans may be committed on an isolated delivery branch for
+resume, but Elephant removes them before integration. Product Contracts, Git roadmaps, delivery
+logs, checkpoints, and copied Notion content are not part of the workflow.
 
-The product owner approves one Product Contract Recap. On the normal path, product owner
-involvement ends after that recap: technical and code review is agent-owned, and the owner is not
-asked to reread the saved contract or approve routine technical choices. Elephant returns to the
-owner only for a required Product Contract change, a user-visible compromise forced by a technical
-constraint, materially different product outcomes, a scope split, contradictory or incomplete
-product requirements, or destructive, money-sensitive, security-sensitive, or external production
-authority beyond the original request. Pure technical disagreements go to the technical
-adjudicator instead.
+## Owner attention
 
-The existing design gate is unchanged in behavior. For approved product-facing contracts it reads
-the contract's design sensitivity and still uses the configured provider, `design-handoff.md`, and
-human ready signal before technical authoring continues.
+The owner starts with an idea and participates deeply in product shaping. One shaping recap
+approval authorizes the displayed Linear and Notion changes. Technical design, specialist review,
+planning, implementation, code review, factual progress, and closeout are agent-owned.
 
-Existing profiles are not silently migrated. A profile missing `story_contracts` remains
-`legacy-mixed` until an explicit refresh proposes and the owner accepts dual mode. Existing mixed
-specs remain resumable through the preserved generic brainstorming path; `superpowers:brainstorming`
-is never used by the dual-contract v2 path. When v2 and legacy artifacts coexist, the Product
-Contract must explicitly record the legacy artifact in `supersedes` or Elephant stops for a
-decision.
+Elephant returns to the owner when product meaning, acceptance, Product ownership, or strategic
+priority must change—not for routine data entry or technical review.
 
-Artifact evidence selects v2 or legacy before dependency preflight, so resumed work requires only
-capabilities its remaining branch can dispatch. Technical Contracts persist
-`draft → ready → implementing → done`, with product ambiguity branching through
-`needs-product-decision`. After implementation and code review, a read-only conformance reviewer,
-implementation fixer, and affected rechecks gate integration without a routine owner checkpoint.
+## Native relationships
 
-## Prerequisite
+Branch names and pull-request titles/descriptions contain the Linear Issue identifier so native
+Linear-GitHub integration can connect delivery. Notion pages and Linear work use ordinary reciprocal
+links or previews. Missing convenience degrades to ordinary links; missing authoritative context is
+reported rather than guessed.
 
-Install Superpowers before using Elephant. Elephant preflights its required Superpowers skills and stops before writing artifacts if a dependency is missing.
+## Install
 
-## Claude Code
+Install Superpowers first.
 
-Install from the Claude marketplace:
+Claude Code:
 
 ```text
 /plugin marketplace add aki-chang-dev/elephant
 /plugin install elephant@elephant
 ```
 
-Invoke the installed Elephant skills through Claude Code's skill or command interface:
-
-```text
-/kickoff
-/init-profile
-/ship-story F-15
-```
-
-The optional `claude-design` provider can retrieve an approved design through Claude Design and DesignSync. It still produces the same portable `design-handoff.md` required by the common gate.
-
-## Codex
-
-Add the Git marketplace and install Elephant:
+Codex:
 
 ```bash
 codex plugin marketplace add aki-chang-dev/elephant
 codex plugin add elephant@elephant
 ```
 
-In Codex, explicitly select a skill with `$` or choose it from the skill picker:
+Start a new host session after install/update so the skill inventory reloads. Invoke skills through
+the host's installed-skill interface, for example `elephant:kickoff` or
+`elephant:ship-story CF-123`.
 
-```text
-$elephant:kickoff
-$elephant:init-profile
-$elephant:ship-story F-15
-```
-
-After installation or an update, start a **new session** so Codex loads the new plugin and skill inventory.
-
-## Design Gate
-
-The design gate checks an approved artifact contract, not a particular design product.
-
-### `manual` — portable default
-
-For Codex and any host without Claude Design:
-
-1. Elephant commits and pushes the approved Product Contract, or the configured ready legacy
-   mixed spec.
-2. It stops and reports the exact `design_local_dir`.
-3. Place design artifacts and `design-handoff.md` in that directory.
-4. Give the human ready/approved signal.
-5. Elephant validates the artifacts and resumes v2 at Technical Contract authoring, or legacy at
-   planning.
-
-The handoff records key screens or states, interactions and transitions, their mapping to Product
-Contract flows/states or the legacy mixed contract, and unresolved implementation constraints.
-
-### `claude-design` — optional provider
-
-When explicitly configured, Elephant uses DesignSync after the human ready signal to retrieve Claude Design artifacts. Missing project or slice mappings stop loudly; they are never guessed. The provider must satisfy the same `design-handoff.md` contract as `manual`.
-
-Agent-assisted design is reserved as a future extension and is not silently selected.
-
-## Runtime Compatibility
-
-- One shared `skills/` tree serves both hosts.
-- `AGENTS.md` and `CLAUDE.md` are both discovery sources; conflicting values are shown with provenance for user confirmation.
-- Worker delegation accelerates research when available. Without it, Elephant executes the same bounded scopes sequentially.
-- Host-specific invocation and optional design tooling are isolated in the runtime compatibility contract.
-- GitHub PR is a profile choice, not a hardcoded requirement; other integration styles remain profile-driven.
-
-## Workspace v3 development
-
-The [approved workspace design](docs/superpowers/specs/2026-08-03-external-workspace-orchestration-design.md)
-and the Phase 1/2 implementation plans are present. Phase 2 packages the development-only
-[`elephant:setup-workspace`](plugins/elephant/skills/setup-workspace/SKILL.md) skill and its
-canonical [setup protocol](plugins/elephant/references/workspace/setup-workspace.md). Its
-provider-neutral orchestration is fixture-certified with fake adapters. The Phase 3 Linear story
-provider is packaged with its [host protocol](plugins/elephant/references/providers/linear.md)
-and certified by the tracked redacted [sandbox transcript](docs/testing/linear-provider-sandbox.json),
-which passes its offline validator. The offline transcript model and
-[sandbox evidence](docs/testing/linear-provider-sandbox.md) do not perform Linear calls. This
-certifies the Linear story provider only; it does not certify a Linear setup-mutation adapter.
-Notion is not certified yet. v3
-`ship-story` remains inactive until Phase 5. The workspace contracts include the canonical
-[workspace registry](plugins/elephant/references/workspace/workspace-schema.md),
-[profile](plugins/elephant/references/workspace/profile-schema.md),
-[provider](plugins/elephant/references/workspace/provider-contracts.md), and
-[story-state](plugins/elephant/references/workspace/story-state-model.md) references. The active
-shipping runtime remains v2 until concrete providers, v3 delivery, the Maio migration, and the
-coordinated cutover pass. v3 is not yet an active shipping runtime; these phases neither dual-write
-nor translate v2 artifacts.
-
-## Development Validation
-
-Run deterministic compatibility checks:
+## Development validation
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -185,9 +92,6 @@ uv run --with pyyaml python \
   /Users/aki/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py \
   plugins/elephant
 ```
-
-The repeatable host/runtime cases live in `docs/testing/dual-runtime-smoke-tests.md`. Product-first
-story phase cases live in `docs/testing/product-first-story-smoke-tests.md`.
 
 ## License
 

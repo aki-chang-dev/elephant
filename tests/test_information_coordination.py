@@ -25,6 +25,20 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
             "plugins/elephant/references/linear-planning.md",
             "plugins/elephant/references/notion-knowledge.md",
             "plugins/elephant/skills/setup-workspace/SKILL.md",
+            "plugins/elephant/skills/shape-story/SKILL.md",
+            "plugins/elephant/skills/author-technical-contract/SKILL.md",
+            "plugins/elephant/skills/ship-story/SKILL.md",
+            "plugins/elephant/skills/kickoff/SKILL.md",
+            "plugins/elephant/skills/decompose-roadmap/SKILL.md",
+            "plugins/elephant/skills/author-product-spec/SKILL.md",
+        )
+        forbidden = (
+            "plugins/elephant/references/runtime-compatibility.md",
+            "plugins/elephant/skills/author-product-spec/spec-system-template.md",
+            "plugins/elephant/skills/decompose-roadmap/roadmap-template.md",
+            "plugins/elephant/skills/init-profile/SKILL.md",
+            "plugins/elephant/skills/ship-story/delivery-profile-schema.md",
+            "plugins/elephant/skills/ship-story/slice-template.md",
         )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -58,6 +72,19 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
                     self.assertNotIn(missing_error, baseline)
                     self.assertIn(missing_error, validator.validate_repository(root))
                     asset.write_text("fixture\n", encoding="utf-8")
+
+            for path in forbidden:
+                with self.subTest(forbidden_path=path):
+                    asset = root / path
+                    asset.parent.mkdir(parents=True, exist_ok=True)
+                    asset.write_text("fixture\n", encoding="utf-8")
+                    errors = []
+                    validator._validate_native_coordination_assets(root, errors)
+                    self.assertIn(
+                        f"superseded native coordination asset remains: {path}",
+                        errors,
+                    )
+                    asset.unlink()
 
     def test_workspace_map_is_the_executable_coordination_runtime(self) -> None:
         from scripts import workspace_map

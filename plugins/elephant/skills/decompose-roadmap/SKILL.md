@@ -1,71 +1,115 @@
 ---
 name: decompose-roadmap
-description: Use when a project has a product spec foundation but no roadmap yet, and needs the product decomposed into a phased, dependency-aware delivery sequence. Phase B of the kickoff pipeline, or standalone. Triggers on "/decompose-roadmap", "build the roadmap", "decompose the product into slices/stories", "sequence the build".
+description: Use when current Product meaning needs to become or refresh a value-sequenced, dependency-aware native Linear planning map.
 ---
 
-# Decompose-Roadmap
+# Decompose Roadmap
 
-## Overview
+## Purpose
 
-Turn a product spec foundation (`global_specs`) into a **roadmap**: a phased, dependency-aware delivery sequence of coarse, independently-shippable slices. Phase B of the `kickoff` pipeline; consumed downstream by `ship-story` (locates stories by ID) and `init-profile` (detects `roadmap_path` + `story_id_pattern`).
+Turn current Product meaning into the smallest useful Linear map of future work. A roadmap is the
+native view of outcomes, priorities, dependencies, and sequence—not a Git document and not a fixed
+hierarchy. Product and Story are sufficient until a real objective, workstream, or milestone makes
+another level useful.
 
-**Core principle: a roadmap is a delivery SEQUENCE — in what order to build — not a product definition and not detailed specs.** Product definition is Phase A; per-slice detail is ship-story's job. This is judgment-heavy and collaborative: **propose a draft using slicing methodology, then iterate with the user. Never auto-generate a roadmap from spec structure** (one-slice-per-entity is a non-roadmap).
+Before acting, read completely:
 
-## Prerequisites
+- `../../references/information-routing.md`
+- `../../references/linear-planning.md`
+- `../../references/notion-knowledge.md`
 
-- `global_specs` exist (Phase A output, or an existing product spec/understanding). **If the product isn't defined yet, STOP** — that's Phase A, not this skill.
-- **If a complete, user-approved roadmap already exists** (e.g. kickoff re-dispatched this on a finished roadmap), confirm that with the user and **exit without re-running** — don't re-arm CHECKPOINT 1/2. Only (re)build when the roadmap is missing or the user wants changes.
-- Read the output structure first: `roadmap-template.md` in this skill dir. The roadmap you write follows it.
+## Load current authority without writes
 
-## Slicing methodology (bake these into every draft)
+Resolve Product, then fetch current Product Home/Overview and directly relevant durable meaning,
+plus Product-scoped Linear backlog, Initiatives, Projects, Milestones, Stories, priorities,
+dependencies, blockers, and current phase updates. Verify workspace/Team/Product ownership.
 
-| Principle | Means |
-|---|---|
-| Vertical slices | each slice cuts through the stack and delivers demoable value — never a horizontal layer or an entity's CRUD in isolation |
-| Walking skeleton first | the first phase is the thinnest end-to-end path that runs (scaffold → minimal working flow) |
-| MVP-first / value sequencing | order phases by business value + dependency; earliest usable product first |
-| Story mapping | lay out the user journey, slice along it |
-| Coarse & demoable | each slice = one spec→plan→ship unit; deliberately coarse, re-split at implementation |
+If product meaning is insufficient to choose outcomes or boundaries, return the bounded gap to
+`author-product-spec` or `shape-story`; do not invent it from repository structure. Existing native
+objects are planning truth to reuse, update, relate, or explicitly leave unchanged.
 
-**Granularity & phase-count tests** (the methodology's checkable rules):
-- A slice is **right-sized** if it's one spec→plan→ship unit a user could see demoed in isolation. Too horizontal if it's pure CRUD on one entity; too coarse if it spans more than one phase's DoD.
-- **Demoable test**: could you show this slice working end-to-end to someone? If the only "demo" is internal plumbing, fold it into an adjacent vertical slice.
-- The **skeleton → MVP → parity → advantage** tiers are *illustrative, not a fixed four*. Drop tiers a small product doesn't need; add phases a large one does.
+## Build a progressive proposal
 
-## The discipline: propose → iterate → write
+Map the user's journey into coarse, independently valuable outcomes. Prefer vertical, demoable
+Stories and early end-to-end value. Use walking-skeleton or phased thinking only when it genuinely
+clarifies sequence; do not impose a phase model on a small or mature product.
 
-1. **Locate & load `global_specs`.** The profile does NOT exist yet at Phase B (init-profile is Phase C, later), so do not depend on a delivery-profile. Find the specs by (a) Phase A's in-session output if chained, else (b) scan the repo for an existing spec system (e.g. a `docs/**` product-spec dir) and confirm with the user, else (c) ask the user for the spec path/dir. Then understand entities, capabilities, user journeys, decisions.
-2. **Draft phases** — each phase = a milestone with a goal + DoD (exit criteria), following skeleton → MVP → parity → advantage. **🛑 CHECKPOINT 1: user approves the phase skeleton before slicing; resume on explicit approval.** (The strategic spine is the user's call.)
-3. **Draft slices** per phase — vertical, coarse, demoable; assign IDs by prefix (see below).
-4. **Draft dependencies** — cross-slice blockers + ordering within/across phases.
-5. **Draft phase-transition criteria** — the minimal standard to advance between phases.
-6. **Iterate** — present the draft slices/deps/gates; refine on business priority with the user. One question at a time (**REQUIRED DISCIPLINE:** follow superpowers:brainstorming's one-question-at-a-time rule; do NOT dump many questions at once). **Exit:** repeat steps 3–5 (slice-level refinement) until the user confirms the slices; do NOT loop indefinitely. Re-open CHECKPOINT 1 (re-enter Step 2) ONLY if the phasing itself must change — slice tweaks do not re-arm it. Then go to Step 7.
-7. **Capture deferred capabilities** into the roadmap's Out-of-scope section, **seed the change log** (`<date> — initial roadmap`), and **write** the roadmap using `roadmap-template.md`. Output path: the profile doesn't exist yet, so default to Elephant's layout — **`docs/elephant/<product>/roadmap.md`**, co-located with the spec foundation (derive `<product>` from the spec dir you loaded in Step 1). Confirm with the user; an existing project may use a different path — keep theirs. **🛑 CHECKPOINT 2: user reviews the final roadmap; resume on explicit approval.**
+Choose each native level by meaning:
 
-## ID scheme
+- **Story/Backlog:** default. A useful outcome may remain standalone and unscheduled.
+- **Project:** only for a real workstream coordinating multiple Stories toward one bounded result.
+- **Milestone:** only within a Project when a meaningful intermediate outcome helps navigation,
+  sequencing, or commitment.
+- **Objective/Initiative:** only for a strategic outcome that usefully groups one or more Projects.
+- **Cycle:** optional execution cadence, never required roadmap structure.
 
-Default to **phase-keyed prefixes** (e.g. `S-` scaffold / `F-` foundation / `P-` parity / `A-` advantage). Help the user pick a set and **record it in the roadmap's §0 reading guide under "Slice ID prefixes (legend)"**. This skill does NOT write the profile — `init-profile` (Phase C) later DERIVES `roadmap_path` + `story_id_pattern` by reading the roadmap you wrote.
+An Objective relevant to a standalone Story uses `Related Objective` without a synthetic Project or
+progress attribution. Product membership remains implicit for one Product and uses each native
+label namespace for multiple Products.
 
-## Coarse-slice principle
+For every proposed object or relation, state:
 
-Slices are intentionally coarse — a slice that turns out large gets re-split during ship-story's brainstorm (a slice can spawn sub-slices, e.g. `F-02a-i`). The roadmap states this explicitly so nobody over-details here.
+- human outcome/title and concise purpose;
+- existing/reuse, create, update, or unchanged;
+- parent/containment or deliberate standalone placement;
+- priority and why it earns current attention;
+- dependencies, conflicts, and blockers;
+- observable completion/result at the appropriate level;
+- consequence for existing work, including displacement, delay, split, or no impact.
 
-## A / B boundary
+Keep Stories coarse enough for later shaping, while still describing one user-visible outcome.
+Never derive one Story per entity, package, layer, or CRUD surface. Do not assign Elephant slice IDs;
+Linear owns identifiers.
 
-- **Phase A** = what the product IS (object model, decisions, glossary).
-- **This skill (Phase B)** = in what order to build it (delivery sequence).
-- Don't redefine the product here; if a spec gap blocks slicing, flag it back to Phase A, don't invent product decisions.
+## One roadmap recap and approval
 
-## Red flags — STOP
+Present one compact human roadmap recap:
 
-- Auto-deriving slices from the object model (one-per-entity / CRUD-per-entity) → that's a horizontal non-roadmap. Slice vertically.
-- Writing detailed, spec-ready slices → too fine; keep coarse, ship-story re-splits.
-- Skipping CHECKPOINT 1 and slicing before the user approves the phase skeleton → the phasing is the user's strategic call.
-- Inventing product decisions to fill a spec gap → flag back to Phase A instead.
-- Authoring the product spec or the profile here → out of scope (Phase A / Phase C).
+1. Product direction and ordering principle;
+2. current native structure being preserved;
+3. Initiatives, Projects, Milestones, and Stories to create/update/reuse, with omitted levels clear;
+4. backlog/current attention and native priority;
+5. dependencies, conflicts, and roadmap consequences;
+6. deferred/out-of-scope outcomes and their reconsideration conditions;
+7. exact Linear objects, relations, labels, and statuses approval will apply;
+8. unresolved product questions.
 
-## Common mistakes
+Resolve material questions before recap. Wait for one explicit approval of the complete proposal.
+That approval authorizes the displayed Linear operations. Do not ask the owner to review a generated
+roadmap or approve data entry afterward.
 
-- **Layer-first instead of value-first.** "All the models, then all the APIs, then all the UI" is not a roadmap — no phase is demoable. Each slice must stand up end-to-end.
-- **Front-loading completeness over a walking skeleton.** Get a thin thing running end-to-end first, then widen.
-- **Treating phases as buckets instead of milestones.** Every phase needs a goal + DoD, or phase-transition is undefined.
+## Apply directly to Linear
+
+Use native Linear operations and `linear-planning.md` recovery rules:
+
+1. Re-fetch current scoped objects and semantic preconditions.
+2. For each approved target, search its exact native scope. Reuse/update one equivalent object,
+   create when none exists, and stop on multiple/conflicting matches.
+3. Create or verify required multi-Product labels before labeled planning writes.
+4. Apply Initiatives, then Projects and their Team sets, then Milestones, Stories, relations,
+   priority, and statuses in dependency-safe order. Preserve unrelated labels, relations, and text.
+5. Read every mutation back and verify ownership, content, containment, Product classification, and
+   no-progress `Related Objective` semantics.
+6. For meaningful existing Project/Initiative phase changes, write one concise progress/risk/next
+   direction update. Initial creation text belongs in the object description, not an activity log.
+
+If a write is rejected or indeterminate, reconcile exact native scope and preserve the approved
+result without creating duplicates. Resume without another owner decision when meaning and
+preconditions remain unchanged; changed product meaning requires a revised recap. Never delete or
+roll back user-owned planning content automatically.
+
+## Completion
+
+Re-fetch the Product planning scope and return direct links to backlog, current attention, created
+or updated Initiatives/Projects/Milestones/Stories, and any deferred work. Completion may be only
+Product + Backlog + Stories. Create no Git roadmap, change log, phase table, or parallel Story
+registry.
+
+## Red flags
+
+- Existing Linear objects are copied into a document instead of reused.
+- A planning level is created because the template has a slot for it.
+- Repository packages/entities become horizontal Stories.
+- Product meaning is invented to fill a planning gap.
+- Approval is split into phase, slice, and final-document reviews.
+- A roadmap file or custom Story ID scheme becomes required for delivery.

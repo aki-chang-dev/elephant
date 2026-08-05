@@ -16,9 +16,10 @@ Read `../../references/information-routing.md` before acting. The Technical Cont
 implementation plan are transient delivery-branch artifacts. They exist for resume and review, then
 are removed before final integration after durable facts have reached their authoritative homes.
 
-The lifecycle is `draft → ready → implementing → done`, with a return through
+The transient lifecycle is `draft → ready → implementing`, with a return through
 `needs-product-decision`. This skill owns `draft` authoring/review and exits to `ready` or
-`needs-product-decision`; `ship-story` owns implementation and closeout transitions.
+`needs-product-decision`; `ship-story` owns implementation, conformance, and removal of the
+transient contract before integration. Verified Git/Linear truth owns final completion.
 
 ## Bind current product authority
 

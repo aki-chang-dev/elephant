@@ -72,6 +72,21 @@ REQUIRED_NATIVE_COORDINATION_ASSETS = (
     "references/linear-planning.md",
     "references/notion-knowledge.md",
     "skills/setup-workspace/SKILL.md",
+    "skills/shape-story/SKILL.md",
+    "skills/author-technical-contract/SKILL.md",
+    "skills/ship-story/SKILL.md",
+    "skills/kickoff/SKILL.md",
+    "skills/decompose-roadmap/SKILL.md",
+    "skills/author-product-spec/SKILL.md",
+)
+
+FORBIDDEN_SUPERSEDED_COORDINATION_ASSETS = (
+    "references/runtime-compatibility.md",
+    "skills/author-product-spec/spec-system-template.md",
+    "skills/decompose-roadmap/roadmap-template.md",
+    "skills/init-profile/SKILL.md",
+    "skills/ship-story/delivery-profile-schema.md",
+    "skills/ship-story/slice-template.md",
 )
 
 ACTIVE_V2_SKILLS = (
@@ -391,6 +406,13 @@ def _validate_native_coordination_assets(root: Path, errors: list[str]) -> None:
         if not path.is_file():
             errors.append(
                 f"missing native coordination asset: {path.relative_to(root)}"
+            )
+    for relative in FORBIDDEN_SUPERSEDED_COORDINATION_ASSETS:
+        path = plugin_root / relative
+        if path.exists():
+            errors.append(
+                "superseded native coordination asset remains: "
+                f"{path.relative_to(root)}"
             )
 
 

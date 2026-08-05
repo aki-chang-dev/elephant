@@ -1,64 +1,123 @@
 ---
 name: author-product-spec
-description: Use when a product idea needs to become a structured spec foundation — the global_specs that a roadmap and per-slice specs build on. Phase A of the kickoff pipeline, or authoring a product spec system from scratch. Triggers on "/author-product-spec", "define the product", "write the object model / product spec", "create the spec foundation".
+description: Use when a one-sentence product idea or existing Product Home needs the minimum durable product foundation established or refreshed in Notion.
 ---
 
-# Author-Product-Spec
+# Author Product Spec
 
-## Overview
+## Purpose
 
-Turn a product idea into `global_specs`: a canonical, cross-referenced **spec system** (master-spec · object-model · glossary · AD · ED). Phase A of the `kickoff` pipeline; consumed downstream by `decompose-roadmap` (Phase B) and by `ship-story`'s brainstorm as loaded context.
+Establish or refresh the durable product meaning needed to guide future shaping and planning. The
+output is the smallest useful set of ordinary Notion pages under Product Home—not a repository spec
+system, implementation design, or roadmap.
 
-**Core principle: this defines what the product IS — not the build order (Phase B) and not config (Phase C).** It is product-scale brainstorming PLUS a structuring discipline: elicit with brainstorming, then shape the output into the canonical doc set and keep the cross-references honest. **REQUIRED SUB-SKILL:** use superpowers:brainstorming for every elicitation stage (one question at a time).
+Before acting, read completely:
 
-## Prerequisites
+- `../../references/information-routing.md`
+- `../../references/notion-knowledge.md`
+- `../../references/linear-planning.md`
 
-- A product idea or rough understanding to start from.
-- Read the output structure first: `spec-system-template.md` in this skill dir.
-- If a spec system already partially exists, this skill **resumes** it (see Multi-session) — don't restart from scratch.
+## Discover current meaning without writes
 
-## Canonical spec-system (the output)
+Accept a one-sentence idea. Resolve the likely Product from user/audience/outcome evidence and ask
+one bounded question only when the Product boundary is genuinely ambiguous.
 
-| Doc | Contents |
-|---|---|
-| **master-spec** | product definition · scope (in/out) · object-model overview · module index · cross-cutting principles · technical constraints · how-to-use (reading order) · change log (full section list in the template) |
-| **object-model** | overview + `entities/` (per-entity field contracts) + cross-rules (cross-entity invariants) |
-| **glossary** | domain terms (grown throughout) |
-| **decision records** | the project's decision log. **Default taxonomy: split into AD (architecture decisions, product-level what/why) + ED (engineering decisions, implementation how), numbered `AD-1..` / `ED-1..`.** A project may substitute its own convention (ADR, RFC, a single `decisions.md`) — record which it uses; `decision_ref` ids then follow that convention. Each entry: context / decision / rationale / consequences |
-| **+ domain-specific** (optional) | e.g. a taxonomy, only if the product needs it |
+Read current Product Home, Overview, Knowledge Map, directly relevant Knowledge/Decisions, and the
+linked Linear planning entry. If a workspace map is not yet present during kickoff, discover the
+verified Company Knowledge root and existing exact-parent Product Home in the active connector
+context; `setup-workspace` will later persist the entry points.
 
-**AD vs ED (the default split):** AD = product-level, stable, "what & why" (data model shape, scope, business rules). ED = implementation-level, evolves with tech, "how" (framework, deploy topology, patterns). When unsure, ask "would this change if we rewrote in another stack?" — yes → ED, no → AD. (If the project uses a single decision log instead, this distinction is just guidance, not separate files.)
+Use exact parent plus human title identity. Zero matches may be proposed for creation, one is the
+canonical page to update, and multiple matches stop for reconciliation. Wrong-parent and
+wrong-Product pages remain untouched.
 
-## Authoring sequence (guided discipline; artifacts co-evolve)
+## Product-only conversation
 
-0. **Resolve the output location** before writing anything. Elephant's standard layout is `docs/elephant/<product>/` per project; the spec foundation goes in **`docs/elephant/<product>/spec/`**. Confirm the `<product>` slug with the user and **state the final spec-dir path back**. (Existing projects may already use a different spec dir — keep theirs; this default is for greenfield. The `<product>` slug you pick keys the whole `docs/elephant/<product>/` tree that B's roadmap and C's per-slice specs/plans also write under.)
-1. **Vision & scope** (master-spec §1–2): what the product is, who it's for, in/out boundaries. **🛑 CHECKPOINT 1: user approves the north star + boundaries; resume on explicit approval.**
-2. **Object model**: entities, field contracts, cross-rules — the product backbone. Author the **field-naming-convention AD first, during this step, before any field contract** (it's the one AD that precedes Step 3 — see below). **Done test:** every IN-scope capability from §1 maps to ≥1 entity or cross-rule, and every entity has a purpose + a field-contract table. Individual field *names* may remain `TBD` (the naming convention governs them; ship-story pins each `TBD`→real during the slice that creates the field) — completeness here means the contract exists, not that every name is final. **🛑 CHECKPOINT 2: user reviews the object model; resume on explicit approval.**
-3. **AD**: the product-level decisions that shaped 1–2 (numbered, with rationale) — all ADs except the field-naming one already authored in Step 2.
-4. **ED**: implementation-level decisions.
-5. **Glossary**: grown throughout; finalize here.
-6. **Cross-reference pass**: link entities ↔ AD ↔ glossary; master-spec module index points to every doc. **🛑 CHECKPOINT 3: user reviews the final spec system; resume on explicit approval.**
+Ask one question at a time and discuss only durable product meaning:
 
-Entities, AD, and glossary **co-evolve** — iterate, don't force strict linearity. But hold the primary order (backbone before decisions): a decision with no entity to attach to means the object model isn't ready yet. The sole exception is the field-naming-convention AD, authored inside Step 2.
+- product, audience, context, and problem;
+- core value and desired user/business outcomes;
+- product boundaries and explicitly unchanged/out-of-scope areas;
+- important user-facing concepts, rules, defaults, terminology, and experience principles;
+- decisions whose rationale will matter beyond one Story;
+- current knowledge that future shaping or planning should be able to retrieve.
 
-## Field-naming convention (downstream hook — do this early)
+Do not define fields, schemas, modules, libraries, deployment, architecture, implementation
+sequence, or test design. A product concept may become living Knowledge; it is not an entity/field
+contract. Planning order belongs to `decompose-roadmap`, and individual feature behavior belongs to
+`shape-story`.
 
-While authoring the object model, **establish the field-naming convention as an early AD** (e.g. a layered naming rule: a stable baseline layer + a high-frequency-terse layer + a low-frequency-verbose layer). Every field contract follows it. This decision record is what `ship-story`'s field-naming gate and `init-profile`'s `field-naming.decision_ref` point at — `decision_ref`'s value is exactly this record's id token (e.g. `AD-3` / `ADR-7`, per the project's convention). Pin it (and its id) before filling field contracts, not after.
+## Decide what is worth preserving
 
-## Multi-session resume
+Apply a future-value test to every result:
 
-Phase A spans sessions. On re-entry, detect which canonical docs exist + their completeness and resume at the first incomplete one: master-spec → object-model → AD/ED → glossary → cross-reference pass. Never restart a completed doc.
+- update **Overview** when it changes or completes the stable explanation of product, audience,
+  problem, core value/outcomes, boundaries, or product principles;
+- create/update **Knowledge** when a reusable current conclusion will answer future product
+  questions;
+- create a **Decision** when preserving the context, rationale, and consequences of a durable choice
+  is independently valuable;
+- write nothing when the result is local to one Story, repeats existing meaning, is temporary, or
+  has no future retrieval value. Route Story-local work to `shape-story` instead.
 
-## Red flags — STOP
+Living Knowledge updates the one canonical page in place. Obsolete Decisions are visibly
+superseded and linked to the current result. Do not preserve raw discussion, technical design,
+planning sequence, progress, review history, or implementation notes.
 
-- Slicing into a roadmap or sequencing the build → that's Phase B; here you define the product, not its delivery order.
-- Writing the delivery profile → Phase C.
-- Jumping to entities/decisions before vision & scope is approved (CHECKPOINT 1) → the north star gates everything.
-- Filling field contracts before the naming-convention AD exists → pin the convention first.
-- Recording an implementation choice as an AD (or a product rule as an ED) → apply the rewrite-in-another-stack test.
+Do not create empty Knowledge, Decisions, Shared Knowledge, or Knowledge Map pages. Create the
+exact category lazily with its first approved child; create/update Knowledge Map only when durable
+children exist.
 
-## Common mistakes
+## One foundation recap and approval
 
-- **Object model as a database schema dump.** Entities are product concepts with contracts and cross-rules, not just tables — capture the invariants.
-- **Decisions with no context/rationale.** An AD/ED that records only the choice is useless later; capture why and what it rules out.
-- **Letting the glossary lag.** Define terms as they first appear; a term used three different ways across docs is a spec smell.
+Before asking for approval, self-check the proposal from the future reader's perspective: can they
+understand what the product is, whom it serves, why it matters, what it does not mean, and where to
+look next without reading this conversation?
+
+Present one human-readable recap:
+
+1. current Product foundation already preserved;
+2. proposed Overview changes;
+3. Knowledge pages to create/update and the future question each answers;
+4. Decisions to create/supersede and why their rationale remains useful;
+5. content intentionally left only in the current conversation/Story;
+6. exact Notion parents/titles and reciprocal Linear links approval will apply;
+7. unresolved product questions.
+
+If no durable change is needed, report that result and existing direct links without requesting an
+approval or writing anything. Otherwise resolve product questions, then wait for one explicit
+approval of the complete recap. Do not add separate north-star, object-model, or final-document
+review gates.
+
+## Apply natively and verify
+
+After approval, use semantic Notion operations and `notion-knowledge.md` recovery rules:
+
+1. Re-fetch exact parents, current pages, and semantic preconditions.
+2. Reuse/update the one canonical Product Home and Overview or create missing approved entry points
+   under the verified Company Knowledge root.
+3. Create category nodes only together with their first approved child. Preserve unrelated content.
+4. Create/update approved Knowledge and Decision pages with the human sections defined in the
+   reference.
+5. Maintain the short Knowledge Map and ordinary reciprocal Linear links/previews without copying
+   roadmap or status.
+6. Fetch every affected page, verify exact ancestry/title/content/links, and return canonical URLs.
+
+For rejected or indeterminate writes, reconcile the exact parent before retrying and stop on
+multiple/conflicting matches. Preserve the approved result without repeating owner review while
+meaning and preconditions remain unchanged. Never delete or roll back user pages automatically.
+
+## Completion
+
+Return Product Home, Overview, relevant Knowledge/Decision, Knowledge Map when present, and Linear
+planning links. Create no master spec, object model, field contract, glossary, AD/ED log, product
+spec directory, or Git change log.
+
+## Red flags
+
+- Existing Notion meaning is copied into Git instead of updated in place.
+- Technical structure appears because “spec” is interpreted as implementation design.
+- Blank categories are created for completeness.
+- A Story-local conclusion becomes permanent Knowledge without future value.
+- Multiple owner checkpoints replace one complete foundation recap.
+- A complete current foundation is rewritten merely because no repository spec files exist.
