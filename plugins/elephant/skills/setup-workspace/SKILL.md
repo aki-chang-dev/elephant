@@ -1,46 +1,113 @@
 ---
 name: setup-workspace
-description: Use when a repository needs Elephant v3 workspace discovery, a product/domain topology proposal, provider diagnostics, or an approved idempotent setup dry run. Triggers on "/setup-workspace", "set up Elephant workspace", "analyze products and engineering domains", "provision Linear and Notion workspace structure".
+description: Use when a repository needs its Products, engineering domains, and native Linear, Notion, and Git/GitHub information structure discovered, proposed, initialized, or refreshed.
 ---
 
 # Setup Workspace
 
-## Overview
+## Purpose
 
-Discover and propose an Elephant v3 workspace, then execute only the exact approved setup manifest. One fingerprinted manifest is the sole write authority.
+Analyze the repository as both a product system and an engineering system, then establish the
+smallest useful native information structure. Setup organizes entry points; it does not pre-create
+future roadmap levels, knowledge categories, or delivery records.
 
-Read `../../references/workspace/setup-workspace.md` completely before acting. It is the canonical protocol and links the four required workspace contracts.
+Before acting, read these references completely:
 
-When Linear is selected, also read `../../references/providers/linear.md` before discovery. It owns exact host tool execution, response decoding, replay, diagnostics, and certification cleanup; keep this skill at the setup-routing layer.
+- `../../references/information-routing.md`
+- `../../references/linear-planning.md`
+- `../../references/notion-knowledge.md`
 
-The executable API is bundled in this plugin as `elephant_runtime.workspace_setup`. Use its public `fingerprint_local_container()` and `RepositoryLocalWriter` boundaries; checkout-only `scripts.workspace_setup` imports are compatibility forwarding, not a second runtime. Reject a checkout forwarder whose preloaded canonical module resolves outside the current checkout's plugin root.
-
-## Boundary
-
-Phase 2 certifies provider-neutral orchestration with fake adapters only. Linear story-provider discovery and host protocol are packaged in Phase 3, but a future Linear setup mutation adapter must independently meet Phase 2 atomicity and disposable-cleanup rules; never wrap search-then-create and call it atomic. Notion remains a later provider boundary. Local mutation is supported only on Darwin/Linux POSIX hosts whose target filesystem provides the required native atomic rename primitive; preflight that capability before any external mutation and emit `platform_unsupported` if it is absent. Keep read-only discovery and dry-run usable where practical. Never invent a connector call, substitute Git, or treat MCP/connector presence as capability.
+Use the host's native Linear and Notion connectors and ordinary Git/GitHub operations. The only
+durable local output is `.agents/elephant/workspace.yaml` using `elephant.workspace/v4`.
 
 ## Procedure
 
-1. **Discover read-only.** Inventory the repository through one identity-bound root descriptor, external structures, and the connector's actual platform-supported, exposed, permitted, and configured operations. For Linear, list/get teams, statuses, labels, and existing issues before proposal; record the verified workspace locator separately from the team UUID and never invent either. Report a lexical root-path identity change without mixing evidence from two repositories. Do not create a mapping file, checklist, draft config, or external object.
-2. **Propose independent dimensions.** Present product identities separately from engineering domains. Keep provenance, confidence, conflicts, and owner questions explicit; never promote an app, package, directory, team, or deployment unit to a product without product evidence and owner confirmation. Aggregate repository and external display alternatives plus all provenance into one conflict for a shared normalized product key.
-3. **Run one owner decision session.** Resolve all semantic questions, regenerate the complete no-write manifest from those answers, then display products, domains, provider selections, reuse/create/manual structures, conflicts, exact diagnostics, local file diff, disposable cleanup plan, and the complete manifest fingerprint. Approval must name that displayed fingerprint. This is the only human checkpoint. Treat the confirmed registry and profile payloads as the sole semantic source of canonical local YAML; optional rendered templates may supply typed slots only when every path and body exactly matches that derived projection. For reruns, provide an exact read-only byte SHA-256 or proven absence for every setup output through `observed_local_fingerprints`; only an exact external REUSE/VERIFY plus local-byte match may omit round trips.
-4. **Apply the approved manifest.** Accept only `ApprovedManifest` produced from that exact complete fingerprint. Use stable external keys, idempotent reuse/create, and read every mutation back. Represent every external binding/reference in local output with a typed `LocalDocumentSlot` bound to its approved stable-key operation, including already observed IDs; raw opaque-ID strings and `verified: true` assertions are not authority. Materialize only the current unique read-back ID, reject the reserved `urn:elephant:setup-slot:` namespace as an external ID, require every slot to resolve structurally, and bind the canonical final byte hash into readiness evidence. A changed or regenerated manifest requires fresh fingerprint approval; never carry authority forward from an earlier dry run.
-5. **Verify and finish.** An absent `MANUAL` target returns its handoff with no local batch. After out-of-band completion, call `apply_setup()` again with the exact same `ApprovedManifest` and fingerprint, pass the returned token as `resume_handoff`, and supply a distinct nonblank execution ID for this new attempt. The handoff binds the prior execution ID, approval fingerprint, exact operation, semantics, instructions, and the exact ordered prefix of earlier MANUAL prerequisites already verified by apply; each prior completion is re-read on every later attempt. Changing the attempt ID without that token grants no continuation authority. One stable-key match with the approved fingerprint must pass read-back and a guarded uniqueness re-query before `manual_completed` resumes work without another owner checkpoint. Duplicate, mismatch, missing prior completion, or read failure stops; never regenerate or transfer approval. For each approved disposable round trip on a changing setup, stable-key the relationship, reuse an exact interrupted-attempt relationship, prove its unique read-back, unbind it, and verify absence by relationship ID and key before deleting the disposable record and verifying record absence. A fully unchanged rerun emits and executes no round trip. Then write and revalidate local config last.
-6. **Interpret local evidence.** Active `.agents` is the only authority. Hold the preflighted repository-root identity through commit and attest the candidate descriptor and fingerprint immediately before switching. Transfer descriptor ownership before publishing an execution receipt; discard it identity-specifically and idempotently on cancellation or any `BaseException`, including interruption while replacing a same-owner receipt, then propagate non-`Exception` cancellation unchanged. Bind the complete template payload in local preflight before adapter calls and permit commit-time body changes only for structurally validated typed-slot scalar materialization plus its exact byte hash. Resolve slot-backed final bytes by read-only unique read-back after that local preflight and before external mutation; an exact rerun must skip every provider mutation, mutating local probe, stage, and commit, and a stale no-op observation must stop before adapter calls. Stage each changed file through a new exclusive single-link sibling and rename it into place without truncating an existing target. If final attestation fails, restore the approved prior container or approved absence and retain the unexpected tree as non-authoritative evidence. An identity-attested retained `.agents.setup-stage-*` with `cleanup_pending` is non-authoritative and nonblocking. Never auto-delete it or invent cleanup authority from its name.
-7. **Rerun read-only.** Show the resulting diff. Do not semantically rename, move, merge, or delete user-owned structures. Declare readiness only when every selected logical provider passes all runtime requirements.
+### 1. Discover without writes
 
-Phase 2 guarantees complete old-or-new local visibility across process death, but same-approval retry after death immediately following the atomic switch remains deferred to Phase 5. Do not claim that crash-resume window is supported.
+Read repository instructions, product documentation, workspace boundaries, Git remotes, and the
+available integration capabilities. Discover existing Linear workspace/Team structures and the
+Notion company-knowledge root. Fetch enough native objects to verify the selected tenant, Team,
+root ancestry, and existing reusable entry points.
 
-## Diagnostics
+Derive Product candidates from user outcomes, audiences, product naming, and existing planning or
+knowledge evidence. Derive engineering domains independently from repository responsibilities,
+deployments, packages, instructions, and verification boundaries. Never infer that each app,
+directory, Team, or deployable is a Product.
 
-Emit the first missing layer for each capability using exactly one of `platform_unsupported`, `connector_capability_missing`, `permission_missing`, or `configuration_missing`. A one-time manual handoff is valid only for an administrative setup operation and still requires read-back. Any missing runtime capability blocks readiness; it never becomes a manual runtime fallback.
+For a single Product, keep membership implicit and label-free. For multiple Products, inventory
+existing managed Linear work and follow the transition rules in `linear-planning.md` before
+proposing a change.
 
-## Stop conditions
+### 2. Present one human proposal
 
-- Any local or external write is proposed before exact fingerprint approval.
-- The approved fingerprint does not match the complete regenerated manifest.
-- A selected real provider lacks a certified adapter or any runtime capability.
-- A mutation cannot be read back, or a disposable record cannot be proven absent.
-- Manual continuation omits or changes the returned `resume_handoff`, uses a different manifest or approval fingerprint, reuses the earlier attempt's execution ID, or its exact stable-key/fingerprint/read-back verification fails. A distinct nonblank execution ID alone grants no continuation authority.
-- The local host is not Darwin/Linux POSIX, the target filesystem lacks the native atomic rename primitive, or that capability was not preflighted before external mutation.
-- A rerun encounters semantic drift, ambiguous authority, or destructive work outside the approved manifest.
+Show one compact proposal containing:
+
+- Products and the evidence for each;
+- engineering domains and their repository paths/instructions;
+- Linear and Notion entry points to reuse or create;
+- useful native Linear-GitHub and Linear-Notion links;
+- existing valuable content worth migrating later, without moving it now;
+- the exact final workspace-config projection.
+
+Keep optional Objective, Project, Milestone, view, Shared Knowledge, Knowledge Map, Decisions, and
+Knowledge structures absent until a real need exists. Existing IDs and URLs are literal. For an
+object to be created, show its human target and the exact config field its verified returned value
+will fill; do not invent the final value.
+
+Resolve all material ambiguity in this conversation. Ask for one approval of the whole human
+proposal. That approval covers the displayed native writes and config projection; do not ask for a
+second data-entry review.
+
+### 3. Preserve the approved outcome during application
+
+After approval and before the first external write, create a non-main operation branch. Add and
+commit one short-lived `pending-application.md` containing the approved intended outcomes, verified
+target scopes, and semantic preconditions. Publish the branch when a configured remote is
+available. If it cannot be published, state that recovery is limited to this working copy.
+
+The note is a human recovery aid, not permission to write. Another device may use it for read-only
+reconciliation only. Resume writes only in the original authenticated approved host context. Any
+semantic change to the intended outcome or preconditions requires a revised proposal.
+
+### 4. Apply through native products
+
+Execute the approved operations sequentially. Before each create, search the exact verified parent
+scope. Reuse or update one semantically equivalent object, create when none exists, and stop when
+multiple or conflicting objects exist. Fetch every changed object and verify its ownership and
+human-visible result before continuing. Preserve unrelated labels, relations, Teams, and page
+content.
+
+Use the authenticated in-app browser only for approved setup administration that the Linear
+connector cannot perform. First prove the workspace and Team with semantic reads, then visibly
+confirm the browser is on that same Linear tenant and exact target. Stop on any mismatch. Verify
+the browser-created result afterward through semantic Linear reads. If neither route can create a
+required Product label, stop before the first setup write. An optional overview may instead end in
+one concise UI handoff.
+
+If an operation is interrupted or its result is unclear, do not create a duplicate. Reconcile the
+exact native scope, adopt one equivalent result, and stop on ambiguity. Retry a definitively
+rejected operation only after refreshing its preconditions. For an indeterminate create with zero
+results, retry once only when the connector is healthy, approved semantic preconditions are
+unchanged, and two fresh authoritative scoped reads across its normal consistency window still
+show absence. Never delete or roll back user-visible Linear or Notion content automatically.
+
+Report recovery in user terms: what is already visible, what remains unapplied or unconfirmed, that
+the approved outcome is preserved, and the direct place/action for continuation.
+
+### 5. Write and integrate config last
+
+Only after every required external result reads back correctly, materialize its verified ID or URL
+into the declared field, validate the complete workspace map, and atomically replace the one config
+file. Build a config-only change against the current remote integration head. Stop on semantic
+drift, overlap, or conflict; never force-push or guess through a config conflict.
+
+Integrate through the repository's configured workflow, push without force, and verify the remote
+integration branch contains the validated config. The final integrated change excludes the pending
+note and its operation history. Then remove the note and clean up the local and remote operation
+branch.
+
+## Completion
+
+Return the Product/domain mapping, the native Linear and Notion entry links, integrations that are
+active or gracefully degraded, and the verified config location. Readiness requires every
+configured entry point to resolve to its approved tenant, Team, repository, or page ancestry.

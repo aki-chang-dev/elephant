@@ -67,6 +67,13 @@ REQUIRED_LINEAR_CHECKOUT_ASSETS = (
     "tests/test_linear_packaging.py",
 )
 
+REQUIRED_NATIVE_COORDINATION_ASSETS = (
+    "references/information-routing.md",
+    "references/linear-planning.md",
+    "references/notion-knowledge.md",
+    "skills/setup-workspace/SKILL.md",
+)
+
 ACTIVE_V2_SKILLS = (
     "shape-story/SKILL.md",
     "author-technical-contract/SKILL.md",
@@ -375,6 +382,16 @@ def _validate_linear_provider_assets(root: Path, errors: list[str]) -> None:
         path = plugin_root / "skills" / relative
         if path.is_file() and "elephant_runtime.linear" in path.read_text(encoding="utf-8"):
             errors.append(f"active v2 skill imports Linear provider: {path.relative_to(root)}")
+
+
+def _validate_native_coordination_assets(root: Path, errors: list[str]) -> None:
+    plugin_root = root / PLUGIN
+    for relative in REQUIRED_NATIVE_COORDINATION_ASSETS:
+        path = plugin_root / relative
+        if not path.is_file():
+            errors.append(
+                f"missing native coordination asset: {path.relative_to(root)}"
+            )
 
 
 def _load_v3_core_oracle(root: Path, errors: list[str]):
@@ -728,6 +745,7 @@ def validate_repository(root: Path) -> list[str]:
     _validate_v3_core_oracle(root, errors)
     _validate_v3_setup_assets(root, errors)
     _validate_linear_provider_assets(root, errors)
+    _validate_native_coordination_assets(root, errors)
     _validate_v3_setup_oracle(root, errors)
     return errors
 
