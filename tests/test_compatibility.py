@@ -22,6 +22,30 @@ EXPECTED_RUNTIME_EXPORTS = frozenset(
         "validate_workspace_map",
     }
 )
+EXPECTED_DESCRIPTION = (
+    "A product-first coordination workflow for one owner and agents across "
+    "Linear planning, Notion knowledge, and GitHub delivery."
+)
+EXPECTED_VERSION = "0.4.0"
+EXPECTED_KEYWORDS = {
+    "superpowers",
+    "workflow",
+    "roadmap",
+    "delivery",
+    "product-first",
+    "linear",
+    "notion",
+    "github",
+}
+EXPECTED_SKILLS = {
+    "author-product-spec",
+    "author-technical-contract",
+    "decompose-roadmap",
+    "kickoff",
+    "setup-workspace",
+    "shape-story",
+    "ship-story",
+}
 
 if str(PLUGIN) not in sys.path:
     sys.path.insert(0, str(PLUGIN))
@@ -52,6 +76,46 @@ class CompatibilityValidatorTests(unittest.TestCase):
         self.assertEqual(codex["version"], claude["version"])
         self.assertEqual(codex_marketplace["plugins"][0]["name"], codex["name"])
         self.assertEqual(claude_marketplace["plugins"][0]["name"], codex["name"])
+
+    def test_plugin_metadata_describes_native_coordination(self) -> None:
+        codex = json.loads((PLUGIN / ".codex-plugin/plugin.json").read_text())
+        claude = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
+        claude_marketplace = json.loads(
+            (ROOT / ".claude-plugin/marketplace.json").read_text()
+        )
+
+        self.assertEqual(codex["description"], EXPECTED_DESCRIPTION)
+        self.assertEqual(claude["description"], EXPECTED_DESCRIPTION)
+        self.assertEqual(codex["version"], EXPECTED_VERSION)
+        self.assertEqual(claude["version"], EXPECTED_VERSION)
+        self.assertEqual(set(codex["keywords"]), EXPECTED_KEYWORDS)
+        self.assertEqual(set(claude["keywords"]), EXPECTED_KEYWORDS)
+        self.assertEqual(codex["skills"], "./skills/")
+        self.assertEqual(codex["interface"]["capabilities"], ["Interactive", "Write"])
+        self.assertEqual(
+            codex["interface"]["defaultPrompt"],
+            [
+                "Kick off this product with Elephant.",
+                "Set up native Linear, Notion, and GitHub coordination for this repository.",
+                "Shape and ship the next Linear Story with Elephant.",
+            ],
+        )
+        marketplace_plugin = claude_marketplace["plugins"][0]
+        self.assertEqual(marketplace_plugin["description"], EXPECTED_DESCRIPTION)
+        self.assertEqual(set(marketplace_plugin["keywords"]), EXPECTED_KEYWORDS)
+
+        forbidden = ("dual-contract", "delivery profile", "Product Contract")
+        rendered = json.dumps(
+            [codex, claude, claude_marketplace], ensure_ascii=False
+        )
+        for phrase in forbidden:
+            self.assertNotIn(phrase, rendered)
+
+    def test_installed_skill_inventory_is_exact(self) -> None:
+        installed = {
+            path.parent.name for path in (PLUGIN / "skills").glob("*/SKILL.md")
+        }
+        self.assertEqual(installed, EXPECTED_SKILLS)
 
     def test_minimal_runtime_exports_are_exact(self) -> None:
         from elephant_runtime import workspace_map

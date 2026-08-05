@@ -1,68 +1,37 @@
-# Elephant Dual-Runtime Smoke Tests
+# Elephant host and packaging smoke tests
 
-Run these cases after installing or updating Elephant. Start a new host session before testing. Use a disposable repository or branch for cases that write artifacts.
+These cases verify the same packaged workflow in Claude Code and Codex. They store outcome
+categories only—never connector payloads, credentials, or external-object dumps.
 
-Product-first story phases, dispositions, review, sequential fallback, and legacy-resume coverage
-are specified in [Product-First Story Smoke Tests](product-first-story-smoke-tests.md). Keep the
-design-provider cases below as the authoritative cross-runtime provider checks.
+## Install and inventory
 
-## 1. kickoff preflight
+Install Elephant from its marketplace in each host, start a new session, and inspect the available
+skills. Both hosts must expose exactly the seven current workflow skills: `kickoff`,
+`author-product-spec`, `decompose-roadmap`, `setup-workspace`, `shape-story`,
+`author-technical-contract`, and `ship-story`. No `init-profile` entry may remain.
 
-**Hosts:** Claude Code, Codex  
-**Request:** explicitly invoke `elephant:kickoff` in a repository where one required Superpowers skill is unavailable.  
-**Expected:** Elephant names the missing canonical skill, gives host-appropriate installation guidance, and creates no spec, roadmap, or profile artifact.
+## Single Product setup
 
-Repeat with all dependencies available. Expected: Elephant detects the first incomplete inception phase and invokes its canonical Elephant sub-skill.
+Given one repository Product plus authenticated Linear and Notion integrations, run setup through
+the proposal boundary without approving writes. It must propose a label-free Product scope, mapped
+Notion and Linear entry points, repository domains, and one final workspace-map write. It must not
+propose databases, provider manifests, certification, or a delivery profile.
 
-## 2. neutral profile output
+## Multi Product setup
 
-**Hosts:** Claude Code, Codex  
-**Request:** invoke `elephant:init-profile` in a fixture repository with a roadmap, specs, and unambiguous repository conventions.  
-**Expected:** after the single confirmation checkpoint, Elephant writes `.agents/elephant/delivery-profile.md`. It does not create a runtime-specific profile path.
+Given two repository Products, setup must distinguish each Product from its engineering domains
+and require Product classification on Linear Issues, Projects, and Initiatives. Ambiguous existing
+objects stop the affected operation instead of triggering a global scan or guessed match.
 
-## 3. instruction conflict
+## Missing integrations
 
-**Hosts:** Claude Code, Codex  
-**Fixture:** root `AGENTS.md` requires merge commits while root `CLAUDE.md` requires squash merges.  
-**Request:** invoke `elephant:init-profile`.  
-**Expected:** the confirmation draft shows both candidate `finish.integration` values with source paths. Elephant waits for the user's resolution and does not silently prefer the active host.
+If Linear is unavailable, planning work stops with the missing authoritative source. If Notion is
+unavailable and no durable meaning needs to be read or written, the Story may remain Linear-only;
+otherwise it stops. Missing native Linear-GitHub convenience falls back to an ordinary verified PR
+link. No missing integration causes Elephant to invent a local replacement store.
 
-## 4. missing profile
+## Host-instruction conflict
 
-**Hosts:** Claude Code, Codex  
-**Request:** invoke `elephant:ship-story` for a valid roadmap ID without `.agents/elephant/delivery-profile.md`.  
-**Expected:** Elephant stops before research or artifact creation and directs the user to `kickoff` or `init-profile`.
-
-## 5. non-UI bypass
-
-**Hosts:** Claude Code, Codex  
-**Fixture:** design gate enabled; slice spec §6 sensitivity is exactly `Low`.  
-**Request:** invoke `elephant:ship-story` for the slice.  
-**Expected:** phase detection skips the design gate and proceeds from the refined spec to planning.
-
-## 6. manual design resume
-
-**Hosts:** Claude Code, Codex  
-**Fixture:** UI slice with `design.provider: manual`.  
-**Request:** invoke `elephant:ship-story`.  
-**Expected first run:** Elephant commits and pushes the `Refined` spec, reports the exact design directory and handoff fields, then stops.
-
-Place design artifacts plus `design-handoff.md` in the directory and give the human ready signal.
-
-**Expected resume:** Elephant verifies the non-empty directory, handoff file, and human signal, then continues to planning. Missing any one condition keeps the story at the design phase.
-
-## 7. claude-design handoff
-
-**Host:** Claude Code with DesignSync available  
-**Fixture:** UI slice with `design.provider: claude-design` and valid `claude_design.project_ref` plus `slice_to_design_mapping`.  
-**Request:** give the human ready signal and resume `elephant:ship-story`.  
-**Expected:** Elephant pulls the mapped design, writes or validates `design-handoff.md`, applies the common gate, and continues.
-
-Repeat with either provider field unresolved. Expected: Elephant stops and requests the exact missing value instead of guessing.
-
-## 8. sequential research fallback
-
-**Hosts:** a Claude Code or Codex session without worker delegation  
-**Fixture:** a story with mature industry precedent and research depth set to three scopes.  
-**Request:** approve the announced research.  
-**Expected:** Elephant executes the same three scopes sequentially in the current agent, synthesizes them once, and continues to brainstorming without changing the requested scope.
+Repository instructions continue to control commands, verification, worktrees, and commit/PR
+conventions. Elephant controls only its product coordination flow. A real conflict is reported with
+the exact instructions; host identity is never used to silently choose different product behavior.

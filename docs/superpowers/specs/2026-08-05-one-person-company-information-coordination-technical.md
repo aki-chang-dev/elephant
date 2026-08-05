@@ -475,8 +475,9 @@ convenience allowed to remain a visible manual step; it does not create a Notion
    tests cover the Product Contract.
 3. Do not merge `feat/notion-providers`. After the new implementation has no dependency on it,
    remove its worktree/branch through the normal safe branch cleanup workflow.
-4. Pilot the generic setup and one complete shape/deliver path in Maio without converting existing
-   documents yet.
+4. Run the synthetic read-only cold-start pilot for generic setup, one-recap shaping, and
+   authoritative routing. Do not write to Maio's live Linear, Notion, or GitHub scope in this
+   plugin-redesign step.
 5. Run the separate Maio migration: create the minimal Linear/Notion structure, move current useful
    truth, replace `delivery-profile.md` with the new workspace map, and clean redundant documents.
 6. Cut over `kickoff`, `shape-story`, and `ship-story` together, then remove legacy v2 profile,
@@ -488,7 +489,23 @@ in place; rollback does not delete user-visible Linear/Notion content.
 
 ## 9. Verification strategy
 
-### Focused automated evidence
+### Deterministic automated evidence
+
+Deterministic tests cover the executable surfaces that can be evaluated without pretending prose
+is runtime behavior:
+
+- Workspace-map schema, validation, Product resolution, planning-scope projection, safe anchors,
+  label-free single Product, labeled multi Product, and invalid/ambiguous routing stops.
+- Exact packaged skill/reference inventory, manifest parity and release metadata, installed-plugin
+  smoke, minimal runtime exports, checkout forwarder, and absence of superseded runtime/assets.
+- Full unit suite, compatibility validator, compileall, official plugin validator, and
+  `git diff --check`.
+
+### Independent skill pressure and acceptance evidence
+
+The following behaviors are evaluated by fresh read-only agents against the complete packaged
+skills and synthetic scenarios, then recorded as concise RED/GREEN outcomes. They are not Python
+source-text assertions: such assertions would prove wording, not host behavior.
 
 - Workspace-map validation and route selection: implicit label-free single product, multi product,
   ambiguous product, distinct Issue/Project/Initiative Product labels, optional integrations/views,
@@ -562,17 +579,21 @@ in place; rollback does not delete user-visible Linear/Notion content.
   are removed rather than retained as compatibility requirements.
 - Full unit suite, plugin validator, skill validators, compileall, and `git diff --check` pass.
 
-### Real product-path pilot
+### Generic cold-start pilot
 
-- On a disposable or explicitly approved Maio scope, run setup discovery and show the minimal
-  proposal before writes.
-- Shape one one-sentence idea, let the discussion determine planning structure, approve once, and
-  verify the resulting Linear and optional Notion experience through normal reads.
-- Deliver one bounded Story using the Linear identifier in branch/PR and verify the native GitHub
-  relationship from both products.
-- Ask one planning question and one product-knowledge question from a cold session; verify the
-  router reaches the correct sources without global scanning.
-- Record concise redacted outcomes, not a connector-call certification transcript.
+- In a fresh-agent session, use a synthetic disposable-repository scenario and the packaged plugin
+  to run setup discovery through its proposal boundary without external writes.
+- Trace one one-sentence shaping case through its single recap approval, including planning and
+  knowledge disposition, without applying real Linear or Notion changes.
+- Ask planning, product-meaning, and executable-behavior questions; verify the skills require the
+  mapped Linear, Notion, and Git starting routes and stop before global search when those routes
+  are sufficient.
+- Record concise redacted protocol outcomes, not connector payloads or claims of live execution.
+
+The separately shaped Maio migration owns the first authorized native write/read-back and
+Linear-GitHub delivery pilot. It must verify those product paths before removing repository truth;
+this plugin redesign does not create disposable objects in the owner's live workspaces merely to
+certify itself.
 
 ## 10. Risks and open technical questions
 
@@ -635,8 +656,23 @@ technical review/fix/recheck rounds.
   `sha256:ce9fa913caf310422ac380a9c355b04c87e9000043abd70f7afd85f4317310ae`.
 - Superseded delivery evidence: Phase 1–3 implementation and the unmerged Phase 4 branch are
   superseded inputs, not readiness evidence for this contract.
-- Plan and execution evidence: None; planning has not begun.
-- Implementation and code-review evidence: None.
-- Post-implementation conformance: None.
-- Verification and acceptance evidence: None.
-- Integration and closeout evidence: None.
+- Plan and execution evidence: implemented as seven bounded implementation commits plus the
+  current publication/acceptance diff on `feat/native-information-coordination`: minimal workspace
+  map, safe anchor validation, native setup, native product-source coordination, native Story
+  delivery, and obsolete runtime removal. Product Contracts and plans remained planning inputs
+  rather than new runtime stores.
+- Implementation and code-review evidence: independent architecture, domain/data,
+  security/operations, product-conformance, test, and Task 5 code-quality reviews resolved all
+  findings; the latest affected rechecks reported `PASS`.
+- Post-implementation conformance: the current seven-skill inventory routes live planning to
+  Linear, durable meaning to ordinary Notion pages, and executable truth to Git/GitHub. The only
+  executable coordination runtime is the closed-schema workspace map; superseded provider, setup
+  transaction, certification, delivery-profile, design-gate, and legacy compatibility assets are
+  absent.
+- Verification and acceptance evidence: 26 unit tests, compatibility validation, compileall,
+  official plugin validation, and `git diff --check` passed. A fresh-agent, read-only protocol
+  simulation against a synthetic disposable single-Product scenario confirmed that the packaged
+  skills require setup proposal, one-recap shaping, knowledge disposition, and the mapped starting
+  routes: Linear for planning, Notion for product meaning, and Git for executable behavior. It
+  performed no external writes and retained no raw connector payloads or external IDs.
+- Integration and closeout evidence: pending final commit, merge, worktree cleanup, and push.

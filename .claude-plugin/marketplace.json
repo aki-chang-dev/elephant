@@ -4,14 +4,14 @@
     "name": "Aki Chang",
     "url": "https://github.com/aki-chang-dev"
   },
-  "description": "Elephant — a Superpowers-based, product-first delivery harness for Claude Code and Codex, taking Product and Technical Contracts from story seed to shipped work.",
+  "description": "Elephant coordinates one owner and agents across native Linear planning, Notion knowledge, and GitHub delivery.",
   "plugins": [
     {
       "name": "elephant",
       "source": "./plugins/elephant",
-      "description": "Shared Claude Code and Codex workflows: kick off a product, then shape and ship one dual-contract roadmap story end-to-end.",
+      "description": "A product-first coordination workflow for one owner and agents across Linear planning, Notion knowledge, and GitHub delivery.",
       "category": "workflow",
-      "keywords": ["superpowers", "roadmap", "delivery", "product-first", "dual-contract", "orchestration"]
+      "keywords": ["superpowers", "workflow", "roadmap", "delivery", "product-first", "linear", "notion", "github"]
     }
   ]
 }

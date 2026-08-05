@@ -1,7 +1,7 @@
 {
   "name": "elephant",
-  "version": "0.3.0",
-  "description": "A Superpowers-based delivery harness for product-first, dual-contract story delivery from idea to shipped work.",
+  "version": "0.4.0",
+  "description": "A product-first coordination workflow for one owner and agents across Linear planning, Notion knowledge, and GitHub delivery.",
   "skills": "./skills/",
   "author": {
     "name": "Aki Chang",
@@ -17,14 +17,14 @@
     "roadmap",
     "delivery",
     "product-first",
-    "dual-contract",
-    "orchestration",
-    "inception"
+    "linear",
+    "notion",
+    "github"
   ],
   "interface": {
     "displayName": "Elephant",
     "shortDescription": "Take products from idea to shipped stories.",
-    "longDescription": "A Claude Code and Codex delivery workflow built on Superpowers: define the product, decompose a roadmap, shape each new story into a Product Contract, independently review its Technical Contract, and ship it.",
+    "longDescription": "A Claude Code and Codex workflow built on Superpowers: turn one-sentence ideas into user-centered outcomes, keep live planning in Linear, retain durable product knowledge in Notion, and connect implementation through GitHub.",
     "developerName": "Aki Chang",
     "category": "Productivity",
     "capabilities": [
@@ -34,8 +34,8 @@
     "websiteURL": "https://github.com/aki-chang-dev/elephant",
     "defaultPrompt": [
       "Kick off this product with Elephant.",
-      "Create an Elephant delivery profile for this repository.",
-      "Shape and ship the next roadmap story with Elephant."
+      "Set up native Linear, Notion, and GitHub coordination for this repository.",
+      "Shape and ship the next Linear Story with Elephant."
     ],
     "brandColor": "#59636E"
   }
