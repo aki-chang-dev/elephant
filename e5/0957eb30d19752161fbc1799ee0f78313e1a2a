@@ -1,0 +1,21 @@
+plugins/elephant/elephant_runtime/workspace_map.py
+  s_7c6e11e61c7ee5::t_955176952dbdeb 31-42,99-111,118-122
+tests/test_workspace_map.py
+  s_7c6e11e61c7ee5::t_f14d1d3a73caab 193-194,197-199,219-221,229-230,232-234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "e50957eb30d19752161fbc1799ee0f78313e1a2a",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
