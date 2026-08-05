@@ -1,7 +1,9 @@
 # Elephant External Workspace Orchestration Design
 
 **Date:** 2026-08-03
-**Status:** Approved for phased implementation planning
+**Status:** Superseded on 2026-08-05 by
+[`2026-08-05-one-person-company-information-coordination-product.md`](2026-08-05-one-person-company-information-coordination-product.md).
+Do not use this document as the product basis for further implementation.
 
 ## Goal
 

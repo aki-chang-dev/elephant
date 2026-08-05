@@ -1,5 +1,10 @@
 # Linear Provider Implementation Plan
 
+> **Status: superseded.** Do not continue this plan. Its product assumptions were replaced by
+> [`2026-08-05-one-person-company-information-coordination-product.md`](../specs/2026-08-05-one-person-company-information-coordination-product.md).
+> Existing Phase 3 implementation must be audited against the approved Product Contract before
+> any further work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build and sandbox-certify Elephant's provider-neutral Linear story provider for issues, human status, product/kind labels, hierarchy and relations, Product Recap, Product Contract binding, attachment checkpoints, delivery evidence, and GitHub binding.

@@ -1,5 +1,10 @@
 # Notion Providers Implementation Plan
 
+> **Status: superseded.** Do not continue this plan. Its product assumptions were replaced by
+> [`2026-08-05-one-person-company-information-coordination-product.md`](../specs/2026-08-05-one-person-company-information-coordination-product.md).
+> The isolated Phase 4 branch must not be merged; salvage or deletion will be decided only after
+> a new technical design is approved.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build and sandbox-certify Elephant's provider-neutral Notion product-knowledge and Product Contract providers, including shared workspace databases, exact relations, shaping drafts, approval immutability, successor versions, canonical fingerprints, reciprocal Linear binding, setup provisioning, and tamper detection.
