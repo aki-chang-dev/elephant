@@ -1,0 +1,31 @@
+plugins/elephant/elephant_runtime/notion/normalize.py
+  s_7c6e11e61c7ee5::t_d2eeddb6eaf84e 82-94
+plugins/elephant/elephant_runtime/notion/__init__.py
+  s_7c6e11e61c7ee5::t_d2eeddb6eaf84e 22,105
+tests/test_notion_fingerprint.py
+  s_7c6e11e61c7ee5::t_7294f6bc6aae1a 102,136,167,174,180,196,205,218,241,243,266,278,285,294,307,310
+  s_7c6e11e61c7ee5::t_76b7b02b4f132e 14,145,159,162
+  s_7c6e11e61c7ee5::t_2c749ef14c71c6 138,143-144,146-158,160-161
+  s_7c6e11e61c7ee5::t_4c89dc4d455893 198-200,279-282
+  s_7c6e11e61c7ee5::t_28e63ada875335 22,77-97
+plugins/elephant/elephant_runtime/notion/fingerprint.py
+  s_7c6e11e61c7ee5::t_d2eeddb6eaf84e 14,27-65,70-74,104,107,130,133,167,172,177,182,187-188,191-193
+.superpowers/sdd/2026-08-04-notion-providers/task-3-report.md
+  s_7c6e11e61c7ee5::t_ed1116dae6ad46 117-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "70d45901110c9e2281accadbef5082d2150e11a5",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
