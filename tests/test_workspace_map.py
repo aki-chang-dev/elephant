@@ -21,7 +21,6 @@ SINGLE = {
     "notion": {"root_id": "company-knowledge"},
     "domains": {
         "web": {
-            "name": "Web",
             "paths": ["apps/web"],
             "instructions": ["AGENTS.md", "apps/web/AGENTS.md"],
             "verification": ["python3 -m unittest"],
@@ -86,7 +85,15 @@ class WorkspaceMapValidationTests(unittest.TestCase):
         self.assertEqual(route.key, "sample")
         self.assertEqual(route.name, "Sample")
         self.assertEqual(route.domain_keys, ("web",))
-        self.assertEqual(planning_scope(SINGLE).product_labels, {})
+        scope = planning_scope(SINGLE)
+        self.assertEqual(scope.team_id, "linear-team")
+        self.assertEqual(scope.planning_ref, "linear-planning")
+        self.assertEqual(scope.backlog_ref, "linear-backlog")
+        self.assertEqual(scope.product_labels, {})
+        with self.assertRaises(TypeError):
+            route.linear["planning_ref"] = "changed"
+        with self.assertRaises(TypeError):
+            scope.product_labels["issue"] = "changed"
 
     def test_multi_product_requires_and_returns_all_label_namespaces(self) -> None:
         value = multi_product()
@@ -148,28 +155,42 @@ class WorkspaceMapValidationTests(unittest.TestCase):
             validate_workspace_map(value),
         )
 
-    def test_rejects_story_content_and_secret_material_recursively(self) -> None:
+    def test_rejects_unknown_fields_in_each_fixed_schema_scope(self) -> None:
         cases = (
-            ("stories", {"CF-1": {}}),
-            ("checkpoints", []),
-            ("document_bodies", {"overview": "copy"}),
-            ("api_token", "secret"),
-            ("connector_tool_name", "linear_save_issue"),
-            ("approval_hash", "abc"),
+            ((), "github_token"),
+            (("repository",), "access_token"),
+            (("linear",), "client_secret"),
+            (("notion",), "document_body"),
+            (("domains", "web"), "story_registry"),
+            (("products", "sample"), "plans"),
+            (("products", "sample", "linear"), "connector_tool_name"),
+            (("products", "sample", "notion"), "approval_receipt"),
         )
-        for key, forbidden in cases:
-            with self.subTest(key=key):
+        for path, key in cases:
+            with self.subTest(path=path, key=key):
                 value = deepcopy(SINGLE)
-                value["products"]["sample"]["extra"] = {key: forbidden}
-                self.assertTrue(
-                    any(key in problem for problem in validate_workspace_map(value)),
+                target = value
+                for segment in path:
+                    target = target[segment]
+                target[key] = "forbidden"
+                field = ".".join((*path, key))
+                self.assertIn(
+                    f"{field}: unknown workspace-map field",
                     validate_workspace_map(value),
                 )
+
+    def test_dynamic_product_and_domain_keys_are_not_schema_fields(self) -> None:
+        value = deepcopy(SINGLE)
+        value["domains"]["contracts"] = value["domains"].pop("web")
+        value["products"]["sample"]["domains"] = ["contracts"]
+        self.assertEqual(validate_workspace_map(value), ())
 
     def test_rejects_non_https_urls_and_query_credentials(self) -> None:
         cases = (
             "http://github.com/acme/sample",
             "https://github.com/acme/sample?token=secret",
+            "https://github.com/acme/sample?X-Amz-Signature=secret",
+            "https://github.com/acme/sample#access_token=secret",
             "https://user:pass@github.com/acme/sample",
         )
         for github in cases:
@@ -180,6 +201,47 @@ class WorkspaceMapValidationTests(unittest.TestCase):
                     "repository.github: expected safe HTTPS URL",
                     validate_workspace_map(value),
                 )
+
+    def test_rejects_unsafe_values_in_every_anchor_field(self) -> None:
+        fields = (
+            (("linear",), "workspace_id"),
+            (("linear",), "team_id"),
+            (("linear",), "company_portfolio_ref"),
+            (("notion",), "root_id"),
+            (("notion",), "shared_knowledge_id"),
+            (("products", "sample", "linear"), "planning_ref"),
+            (("products", "sample", "linear"), "backlog_ref"),
+            (("products", "sample", "notion"), "home_id"),
+            (("products", "sample", "notion"), "knowledge_map_id"),
+        )
+        unsafe = (
+            "https:malformed",
+            "opaque id with spaces",
+            "https://example.com/value?X-Amz-Credential=secret",
+            "https://example.com/value#api_key=secret",
+        )
+        for path, field in fields:
+            for value_text in unsafe:
+                with self.subTest(path=path, field=field, value=value_text):
+                    value = deepcopy(SINGLE)
+                    target = value
+                    for segment in path:
+                        target = target[segment]
+                    target[field] = value_text
+                    self.assertTrue(
+                        any(
+                            problem.startswith(f"{'.'.join((*path, field))}:")
+                            for problem in validate_workspace_map(value)
+                        ),
+                        validate_workspace_map(value),
+                    )
+
+    def test_allows_benign_https_query_and_fragment(self) -> None:
+        value = deepcopy(SINGLE)
+        value["products"]["sample"]["linear"]["planning_ref"] = (
+            "https://linear.app/acme/project/sample?view=active#overview"
+        )
+        self.assertEqual(validate_workspace_map(value), ())
 
     def test_requires_exactly_one_default_product(self) -> None:
         value = multi_product()

@@ -12,36 +12,32 @@ _LABEL_FIELDS = {
     "project": "project_label_id",
     "initiative": "initiative_label_id",
 }
-_FORBIDDEN_KEYS = {
-    "stories",
-    "story_registry",
-    "checkpoints",
-    "contracts",
-    "plans",
-    "document_bodies",
-    "oauth",
-    "oauth_token",
-    "token",
-    "api_token",
-    "password",
-    "secret",
-    "connector_tool_name",
-    "approval_receipt",
-    "approval_hash",
-    "fingerprint",
-    "hash",
-}
-_CREDENTIAL_QUERY_KEYS = {
-    "access_token",
-    "api_key",
+_CREDENTIAL_URL_KEYS = {
+    "accesstoken",
     "apikey",
     "auth",
+    "authorization",
+    "clientsecret",
+    "credential",
     "key",
     "password",
     "secret",
+    "sig",
     "signature",
     "token",
+    "xamzcredential",
+    "xamzsignature",
 }
+_TOP_FIELDS = frozenset({"schema", "repository", "linear", "notion", "domains", "products"})
+_REPOSITORY_FIELDS = frozenset({"id", "github"})
+_LINEAR_FIELDS = frozenset({"workspace_id", "team_id", "company_portfolio_ref"})
+_NOTION_FIELDS = frozenset({"root_id", "shared_knowledge_id"})
+_DOMAIN_FIELDS = frozenset({"name", "paths", "instructions", "verification"})
+_PRODUCT_FIELDS = frozenset({"name", "default", "domains", "linear", "notion"})
+_PRODUCT_LINEAR_FIELDS = frozenset(
+    {"planning_ref", "backlog_ref", *_LABEL_FIELDS.values()}
+)
+_PRODUCT_NOTION_FIELDS = frozenset({"home_id", "knowledge_map_id"})
 
 
 class WorkspaceMapError(ValueError):
@@ -86,34 +82,40 @@ def _repo_path(value: object) -> bool:
 
 
 def _safe_https_url(value: object) -> bool:
-    if not isinstance(value, str):
+    if not isinstance(value, str) or any(character.isspace() for character in value):
         return False
     parsed = urlsplit(value)
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
         return False
-    query_keys = {key.lower() for key, _ in parse_qsl(parsed.query, keep_blank_values=True)}
-    return not bool(query_keys & _CREDENTIAL_QUERY_KEYS)
+    parameter_keys = {
+        "".join(character for character in key.lower() if character.isalnum())
+        for component in (parsed.query, parsed.fragment)
+        for key, _ in parse_qsl(component, keep_blank_values=True)
+    }
+    return not bool(parameter_keys & _CREDENTIAL_URL_KEYS)
 
 
 def _anchor(value: object) -> bool:
     if not _nonblank(value):
         return False
     assert isinstance(value, str)
-    return _safe_https_url(value) if "://" in value else True
+    if any(character.isspace() for character in value):
+        return False
+    looks_like_url = "://" in value or value.lower().startswith(("http:", "https:"))
+    return _safe_https_url(value) if looks_like_url else True
 
 
-def _find_forbidden(value: object, path: str, problems: list[str]) -> None:
-    if isinstance(value, Mapping):
-        for raw_key, item in value.items():
+def _validate_known_fields(
+    value: Mapping[object, object],
+    allowed: frozenset[str],
+    field: str,
+    problems: list[str],
+) -> None:
+    for raw_key in value:
+        if not isinstance(raw_key, str) or raw_key not in allowed:
             key = str(raw_key)
-            child = f"{path}.{key}" if path else key
-            if key.lower() in _FORBIDDEN_KEYS:
-                problems.append(f"{child}: forbidden workspace-map content")
-            _find_forbidden(item, child, problems)
-    elif _sequence(value) is not None:
-        assert not isinstance(value, (str, bytes))
-        for index, item in enumerate(value):
-            _find_forbidden(item, f"{path}[{index}]", problems)
+            path = f"{field}.{key}" if field else key
+            problems.append(f"{path}: unknown workspace-map field")
 
 
 def _validate_string_list(
@@ -152,14 +154,15 @@ def _validate_optional_anchors(
 
 def validate_workspace_map(document: Mapping[str, object]) -> tuple[str, ...]:
     problems: list[str] = []
+    _validate_known_fields(document, _TOP_FIELDS, "", problems)
     if document.get("schema") != WORKSPACE_SCHEMA:
         problems.append(f"schema: expected {WORKSPACE_SCHEMA}")
-    _find_forbidden(document, "", problems)
 
     repository = document.get("repository")
     if not isinstance(repository, Mapping):
         problems.append("repository: required mapping")
     else:
+        _validate_known_fields(repository, _REPOSITORY_FIELDS, "repository", problems)
         if not _nonblank(repository.get("id")):
             problems.append("repository.id: expected nonblank string")
         if "github" in repository and not _safe_https_url(repository.get("github")):
@@ -169,6 +172,7 @@ def validate_workspace_map(document: Mapping[str, object]) -> tuple[str, ...]:
     if not isinstance(linear, Mapping):
         problems.append("linear: required mapping")
     else:
+        _validate_known_fields(linear, _LINEAR_FIELDS, "linear", problems)
         for name in ("workspace_id", "team_id"):
             if not _anchor(linear.get(name)):
                 problems.append(f"linear.{name}: expected HTTPS URL or opaque ID")
@@ -178,6 +182,7 @@ def validate_workspace_map(document: Mapping[str, object]) -> tuple[str, ...]:
     if not isinstance(notion, Mapping):
         problems.append("notion: required mapping")
     else:
+        _validate_known_fields(notion, _NOTION_FIELDS, "notion", problems)
         if not _anchor(notion.get("root_id")):
             problems.append("notion.root_id: expected HTTPS URL or opaque ID")
         _validate_optional_anchors(notion, "notion", ("shared_knowledge_id",), problems)
@@ -192,11 +197,12 @@ def validate_workspace_map(document: Mapping[str, object]) -> tuple[str, ...]:
         if not isinstance(raw_domain, Mapping):
             problems.append(f"domains.{key}: required mapping")
             continue
+        _validate_known_fields(raw_domain, _DOMAIN_FIELDS, f"domains.{key}", problems)
         if "products" in raw_domain:
             problems.append(
                 f"domains.{key}.products: Product membership belongs only in Product entries"
             )
-        if not _nonblank(raw_domain.get("name")):
+        if "name" in raw_domain and not _nonblank(raw_domain.get("name")):
             problems.append(f"domains.{key}.name: expected nonblank string")
         _validate_string_list(raw_domain.get("paths"), f"domains.{key}.paths", problems, paths=True)
         _validate_string_list(
@@ -225,6 +231,7 @@ def validate_workspace_map(document: Mapping[str, object]) -> tuple[str, ...]:
         if not isinstance(raw_product, Mapping):
             problems.append(f"products.{key}: required mapping")
             continue
+        _validate_known_fields(raw_product, _PRODUCT_FIELDS, f"products.{key}", problems)
         if raw_product.get("default") is True:
             default_count += 1
         elif raw_product.get("default") is not False:
@@ -244,6 +251,13 @@ def validate_workspace_map(document: Mapping[str, object]) -> tuple[str, ...]:
         if not isinstance(product_linear, Mapping):
             problems.append(f"products.{key}.linear: required mapping")
             product_linear = {}
+        else:
+            _validate_known_fields(
+                product_linear,
+                _PRODUCT_LINEAR_FIELDS,
+                f"products.{key}.linear",
+                problems,
+            )
         _validate_optional_anchors(
             product_linear,
             f"products.{key}.linear",
@@ -268,6 +282,13 @@ def validate_workspace_map(document: Mapping[str, object]) -> tuple[str, ...]:
         if not isinstance(product_notion, Mapping):
             problems.append(f"products.{key}.notion: required mapping")
             product_notion = {}
+        else:
+            _validate_known_fields(
+                product_notion,
+                _PRODUCT_NOTION_FIELDS,
+                f"products.{key}.notion",
+                problems,
+            )
         _validate_optional_anchors(
             product_notion,
             f"products.{key}.notion",
