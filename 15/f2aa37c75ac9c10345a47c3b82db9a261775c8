@@ -1,0 +1,32 @@
+tests/test_notion_contracts.py
+  s_7c6e11e61c7ee5::t_b06e37eb3cd998 173-193
+  s_7c6e11e61c7ee5::t_c18b1e06829abe 136
+  s_7c6e11e61c7ee5::t_1b65aa1b0ca95c 1-135,137-172,194-249,263-316
+  s_7c6e11e61c7ee5::t_996ef5c0dca6bb 250-262
+tests/test_notion_contract_failpoints.py
+  s_7c6e11e61c7ee5::t_1b65aa1b0ca95c 1-90,94-125,127-141
+  s_7c6e11e61c7ee5::t_996ef5c0dca6bb 91-93,126
+plugins/elephant/elephant_runtime/notion/contracts.py
+  s_7c6e11e61c7ee5::t_0159c852461ca4 20-22,39-41,52-72,115,130-132,142
+  s_7c6e11e61c7ee5::t_c18b1e06829abe 1-19,23-38,42-51,73-114,116-129,133-141,143-174,176-277,279-281,283-289,291-354,357-358,370-451,459-601,603-675
+  s_7c6e11e61c7ee5::t_e81d95607b2387 355-356,359-369,452-458
+  s_7c6e11e61c7ee5::t_52f0ca90b611db 175,278,282,290,602
+plugins/elephant/elephant_runtime/notion/__init__.py
+  s_7c6e11e61c7ee5::t_de8592c165fc11 16-27,78-81,88-90,114,122,136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "15f2aa37c75ac9c10345a47c3b82db9a261775c8",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
