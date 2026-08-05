@@ -1,117 +1,96 @@
 ---
 schema: elephant.story/v2
-story: <ID>
+story: <Linear Story ID>
 slug: <slug>
 kind: technical
 story_kind: <product-facing | engineering-only>
 status: draft
-product_contract: <path | null>
 ---
 
-# <ID> — <Technical outcome>
+# <Linear Story ID> — <Technical outcome>
 
-This contract contains implementation decisions and evidence. The author and every technical
-reviewer must treat an approved `product.md` as immutable.
+This transient contract contains implementation decisions and evidence. Product meaning remains in
+its fetched authoritative sources. The legal authoring exits are `ready` and
+`needs-product-decision`; unresolved technical questions keep `status: draft`.
 
-The two legal exits from technical authoring before planning are
-`ready | needs-product-decision`. Unresolved technical questions keep this contract at `draft`.
-Unresolved product meaning requires `needs-product-decision`; do not answer it as an implementation
-choice.
+## 1. Product-source binding and traceability
 
-The persisted lifecycle is `draft → ready → implementing → done`. Review is an activity while
-`status: draft` remains persisted; record rounds and rechecks in section 11 instead of inventing a
-`review` status. `ship-story` changes `ready` to `implementing` before implementation and changes
-`implementing` to `done` during closeout after the required delivery evidence exists.
+For product-facing work, record every current source after fetching its full content:
 
-## 1. Product-contract binding
+| Source | Exact ID and URL | Verified ownership/ancestry | Current observation |
+|---|---|---|---|
+| Linear Story | <ID and URL> | <Team and Product> | <native version/last edit when available> |
+| Notion Decision/Knowledge | <ID and URL> | <Product Home ancestry> | <native version/last edit when available> |
 
-For a product-facing story, cite the approved Product Contract and map every requirement and state:
+Map every observable item from all fetched sources. A link alone is not evidence.
 
-`product_contract` is its exact case-sensitive repository-relative POSIX path. It must name the
-existing file for the exact active Product Contract. Absolute paths, URIs, backslashes, empty
-values, `.` or `..` segments, repository escapes, outside-resolving symlinks, missing files,
-other-story paths, and basename/case near matches are invalid.
+| Source item | Observable requirement | Technical response | Verification |
+|---|---|---|---|
+| <source + section/item> | <outcome, flow, state, rule, copy, recovery, or acceptance> | <supporting mechanism> | <independent evidence> |
 
-| Product contract item | Technical response | Verification |
-|---|---|---|
-| <section, requirement, flow, state, or copy boundary> | <supporting mechanism> | <evidence that proves it> |
-
-Map only uniquely approved observable boundaries. If a broad copy/reuse category permits multiple
-user-visible inclusion sets, stop with `needs-product-decision`; do not infer the set from
-repository fields or convention.
-
-For an engineering-only story, set `product_contract: null` and replace the product binding with
-an explicit behavior-preservation contract: name the current observable user and business
-behavior, the invariants that must remain unchanged, and the evidence that will prove preservation.
+For engineering-only work, replace the tables with a behavior-preservation source: current
+observable user/business behavior, invariants that must remain unchanged, and evidence that will
+detect a change.
 
 ## 2. Current-system context
 
-Record inspected repository paths, existing behavior, applicable instructions, global specs,
-decision records, design handoff, and authoritative external documentation.
+Record inspected repository paths, applicable instructions, current behavior, specifications,
+decision records, schema/migrations, and authoritative external engineering documentation.
 
 ## 3. Technical scope
 
-Describe the implementation boundary, affected modules, responsibilities, and explicit exclusions.
+Describe implementation boundaries, affected modules, responsibilities, and explicit exclusions.
 
 ## 4. Domain and data contracts
 
-Define domain invariants, ownership, schema and migration behavior, tenancy, money-path semantics,
-and consistency rules that apply.
+Define applicable invariants, ownership, schema/migration behavior, tenancy, money-path semantics,
+and consistency rules.
 
 ## 5. Interfaces and data flow
 
-Define internal and external interfaces, data movement, validation boundaries, error propagation,
-and compatibility expectations.
+Define interfaces, data movement, validation boundaries, error propagation, and compatibility.
 
 ## 6. Product-state implementation
 
-For product-facing work, explain how every approved flow, state, rule, default, permission,
-critical-copy boundary, and recovery path is supported without changing its meaning.
+Explain how every mapped flow, state, rule, default, permission, critical-copy boundary, and
+recovery path is supported without changing meaning. For engineering-only work, prove observable
+behavior remains unchanged.
 
-For engineering-only work, explain how observable behavior remains unchanged.
+## 7. Security, privacy, and operations
 
-## 7. Security, privacy, and operational behavior
-
-Cover authorization, tenant isolation, secrets and sensitive data, destructive behavior,
-idempotency and retries, observability, rollback, and production failure handling as applicable.
+Cover authorization, isolation, secrets/sensitive data, destructive behavior, retries,
+observability, rollout, rollback, recovery, and production failure handling as applicable.
 
 ## 8. Compatibility and migration
 
-Describe backward compatibility, rollout and migration order, mixed-version behavior, rollback,
-and cleanup.
+Describe compatibility, rollout/migration order, mixed-version behavior, rollback, and cleanup.
 
 ## 9. Verification strategy
 
-Name the automated and manual evidence that proves the traceability rows, behavior preservation,
-failure handling, migration safety, and applicable operational properties.
+Name evidence that independently proves traceability, preserved behavior, failure/recovery paths,
+migration safety, security, and operational properties.
 
 ## 10. Risks and open technical questions
 
-List evidence-backed risks and unresolved technical questions. This section must contain no open
-technical questions at `ready`.
+This section contains no open technical question at `ready`. When product meaning is unresolved,
+set `status: needs-product-decision` and include exactly one bounded brief:
 
-When product meaning is unresolved, set `status: needs-product-decision` and include one bounded
-decision brief:
+- Source ambiguity/change:
+- Evidence and exact source link:
+- Distinct observable outcomes:
+- Decision required:
+- Technical work invalidated or blocked:
 
-- Product-contract ambiguity: <contract item or missing meaning>
-- Evidence: <repository, design, or requirement evidence>
-- Distinct observable outcomes: <the user or business outcomes that differ>
-- Decision required: <one bounded product question>
-- Technical impact: <what cannot proceed without the decision>
+## 11. Review and basis evidence
 
-Do not modify `product.md`.
+Record each selected canonical role, risk trigger, verdict, blocking findings, fixer changes, and
+affected-role recheck. Reviewers report findings only.
 
-## 11. Review evidence
-
-Record each selected canonical role, its risk trigger, verdict, blocking findings, author/fixer
-changes, and affected-role recheck. Reviewers report findings only; they never edit this contract.
-
-For later lifecycle states also record:
-
-- Current contract-basis revision marker: <ready-state commit or contract-content digest; preserve across lifecycle-only writes>
-- Superseded delivery evidence: <older plan/execution/review/conformance records invalidated by a decision return, or None>
-- Plan and execution evidence: <plan path bound to the current revision marker; branch/worktree or equivalent>
-- Implementation and code-review evidence: <commands, commits/diff, verdicts>
-- Post-implementation conformance: <reviewer verdict, findings, fixer changes, affected rechecks>
-- Verification and acceptance evidence: <results>
-- Integration and closeout evidence: <integration result; roadmap/docs closeout>
+- Current source observations re-fetched: <evidence>
+- Current contract-basis marker: <stable marker binding sources, mapping, choices, verification>
+- Superseded delivery evidence: <older plan/execution/review/conformance invalidated, or None>
+- Plan and execution evidence: <plan bound to current marker; branch/worktree>
+- Implementation and code-review evidence:
+- Post-implementation conformance:
+- Verification and acceptance evidence:
+- Integration and closeout evidence:

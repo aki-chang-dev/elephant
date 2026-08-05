@@ -67,3 +67,72 @@ the coordination behavior:
 
 RED verdict: failed. The user-facing conversation was sound, but its inputs and outputs still made
 Git Product Contract files the center of product coordination.
+
+## shape-story — GREEN
+
+The rewritten skill, working recap template, critics, and native references were tested against the
+original scenario plus direct-Objective/no-Project, simple-Story/no-Notion, interrupted write, and
+changed-product-meaning return variants.
+
+Observed behavior:
+
+- began with Linear Story/planning context and directly linked Notion meaning, expanding only when
+  narrower Product evidence was insufficient;
+- kept the conversation in user, experience, copy, recovery, product-rule, and observable-outcome
+  terms;
+- stated dependencies, conflicts, priority impact, and roadmap consequences even when `none`;
+- chose among `linear_only`, `decision`, `knowledge`, and `decision_and_knowledge` with concrete
+  durable targets;
+- used `Related Objective` without a synthetic Project or Objective progress attribution;
+- treated one recap approval as authority for the displayed native operations, verified results by
+  read-back, and preserved that decision through recoverable write interruption;
+- returned changed product meaning to the bounded shaping flow and invalidated downstream technical
+  work;
+- left no permanent Product Contract or shaping log in Git.
+
+GREEN verdict: passed all five scenarios. The only Git artifact during application is the
+short-lived human-readable pending note, removed after native truth is verified.
+
+## author-technical-contract — RED baseline
+
+Scenario: author technical design from an approved Linear Story with observable acceptance and two
+directly linked Notion pages (Decision and Knowledge), with no repository Product Contract.
+
+Observed current-skill behavior:
+
+- stopped before reading any external product source because a repository Product Contract was
+  absent;
+- fetched neither the Linear Story nor the linked Notion page bodies, so it could not bind exact
+  source IDs/URLs or map their complete observable requirements;
+- tracked Technical Contract edits in its basis marker but could not detect changed meaning at the
+  same external source URLs;
+- misreported unavailable Linear/Notion authority as a missing Git artifact;
+- retained sound independent specialist review, product-ambiguity escalation, engineering-only
+  behavior preservation, and no routine owner technical-review gate.
+
+RED verdict: failed. The review lifecycle was useful, but its product-source boundary rejected the
+new authoritative homes.
+
+## author-technical-contract — GREEN
+
+The rewritten skill, template, and specialist prompts were tested against the original source
+bundle plus unchanged-source edit, changed observable requirement, missing authority,
+product-decision return, pure technical conflict, and engineering-only preservation variants.
+
+Observed behavior:
+
+- fetched current Linear Story and linked Notion bodies, exact IDs/URLs, ownership/ancestry, and
+  native observations instead of accepting links or prior Git artifacts as evidence;
+- mapped every observable source item and supplied complete fetched contents to independent
+  reviewers;
+- re-fetched sources on resume and before readiness, refreshing non-semantic edits but invalidating
+  the contract, plan, implementation, and prior verdicts when observable meaning changed;
+- stopped on missing or wrong-scope authority and returned product ambiguity to one bounded shaping
+  decision without inventing meaning from repository evidence;
+- preserved risk-based independent review, technical adjudication, engineering-only behavior
+  preservation, and no routine owner technical gate;
+- produced a stable basis marker binding source observations, traceability, technical choices, and
+  verification.
+
+GREEN verdict: passed all variants. These are skill pressure scenarios rather than Python prose
+assertions; executable tests cover asset packaging and the workspace-map runtime.

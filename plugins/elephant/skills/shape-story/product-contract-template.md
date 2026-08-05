@@ -1,67 +1,66 @@
----
-schema: elephant.story/v2
-story: <ID>
-slug: <slug>
-kind: product
-status: shaping
-design_sensitivity: <High | Medium | Low>
-supersedes: []
----
+# Shaping recap — <Product outcome>
 
-# <ID> — <Product outcome>
+This is a human product recap for approval and native application. It contains no implementation
+design and is not durable repository documentation.
 
-This contract contains product decisions only. No implementation design belongs in this file.
+## 1. User, problem, and outcome
 
-`supersedes` is always a YAML list of exact repository-relative POSIX paths. Use `[]` for a new
-contract with no predecessor. A versioned successor lists the approved Product Contract it
-replaces and carries forward that predecessor's normalized entries.
+- User and context:
+- Current problem/experience:
+- Desired user outcome:
+- Business consequence:
 
-Use `status: approved` only when section 10 has no open product questions. For
-`split`, `deferred`, or `rejected`, record the product rationale and next condition in section 10
-instead of adding technical content.
+## 2. Experience, states, and recovery
 
-## 1. User and context
+- Entry and primary flow:
+- Branches and exit:
+- Loading/empty/disabled/partial/error/success states:
+- Recovery:
 
-Who is trying to accomplish what, in which situation?
+## 3. Information and copy
 
-## 2. Problem and current experience
+- Information hierarchy and user decisions:
+- Exact critical copy:
+- Flexible-copy intent and tone:
 
-What happens today, and why is that inadequate?
+## 4. Product rules and acceptance
 
-## 3. Desired outcome
+- Rules and defaults:
+- Observable acceptance:
+- Explicitly unchanged/out of scope:
 
-What user and business outcome should change?
+## 5. Planning position
 
-## 4. Experience flow
+- Product:
+- Story title and current/proposed status:
+- Objective: <existing | new | none>
+- Project: <existing | new | none>
+- Milestone: <existing | new | none>
+- Related Objective: <URL | none; no progress effect>
+- Dependencies: <items | none>
+- Conflicts: <items | none>
+- Priority impact: <effect | none>
+- Roadmap consequences: <effect | none>
 
-Describe the entry point, primary flow, branches, exit, and recovery in observable product terms.
+## 6. Durable knowledge
 
-## 5. States and edge cases
+- Action: <linear_only | decision | knowledge | decision_and_knowledge>
+- Decision target: <human title and Product Home | none>
+- Knowledge target: <human title and Product Home | none>
+- Why this will remain useful:
 
-Cover applicable loading, empty, error, disabled, partial-success, and success states, plus
-recovery.
+## 7. Open product questions
 
-## 6. Information and copy
+None.
 
-Record information hierarchy and user decisions. Write critical user-facing copy exactly. For
-intentionally flexible supporting copy, record its intent and tone.
+## 8. Proposed disposition
 
-## 7. Product rules and defaults
+- Disposition: <approved | split | deferred | rejected>
+- Product rationale:
+- Next condition: <condition | none>
 
-Record user-visible rules, defaults, permissions, and business behavior.
+## 9. Native changes authorized by approval
 
-## 8. Product acceptance criteria
-
-List independently observable product outcomes.
-
-## 9. Out of scope
-
-Name adjacent product behavior this story does not change.
-
-## 10. Open product questions
-
-List unresolved product decisions. This section must be empty at `approved`. For `split`,
-`deferred`, or `rejected`, record:
-
-- Rationale: <product reason>
-- Next condition: <condition for reconsideration or follow-up>
+- Linear:
+- Notion:
+- Relations and links:

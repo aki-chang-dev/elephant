@@ -1,177 +1,148 @@
 ---
 name: author-technical-contract
-description: Use when an approved Product Contract or explicitly engineering-only story needs implementation-ready technical decisions and specialist review before planning.
+description: Use when an approved Linear Story and linked product knowledge, or explicitly engineering-only work, needs implementation-ready technical decisions and specialist review before planning.
 ---
 
 # Author Technical Contract
 
-## Overview
+## Purpose
 
-Turn one approved Product Contract or explicitly engineering-only story into a reviewed Technical
-Contract. Separate product meaning from technical choice. Do not invoke
-`superpowers:brainstorming` or `superpowers:writing-plans`; the caller owns those transitions.
+Turn current authoritative product sources into a reviewed, implementation-ready Technical
+Contract. Product meaning comes from Linear and linked Notion pages; technical choices come from
+repository and authoritative engineering evidence. Do not invoke brainstorming or implementation
+planning: the caller owns those transitions.
 
-The persisted lifecycle is `draft → ready → implementing → done`, with a branch to
-`needs-product-decision`. This skill owns authoring/review activity at `draft` and the exit to
-`ready` or `needs-product-decision`; `ship-story` owns execution and closeout transitions.
+Read `../../references/information-routing.md` before acting. The Technical Contract and later
+implementation plan are transient delivery-branch artifacts. They exist for resume and review, then
+are removed before final integration after durable facts have reached their authoritative homes.
 
-## Validate inputs and evidence
+The lifecycle is `draft → ready → implementing → done`, with a return through
+`needs-product-decision`. This skill owns `draft` authoring/review and exits to `ready` or
+`needs-product-decision`; `ship-story` owns implementation and closeout transitions.
 
-When called by `elephant:ship-story`, use its caller-supplied Technical Contract template and
-caller-supplied Technical Contract output path exactly. When those inputs are omitted for a
-standalone invocation, use bundled `technical-contract-template.md` and
-`<ID>-<slug>-technical.md`. Read the selected template and applicable canonical prompts under
-`reviewers/`.
+## Bind current product authority
 
-For a product-facing story, require the caller-selected Product Contract path with
-`schema: elephant.story/v2`, `kind: product`, and `status: approved`. Reject technical authoring
-when that artifact is absent or not approved and return control to product shaping. The approved
-Product Contract is immutable to the author, fixer, reviewers, and adjudicator.
+When called by `ship-story`, use its exact Story-scoped Technical Contract path and template. For a
+standalone call, use bundled `technical-contract-template.md` and a predictable
+`<ID>-<slug>-technical.md` path on an isolated delivery branch.
 
-The non-null `product_contract` value must be the exact active Product Contract's
-repository-relative POSIX path. Compare case-sensitive and reject an empty value, URI, absolute
-path, backslash, `.` or `..` segment, repository escape, outside-resolving symlink, missing file,
-other-story file, or near match.
+For product-facing work, resolve Product and fetch the current product-source bundle:
 
-For an explicitly engineering-only story, require evidence that user and business outcomes remain
-unchanged. Use `product_contract: null` and write an explicit behavior-preservation contract.
-Uncertainty about that classification fails safe to product-facing.
+- the exact Linear Story ID and URL, full description/outcome/observable acceptance, Team
+  ownership, and relevant native planning relations;
+- the full body, exact ID and URL, title, and verified Product Home ancestry of every directly
+  linked Notion Decision or Knowledge page needed to interpret the Story;
+- native source version or last-edited evidence when exposed by the host.
 
-Before selecting architecture, inspect the real repository: applicable instruction files, current
-code and tests, global specs, decision records, migrations and schema where relevant, optional
-design handoff, and authoritative external documentation required by repository policy. Cite the
-evidence in section 2.
+A URL, preview, cached excerpt, or prior Git Product Contract is not sufficient. Fetch source
+content in the current run and route through the authoritative home. A `linear_only` Story may have
+no Notion source. Unreadable, missing, wrong-Team, wrong-Product, wrong-parent, conflicting, or
+insufficient product authority stops authoring and names the exact missing context; never replace it
+with plausible repository text.
 
-## Separate product meaning from technical choice
+Record each exact source and its current observation in section 1, then map every current observable
+requirement, flow, state, rule, copy boundary, recovery path, and acceptance item. The Technical
+Contract contains the complete mapping and source links, not copied page bodies.
 
-A choice is a **product ambiguity** when plausible answers change an observable user or business
-outcome, flow, state, default, permission, copy boundary, recovery behavior, or acceptance
-criterion. Set exactly `status: needs-product-decision`, write the bounded decision brief from
-section 10, stop making downstream technical choices, and return to product shaping. Never rename
-such ambiguity an “implementation detail” or resolve it by assumption.
+For explicitly engineering-only work, require evidence that user and business outcomes remain
+unchanged. Use the template's behavior-preservation source and record current observable behavior,
+preservation invariants, and evidence capable of detecting change. Classification uncertainty fails
+safe to product-facing. During a bounded migration, an explicit behavior-preservation source may
+also stand in for product sources only when the approved task is precisely to preserve behavior.
 
-Before mapping a broad product category such as “user-owned configuration,” “reusable setup,” or
-“operational state” to fields, prove that the approved contract uniquely identifies its observable
-included and excluded behavior. If two different sets of user-visible settings satisfy the words,
-the copy boundary is product ambiguity. Repository Create/Edit fields, current schema, prior
-behavior, and industry convention may demonstrate the ambiguity; they cannot select the set. Stop
-at the first such ambiguity and use exactly `needs-product-decision`.
+Before selecting architecture, inspect applicable repository instructions, current code and tests,
+specifications and decision records, schema/migrations when relevant, and authoritative external
+engineering documentation required by repository policy. Cite concrete evidence in section 2.
 
-A choice is **technical** only when all viable answers preserve the same approved or preserved
-observable behavior. Select it from repository and authoritative evidence. Use the technical
-adjudicator before escalating conflicting specialist findings about a pure engineering choice.
+## Keep product meaning separate from technical choice
 
-## Draft the contract
+A **product ambiguity** exists when plausible answers change an observable user/business outcome,
+flow, state, default, permission, copy boundary, recovery behavior, or acceptance criterion. Set
+exactly `status: needs-product-decision`, write one bounded section-10 brief, stop downstream
+technical choices, and return to `shape-story`.
 
-Copy the selected template to the selected output path and keep `status: draft` while authoring.
-Independent review is an activity while `status: draft` remains persisted. Record each active
-round and verdict in section 11; do not invent a separate persisted review state.
+Repository fields, current UI, schema, or convention may reveal ambiguity but cannot choose product
+meaning. A choice is **technical** only when all viable answers preserve every current observable
+requirement. Resolve technical choices from repository and authoritative evidence; use the technical
+adjudicator only for conflicting specialist findings about such a pure technical choice.
 
-- Product-facing: map every Product Contract requirement, flow, state, rule, and copy boundary
-  through `Product contract item | Technical response | Verification`.
-- Engineering-only: replace that binding with explicit current behavior, preservation invariants,
-  and evidence that will detect a changed user or business outcome.
-- Record unresolved technical questions in section 10. Do not declare readiness with `TBD`,
-  placeholders, deferred questions, or unresolved choices.
-- Do not modify `product.md`.
+## Draft and maintain source validity
 
-When resuming a persisted `needs-product-decision` after the owner approves the caller-selected
-Product Contract, the author/fixer owns the return for both sources:
+Copy the selected template to the selected output path and keep `status: draft` throughout authoring
+and review. Record review rounds in section 11; do not invent a persisted review status.
 
-1. rebind `product_contract` to that exact canonical path;
-2. set `story_kind: product-facing`, including a prior engineering-only artifact with
-   `product_contract: null`;
-3. clear the resolved decision brief;
-4. set `status: draft` before remapping affected product items and technical choices.
+- Map every product-source item through `Source item | Observable requirement | Technical response
+  | Verification`.
+- For engineering-only work, map every preservation invariant to implementation and verification.
+- Keep section 10 free of placeholders, deferred choices, or unresolved questions at `ready`.
+- Treat fetched product sources as read-only. Technical authors and reviewers never edit Linear or
+  Notion product meaning.
 
-Persist all four field changes atomically. An interruption must observe either the unchanged
-`needs-product-decision` artifact or the fully rebound `draft`, never a partial transition that
-could re-present a resolved question. Keep `draft` while affected reviewers recheck.
+Before every resumed authoring/review round and immediately before `ready`, re-fetch all sources and
+compare their current content and native observations with section 1. A changed observable
+requirement invalidates the current contract, plan, implementation, and earlier verdicts: set
+`needs-product-decision`, state the changed source/outcome, and return to shaping. A source edit that
+provably leaves observable meaning unchanged refreshes the binding and reruns every affected
+reviewer. Missing authority stops; an old source copy never substitutes.
 
-When the decision arose after planning or implementation began, preserve the earlier plan,
-execution, code-review, and conformance records as explicitly superseded history. They do not
-satisfy the current revision's readiness, planning, execution-start, or conformance evidence.
-Before returning `ready`, record that invalidation plus a stable marker for the revised contract;
-the caller will create or revise a plan bound to that marker before returning to `implementing`.
-The marker identifies the contract basis: lifecycle-only status/evidence writes preserve it, while
-any later author/fixer change to requirements, traceability, or technical choices replaces it and
-invalidates the prior plan/execution evidence.
-
-Reviewers never perform this transition, and the approved predecessor and successor Product
-Contracts remain read-only to every technical role.
+After shaping resolves a decision, re-fetch the entire current source bundle, clear the resolved
+brief, set `status: draft`, remap affected and dependent items, and invalidate superseded plan,
+execution, review, and conformance evidence. An interruption must leave either the unchanged
+`needs-product-decision` artifact or a fully rebound `draft`, not a mixed state.
 
 ## Select independent reviewers by risk
 
-Every draft receives independent review; “small,” “obvious,” or low-risk work is not a reason to
-self-review or skip it. Always select `test`. Select every additional role whose observable
-trigger applies:
+Every draft receives independent review. Always select `test`; select every other role whose
+observable trigger applies:
 
 | Canonical prompt | Observable trigger |
 |---|---|
-| `reviewers/architecture.md` | Module boundaries, responsibility placement, coupling, interfaces, data flow, or compatibility |
-| `reviewers/domain-data.md` | Domain invariants, schema, migration, tenancy, transaction/concurrency, or money path |
-| `reviewers/security-operations.md` | Auth/access, tenant isolation, secrets/sensitive data, destructive behavior, retries/idempotency, rollback, deployment, recovery, or production risk |
-| `reviewers/product-conformance.md` | Every product-facing story |
+| `reviewers/architecture.md` | Boundaries, responsibility placement, coupling, interfaces, data flow, or compatibility |
+| `reviewers/domain-data.md` | Domain invariants, schema, migration, tenancy, concurrency, transactions, or money path |
+| `reviewers/security-operations.md` | Access, secrets, destructive behavior, retries, rollout, rollback, recovery, or production risk |
+| `reviewers/product-conformance.md` | Every product-facing Story |
 | `reviewers/test.md` | Every draft |
 | `reviewers/technical-adjudicator.md` | Conflicting specialist findings about a pure technical choice |
 
-Record selected roles and triggers in section 11.
+Record selected roles and triggers in section 11. Give every selected reviewer the latest draft,
+the complete fetched product-source contents or behavior-preservation evidence, exact source links,
+the canonical prompt, and the same relevant repository evidence. External links alone are not
+review input.
 
-## Review, fix, and recheck
+Use isolated read-only workers when available; otherwise run identical prompts sequentially.
+Reviewers report findings and never edit the Technical Contract, product sources, code, or each
+other's findings.
 
-Give each selected role the latest draft, its canonical prompt, the immutable Product Contract or
-behavior-preservation contract, and the same relevant evidence. Reviewers are read-only.
-Canonical Elephant prompts are the source of truth; host-native agents are optional adapters.
+## Fix, recheck, and exit
 
-Dispatch isolated read-only workers when delegation is available. Otherwise run the identical
-prompts sequentially. Parallel and sequential modes must use identical inputs, output contracts,
-severity standards, and pass criteria.
+Deduplicate findings by contract/risk reference, evidence, and required outcome:
 
-Deduplicate findings by contract/risk reference, evidence, and required outcome. Then:
+1. Product-meaning findings set `needs-product-decision` and return one bounded brief to shaping.
+2. Pure technical conflicts go to `technical-adjudicator.md`.
+3. The author/fixer revises evidence-backed technical findings.
+4. Every reviewer affected by changed text or source observations rechecks the latest draft.
+5. Repeat until no blocking finding or product ambiguity remains.
 
-1. If a finding changes product meaning, set `needs-product-decision`, write one bounded decision
-   brief, and return to product shaping.
-2. If specialists conflict but all outcomes are observably identical, run
-   `reviewers/technical-adjudicator.md`.
-3. Have the author/fixer revise the Technical Contract for evidence-backed technical findings.
-4. Re-run every reviewer affected by a revision. A prior verdict does not cover changed text.
-5. Repeat until there are no blocking findings or product ambiguity requires escalation.
+Set `status: ready` only when section 10 is clear, every source requirement or preservation
+invariant has implementation and verification coverage, all selected reviewers pass the latest
+draft, and the sources still match the current authoritative content.
 
-Reviewers and the adjudicator never edit the draft. Do not replace independent review with author
-self-review.
+After the final fixer change and rechecks, record one stable non-placeholder contract-basis marker
+in section 11. It binds the current source observations, complete requirement mapping, technical
+choices, and verification strategy. Lifecycle-only status/evidence updates preserve it; any source,
+requirement, traceability, or technical-choice change replaces it and invalidates the earlier plan
+and execution evidence.
 
-## Exit
-
-Set `status: ready` only when all of these are true:
-
-- section 10 has no open technical questions, placeholders, or deferred choices;
-- every applicable product item or preservation invariant has technical and verification coverage;
-- selected reviewers report no blocking findings;
-- every affected reviewer has rechecked the author/fixer's latest revision;
-- no unresolved choice changes product meaning.
-
-After the last author/fixer change and affected rechecks, capture one non-placeholder
-contract-basis revision marker for the ready requirements, traceability, and technical choices.
-Record it in section 11 before setting `status: ready`. Lifecycle-only status/evidence writes
-preserve it; a later author/fixer contract change replaces it.
-
-If product meaning must be supplied or changed, the only technical-state escalation is exactly
-`status: needs-product-decision`. Preserve the approved Product Contract, include only the bounded
-decision brief, and return to product shaping.
-
-Return a ready contract to the caller without a routine product-owner technical review or another
-written-file approval checkpoint.
+Return the ready Technical Contract to the caller without routine owner technical review or a
+second written-file approval gate.
 
 ## Red flags
 
-- “It is an implementation detail” hides two different user outcomes.
-- A broad copy/reuse category is expanded to repository fields without a uniquely approved
-  observable boundary.
-- “The change is small” replaces independent review with self-review.
-- `ready` coexists with an open question, `TBD`, placeholder, or blocking finding.
-- A reviewer or adjudicator edits either contract.
-- A technical role changes the approved Product Contract.
-- The workflow requests routine owner review, brainstorming, or planning.
+- A source URL is cited without fetching and reviewing its current content.
+- A prior Product Contract or preview substitutes for missing Linear/Notion authority.
+- A broad product category is mapped to fields without a uniquely observable boundary.
+- “Small change” replaces independent review.
+- `ready` coexists with stale sources, an open question, placeholder, or blocking finding.
+- A technical role edits product meaning or asks the owner to review routine technical choices.
 
-Stop at `draft` or `needs-product-decision` and follow the applicable gate when any red flag
-appears.
+Stop at `draft` or `needs-product-decision` and follow the applicable return when a red flag appears.
