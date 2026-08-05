@@ -1,0 +1,29 @@
+tests/test_notion_knowledge.py
+  s_7c6e11e61c7ee5::t_d7a03490aebfe7 248-259
+  s_7c6e11e61c7ee5::t_b0082ce3743248 68
+  s_7c6e11e61c7ee5::t_9be9e71696d94b 1-67,69-247,260-323
+tests/test_notion_knowledge_failpoints.py
+  s_7c6e11e61c7ee5::t_9be9e71696d94b 1-161
+plugins/elephant/elephant_runtime/notion/knowledge.py
+  s_7c6e11e61c7ee5::t_58f8eec3422ed9 534
+  s_7c6e11e61c7ee5::t_b0082ce3743248 421-426,430-431
+  s_7c6e11e61c7ee5::t_28c4908cae8089 1-420,427-429,432-533,535-630
+plugins/elephant/elephant_runtime/notion/__init__.py
+  s_7c6e11e61c7ee5::t_28c4908cae8089 38-44,90-91,107-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "448b9c1b6176f91ddcd86969c5d9615190d07971",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
