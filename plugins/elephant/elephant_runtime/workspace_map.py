@@ -28,6 +28,18 @@ _CREDENTIAL_URL_KEYS = {
     "xamzcredential",
     "xamzsignature",
 }
+_CREDENTIAL_URL_LEXEMES = (
+    "accesskey",
+    "accesstoken",
+    "apikey",
+    "authorization",
+    "clientsecret",
+    "credential",
+    "password",
+    "secret",
+    "signature",
+    "token",
+)
 _TOP_FIELDS = frozenset({"schema", "repository", "linear", "notion", "domains", "products"})
 _REPOSITORY_FIELDS = frozenset({"id", "github"})
 _LINEAR_FIELDS = frozenset({"workspace_id", "team_id", "company_portfolio_ref"})
@@ -84,15 +96,30 @@ def _repo_path(value: object) -> bool:
 def _safe_https_url(value: object) -> bool:
     if not isinstance(value, str) or any(character.isspace() for character in value):
         return False
-    parsed = urlsplit(value)
-    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError:
+        return False
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or hostname is None
+        or parsed.username
+        or parsed.password
+    ):
         return False
     parameter_keys = {
         "".join(character for character in key.lower() if character.isalnum())
         for component in (parsed.query, parsed.fragment)
         for key, _ in parse_qsl(component, keep_blank_values=True)
     }
-    return not bool(parameter_keys & _CREDENTIAL_URL_KEYS)
+    return not any(
+        key in _CREDENTIAL_URL_KEYS
+        or any(lexeme in key for lexeme in _CREDENTIAL_URL_LEXEMES)
+        for key in parameter_keys
+    )
 
 
 def _anchor(value: object) -> bool:

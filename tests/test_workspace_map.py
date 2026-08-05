@@ -190,8 +190,13 @@ class WorkspaceMapValidationTests(unittest.TestCase):
             "http://github.com/acme/sample",
             "https://github.com/acme/sample?token=secret",
             "https://github.com/acme/sample?X-Amz-Signature=secret",
+            "https://github.com/acme/sample?X-Goog-Signature=secret",
+            "https://github.com/acme/sample?AWSAccessKeyId=secret",
             "https://github.com/acme/sample#access_token=secret",
             "https://user:pass@github.com/acme/sample",
+            "https://[bad",
+            "https://:443/path",
+            "https://github.com:bad/acme/sample",
         )
         for github in cases:
             with self.subTest(github=github):
@@ -211,6 +216,9 @@ class WorkspaceMapValidationTests(unittest.TestCase):
             (("notion",), "shared_knowledge_id"),
             (("products", "sample", "linear"), "planning_ref"),
             (("products", "sample", "linear"), "backlog_ref"),
+            (("products", "sample", "linear"), "issue_label_id"),
+            (("products", "sample", "linear"), "project_label_id"),
+            (("products", "sample", "linear"), "initiative_label_id"),
             (("products", "sample", "notion"), "home_id"),
             (("products", "sample", "notion"), "knowledge_map_id"),
         )
@@ -218,7 +226,12 @@ class WorkspaceMapValidationTests(unittest.TestCase):
             "https:malformed",
             "opaque id with spaces",
             "https://example.com/value?X-Amz-Credential=secret",
+            "https://example.com/value?X-Goog-Signature=secret",
+            "https://example.com/value?AWSAccessKeyId=secret",
             "https://example.com/value#api_key=secret",
+            "https://[bad",
+            "https://:443/value",
+            "https://example.com:bad/value",
         )
         for path, field in fields:
             for value_text in unsafe:
