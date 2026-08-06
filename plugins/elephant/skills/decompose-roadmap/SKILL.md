@@ -16,7 +16,9 @@ Before acting, read completely:
 
 - `../../references/information-routing.md`
 - `../../references/linear-planning.md`
-- `../../references/notion-knowledge.md`
+
+Use `information-routing.md` to read current Notion meaning. This skill does not load the Notion
+write protocol because it writes planning only to Linear.
 
 ## Load current authority without writes
 

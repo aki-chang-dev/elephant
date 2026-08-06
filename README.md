@@ -21,8 +21,8 @@ one-sentence idea
 
 Linear Story
 → shape-story               product-only discussion + one recap approval
-→ author-technical-contract transient technical design + specialist review
-→ ship-story                plan, worktree, implementation, review, PR, native closeout
+→ ship-story                proportionate assurance, implementation, PR, native closeout
+   → author-technical-contract only for named elevated technical risk
 ```
 
 | Skill | Role |
@@ -32,8 +32,8 @@ Linear Story
 | `elephant:decompose-roadmap` | Create the smallest useful native Linear planning structure. |
 | `elephant:setup-workspace` | Discover Products/domains and write the verified workspace map. |
 | `elephant:shape-story` | Turn one sentence into an approved user outcome and native planning/knowledge action. |
-| `elephant:author-technical-contract` | Bind current product sources to reviewed technical choices. |
-| `elephant:ship-story` | Deliver or resume one Linear Story through integration and native closeout. |
+| `elephant:author-technical-contract` | Resolve named elevated technical risk with applicable specialists. |
+| `elephant:ship-story` | Deliver or resume one Linear Story with proportionate assurance and native closeout. |
 
 The only durable repository coordination file is:
 
@@ -41,9 +41,10 @@ The only durable repository coordination file is:
 .agents/elephant/workspace.yaml
 ```
 
-Technical Contracts and implementation plans may be committed on an isolated delivery branch for
-resume, but Elephant removes them before integration. Product Contracts, Git roadmaps, delivery
-logs, checkpoints, and copied Notion content are not part of the workflow.
+Multi-step work may keep a concise transient plan on its isolated delivery branch. Technical
+Contracts exist only for elevated assurance. Elephant removes both before integration. Product
+Contracts, Git roadmaps, delivery logs, checkpoints, and copied Notion content are not part of the
+workflow.
 
 ## Owner attention
 
@@ -53,6 +54,19 @@ planning, implementation, code review, factual progress, and closeout are agent-
 
 Elephant returns to the owner when product meaning, acceptance, Product ownership, or strategic
 priority must change—not for routine data entry or technical review.
+
+## Proportionate assurance
+
+Ordinary Stories use an in-session checklist or concise plan, repository verification, and one
+independent final delivery review. Elephant adds specialist technical review only when current
+evidence shows money, destructive data/migration, security or authorization, concurrency or
+transactions, production rollout/recovery, or major system-boundary risk. Uncertain risk takes the
+safer path and is explained at closeout.
+
+Review packets contain only decision-relevant context; complete product authority remains present
+for product and final conformance. Fixes recheck only affected requirements and evidence. Elephant
+does not treat parallel workers as token savings or impose a hard context quota that could remove
+decision-critical evidence.
 
 ## Planning model
 

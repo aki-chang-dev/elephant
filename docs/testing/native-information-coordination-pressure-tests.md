@@ -39,15 +39,14 @@ Observed behavior:
 - preserved the old config through interrupted or incomplete single-to-multi classification;
 - stopped safely on wrong tenant, ambiguous native objects, uncertain results, or changed semantic
   preconditions without repeating the approved product decision;
-- reconciled uncertain ordinary creates, Notion page creates, and append-only Linear Issue comments
-  by exact native scope, with zero/one/multiple handling and one retry only after connector health
-  plus two fresh authoritative reads across the normal consistency window;
-- wrote config only after all required external results were verified and retained only a
-  short-lived operation branch and human-readable pending note during application.
+- reconciled uncertain creates and comments by exact native scope, reported visible, pending, and
+  preserved state precisely, and never retried an uncertain write automatically;
+- treated the approving conversation as the recovery source until verified native results existed,
+  wrote config only after required external results were verified, and created no recovery branch,
+  commit, or note.
 
-GREEN verdict: passed all five scenarios. The normal configured single-Product path is small enough
-for the twenty-minute target and introduces no custom integration infrastructure or extra owner
-gate.
+GREEN verdict: passed all scenarios. The normal configured single-Product path is small enough for
+the twenty-minute target and introduces no custom integration infrastructure or extra owner gate.
 
 ## shape-story — RED baseline
 
@@ -90,8 +89,8 @@ Observed behavior:
   work;
 - left no permanent Product Contract or shaping log in Git.
 
-GREEN verdict: passed all five scenarios. The only Git artifact during application is the
-short-lived human-readable pending note, removed after native truth is verified.
+GREEN verdict: passed all scenarios. Application creates no Git recovery artifact; recovery uses
+the approving conversation, then the first verified authoritative result.
 
 ## author-technical-contract — RED baseline
 
@@ -123,8 +122,9 @@ Observed behavior:
 
 - fetched current Linear Story and linked Notion bodies, exact IDs/URLs, ownership/ancestry, and
   native observations instead of accepting links or prior Git artifacts as evidence;
-- mapped every observable source item and supplied complete fetched contents to independent
-  reviewers;
+- mapped every observable source item, sent each selected specialist only the source sections and
+  evidence needed for its role, and reserved the complete current product authority for
+  product-conformance and final delivery review;
 - re-fetched sources on resume and before readiness, refreshing non-semantic edits but invalidating
   the contract, plan, implementation, and prior verdicts when observable meaning changed;
 - stopped on missing or wrong-scope authority and returned product ambiguity to one bounded shaping
@@ -179,6 +179,51 @@ Observed behavior:
 
 GREEN verdict: passed all variants with no delivery-profile, design-gate, legacy-mixed, or routine
 owner-review path.
+
+## Proportional assurance — RED baseline
+
+Scenarios: a one-label copy change, a one-file UI bug, and a behavior-preserving configuration
+change.
+
+Observed prior behavior:
+
+- every Story required a Technical Contract and implementation plan regardless of supported risk;
+- technical specialist, per-task, implementation-conformance, and final reviews accumulated even
+  when they inspected the same ordinary change;
+- reviewers repeatedly received broad context instead of the changed requirements and evidence;
+- the owner-facing product decision was followed by additional workflow ceremony that did not
+  change the result.
+
+RED verdict: failed. The smallest ordinary change still paid the maximum assurance cost.
+
+## Proportional assurance — GREEN
+
+The rewritten assurance reference and delivery skills were pressure-tested against the three
+ordinary scenarios plus a money-path migration, uncertain authorization boundary, affected-only
+recheck, material-copy/non-copy shaping pair, interrupted external writes, and constrained context.
+
+Observed behavior:
+
+- ordinary atomic work used an in-session checklist, repository verification, and one independent
+  final delivery review, with no Technical Contract or specialist review;
+- elevated assurance required a named money, destructive-data/migration, security/privacy/access,
+  concurrency/transaction, production rollout/recovery, major-boundary, or unresolved-risk reason;
+- the money-path migration selected Domain/Data, Security/Operations, and Test specialists while
+  omitting unrelated roles; uncertain risk elevated without asking the owner to classify it;
+- reviewers received role-scoped packets, fixes invalidated only affected requirements and
+  evidence, and unchanged context was not resent;
+- Product/UX criticism remained mandatory before the one shaping approval, while Copy criticism
+  ran only for material user-visible copy;
+- recovery created no Git artifact, did not auto-retry uncertain writes, and reported applied,
+  pending, preserved, and resume state in user terms;
+- constrained context narrowed by authority, scope, and changed evidence; it used neither hard
+  token quotas nor parallelism as an unmeasured token-saving claim.
+- the packaged skill/reference prompt corpus fell from 10,833 to 10,036 words (7.4%); this is static
+  surface evidence only, while the larger ordinary-path saving comes from not invoking technical
+  authoring and specialist subflows.
+
+GREEN verdict: passed. Assurance depth now follows concrete consequence instead of Story size or a
+fixed review count.
 
 ## kickoff — RED baseline
 

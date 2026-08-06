@@ -31,6 +31,10 @@ space in the code repository or remain scattered across conversations. Durable a
 documents are hard to distinguish. Agents may search too broadly, consume excessive context, or
 lose the product direction while working on one concrete problem.
 
+Delivery assurance can create the same burden in another form. When ordinary Stories receive the
+same artifacts, reviewers, repeated context loading, and rechecks as materially risky work, the
+owner waits longer and consumes more agent capacity without a corresponding quality gain.
+
 Existing collaboration products already provide useful native planning, knowledge, preview, and
 code-delivery relationships. When Elephant treats them as low-level stores, it duplicates those
 capabilities, introduces machine-facing concepts, and asks the owner to support the workflow
@@ -47,6 +51,11 @@ The owner spends attention on product judgment. Agents infer, propose, create, l
 retrieve the surrounding planning and knowledge structure without additional review gates. A
 specific Story remains visibly connected to the larger product direction, relevant background,
 and delivered code.
+
+Downstream assurance is proportional to observable risk. Ordinary work follows the smallest path
+that still provides independent evidence of the approved outcome and implementation quality.
+Additional scrutiny appears only for a concrete risk, never merely because another review role or
+artifact exists.
 
 ## 4. Experience flow
 
@@ -92,15 +101,29 @@ and delivered code.
     progress, risk, and next direction. It does not generate activity reports merely to maintain
     a cadence.
 
+### Assure delivery proportionately
+
+13. After shaping, Elephant determines the necessary assurance depth from the approved outcome and
+    current repository evidence. The owner does not classify the Story or populate a risk form.
+14. Ordinary delivery receives one independent end-to-end check of the approved outcome,
+    implementation quality, and verification evidence.
+15. Money, destructive data change, security or authorization, concurrency or transactionality,
+    production rollout or recovery, and major system-boundary risk add only the relevant specialist
+    scrutiny. Uncertain risk takes the safer path and its reason is visible at closeout.
+16. A fix reopens only the requirements and evidence it can materially affect. Unsupported or
+    non-load-bearing findings do not expand the approved outcome.
+17. Agents load and pass along only decision-relevant context. Complete product authority remains
+    available whenever product conformance is being judged.
+
 ### Retrieve and review
 
-13. Questions about current work, future plans, priorities, dependencies, or progress begin in
+18. Questions about current work, future plans, priorities, dependencies, or progress begin in
     Linear. Questions about product meaning, rules, or past decisions begin in Notion. Questions
     about executable behavior begin in Git.
-14. A Product has a Linear planning entry and a Notion Product Home. The Notion home navigates to
+19. A Product has a Linear planning entry and a Notion Product Home. The Notion home navigates to
     an Overview, a short Knowledge Map, durable Decisions, and the Linear planning entry. It does
     not duplicate live roadmap state.
-15. With multiple products, the owner can use a lightweight company view to see active Objectives
+20. With multiple products, the owner can use a lightweight company view to see active Objectives
     and Projects, next milestones, risks, and current attention across products, then enter a
     product-specific view for detail.
 
@@ -130,6 +153,10 @@ and delivered code.
   resuming.
 - Conflicting product meaning is surfaced for owner judgment. Elephant may repair navigation or
   presentation links, but does not silently change an approved product conclusion.
+- An ordinary Story does not inherit additional review layers merely because those roles exist.
+- If material delivery risk is present, Elephant names the risk and adds the applicable scrutiny.
+  If risk is uncertain, it uses the safer depth without asking the owner to classify the work.
+- A review fix causes only materially affected results and evidence to be checked again.
 
 ## 6. Information and copy
 
@@ -155,6 +182,8 @@ and delivered code.
 - Agent summaries lead with the decision, recommendation, consequence, or next product question.
   They do not present fields for the owner to populate when context allows the agent to infer or
   propose the answer.
+- Delivery closeout names any exceptional assurance escalation and its concrete reason. It does
+  not expose reviewer choreography or use review count as a proxy for quality.
 - Integration failure guidance names the missing convenience or context and the next available
   action. It does not expose connector internals.
 
@@ -187,6 +216,15 @@ and delivered code.
     search.
 13. One fact has one primary home. Cross-system links and previews are navigation, not competing
     copies.
+14. Review count is not a quality measure. Ordinary work receives one independent end-to-end
+    delivery review; extra reviews require a named observable risk.
+15. The owner never supplies a technical risk classification and receives no new downstream review
+    gate.
+16. Context expands only when the current decision cannot be supported, and each reviewer receives
+    only the context needed for its question.
+17. Rechecks cover only materially affected requirements and evidence.
+18. Token economy does not use hard quotas that could truncate decision-critical context, and
+    parallel agents are not counted as token savings merely because they reduce elapsed time.
 
 ## 8. Product acceptance criteria
 
@@ -216,6 +254,15 @@ and delivered code.
   missing decision-critical context is surfaced rather than guessed.
 - Progress and planning updates reflect meaningful changes and do not become periodic activity
   logs.
+- A normal Story completes with one independent end-to-end delivery review plus appropriate
+  repository verification, without automatically invoking every available review layer.
+- A materially risky Story receives the applicable additional scrutiny, and closeout states why it
+  was necessary.
+- Review work does not repeatedly consume unrelated product or repository context, and a finding
+  reopens only the scope its resolution can affect.
+- Product shaping depth, one approval, high-risk protection, and return for changed product meaning
+  remain intact while ordinary delivery becomes faster and less token-intensive.
+- Successful routine coordination leaves no temporary recovery artifact in Git.
 
 ## 9. Out of scope
 
@@ -232,6 +279,8 @@ and delivered code.
   model in a separate bounded effort.
 - Detailed implementation choices, connector tool vocabulary, storage formats, retries, locking,
   fingerprints, or certification protocols.
+- Eliminating independent review, weakening material-risk safeguards, imposing fixed token quotas,
+  or building a usage-telemetry platform.
 
 ## 10. Open product questions
 

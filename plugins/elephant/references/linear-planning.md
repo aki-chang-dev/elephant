@@ -55,9 +55,10 @@ before appending.
 Before creating, search the exact native parent scope. Zero equivalent results permits creation;
 one equivalent result is reused or updated; multiple or conflicting results stop for
 reconciliation. After an interrupted create, use a direct scoped collection read. Adopt exactly
-one semantically equivalent result. Retry only a definitively rejected write after refreshing its
-preconditions; an indeterminate absence requires two fresh scoped reads across the connector's
-normal consistency window before one retry.
+one semantically equivalent result. A definitively rejected write stops with a direct resume
+action; only a later explicit resume run may refresh preconditions and decide whether to make a new
+attempt. An indeterminate result remains pending; reconcile the exact native scope before a later
+attempt and never retry automatically in the uncertain run.
 
 Routine factual maintenance does not require owner review. Every meaningful Project or Initiative
 phase change receives one concise native update stating progress, current risk, and next direction.
@@ -67,10 +68,9 @@ choices, and product tradeoffs return to shaping.
 
 Issue comments are append-only. List current comments before appending and fetch them again after
 the call. If the result is indeterminate, reconcile comments for that exact Issue and meaningful
-phase: zero equivalent comments permits one retry only after the connector is healthy and two fresh
-authoritative reads across its normal consistency window still show absence; one equivalent comment
-is adopted; multiple equivalent or conflicting comments stop for reconciliation. Equivalence uses
-the visible progress, risk, next direction, Story, and phase context, never a hidden marker.
+phase: one equivalent comment is adopted; multiple equivalent or conflicting comments stop for
+reconciliation; zero remains pending until a later run can safely attempt it. Equivalence uses the
+visible progress, risk, next direction, Story, and phase context, never a hidden marker.
 
 Use the Linear Issue identifier in branch names and pull-request titles or descriptions so the
 native Linear-GitHub integration can link delivery. If that integration is unavailable, add an

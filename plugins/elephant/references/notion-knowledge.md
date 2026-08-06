@@ -52,10 +52,10 @@ Knowledge Map and ordinary reciprocal Linear links.
 
 If a create result is indeterminate, reconcile through direct reads of the exact approved parent,
 not workspace-wide text search. Adopt one semantically equivalent child and stop on multiple or
-conflicting results. Zero results permits one retry only when the connector is healthy, approved
-semantic preconditions are unchanged, and two fresh authoritative parent-scoped reads across the
-normal consistency window still show absence. A definitively rejected call may be retried after
-refreshing its preconditions.
+conflicting results. Zero results remains pending until a later run can safely attempt it. A
+definitively rejected call stops with a direct resume action; only a later explicit resume run may
+refresh preconditions and decide whether to make a new attempt. An indeterminate call is never
+retried automatically in the uncertain run.
 
 For product-meaning questions, read directly linked pages first, then Product Home and Knowledge
 Map, then Product Home descendants. Expand to Shared Knowledge and finally the workspace only when

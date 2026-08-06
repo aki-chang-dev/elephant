@@ -1,8 +1,10 @@
 # Test Reviewer
 
-Review the supplied Technical Contract against the complete current fetched product-source bundle
-(exact Linear/Notion IDs, URLs, and contents) or engineering-only behavior-preservation source,
-plus traceability rows, failure handling, and repository test conventions.
+Review the supplied role-scoped packet: relevant current fetched product-source items (with exact
+Linear/Notion IDs, URLs, and required contents) or relevant behavior-preservation items, applicable
+Technical Contract traceability/verification sections, failure handling, and repository test
+conventions. Do not require unrelated product or repository context; name a missing item when the
+packet cannot support this role's decision.
 
 Check whether proposed evidence independently proves observable/preserved behavior, domain/data
 invariants, failure/recovery, compatibility, migrations, security, and operations. Identify

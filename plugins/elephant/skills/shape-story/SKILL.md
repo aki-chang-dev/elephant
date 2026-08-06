@@ -19,8 +19,8 @@ Run this skill in the main conversation. Before acting, read completely:
 - `product-contract-template.md`
 
 The bundled template is a working recap shape, not a durable repository Product Contract. Keep the
-working draft in conversation until approval. Git contains only a short-lived recovery note while
-approved native writes are being applied.
+working draft in conversation until approval. The approving conversation carries the intended
+result until the first authoritative write; shaping creates no Git recovery artifact.
 
 ## Start from the idea and current truth
 
@@ -97,11 +97,10 @@ implementation plan, review, test output, or routine progress.
 
 ## Critique and resolution
 
-Before recap approval, run both canonical read-only critics with the latest working recap and the
-fetched Linear/Notion product context:
-
-1. `reviewers/product-ux-critic.md`
-2. `reviewers/copy-critic.md`
+Before recap approval, always run `reviewers/product-ux-critic.md` with the latest working recap and
+fetched product context. Run `reviewers/copy-critic.md` only when the outcome creates or changes
+user-visible labels, hints, placeholders, confirmations, feedback, empty/loading/error/disabled/
+success language, or another material copy boundary.
 
 They report findings and never edit the recap or invent product decisions. Deduplicate findings,
 apply clear product/copy fixes as the author, and rerun each affected critic. Ask the owner one
@@ -130,37 +129,36 @@ entry afterward. `approved` requires no open product questions. For `split`, `de
 
 ## Apply the approved result
 
-After approval and before the first external write, create a non-main operation branch. Commit one
-short-lived `pending-application.md` containing the approved outcomes, resolved target scopes, and
-semantic preconditions. Publish it when a configured remote is available; otherwise state that
-recovery is limited to this working copy. The note aids read reconciliation and never authorizes a
-cold device to write.
+The approving conversation is the recovery source until an authoritative product result exists.
+Apply the Linear Story first whenever possible so its problem, outcome, acceptance, and intended
+durable-context target become the authoritative resume point. A cold context without the approving
+conversation may reconcile native state read-only but does not continue writes.
 
 Apply only the recap's displayed changes:
 
-1. Create, reuse, or update the justified Linear Initiative, Project, Milestone, and Story through
-   native operations, omitting every unnecessary level. Preserve unrelated fields and relations.
-2. Apply native priority, dependencies, conflicts, and disposition effects. Deferred work remains
+1. Create, reuse, or update the Story with its concise user problem, desired outcome, observable
+   acceptance, and intended durable-context target. Preserve unrelated fields and relations.
+2. Create, reuse, or update justified Initiative, Project, and Milestone placement, omitting every
+   unnecessary level. Apply native priority, dependencies, conflicts, and disposition effects.
+   Deferred work remains
    visible with its next condition; canceled work preserves its product rationale. Create child
    Story seeds for a split only when the recap displayed them.
-3. Put the concise user problem, desired outcome, observable acceptance, and durable context links
-   in the Story. Do not put implementation progress or Elephant metadata there.
-4. For direct Objective placement without a Project, add the visible Initiative URL under the
+3. For direct Objective placement without a Project, add the visible Initiative URL under the
    exact label `Related Objective` and verify that the Story does not affect its progress.
-5. Apply the approved Notion action under the exact Product Home parent, lazily creating only the
+4. Apply the approved Notion action under the exact Product Home parent, lazily creating only the
    required category, then maintain the short Knowledge Map and ordinary reciprocal links.
-6. Re-fetch every affected object and verify ownership, visible content, native relations, and
+5. Re-fetch every affected object and verify ownership, visible content, native relations, and
    source links.
 
 Follow the recovery rules in `linear-planning.md` and `notion-knowledge.md`. If a write is
-unavailable or uncertain, reconcile native truth, keep the unchanged pending note, and report what
-is already visible, what remains unapplied or unconfirmed, that the product decision is preserved,
-and the direct resume action. Do not repeat owner approval unless the intended product outcome or a
-semantic precondition changed. Never automatically delete or roll back user content.
+unavailable or uncertain, reconcile the exact authoritative scope and report what is visible, what
+remains pending, that the approved outcome is preserved in the approving conversation or current
+Story, and the direct resume action. Do not repeat owner approval while that source and semantic
+preconditions remain available and unchanged. Never automatically delete or roll back user content.
 
-When all outcomes read back correctly, delete the pending note and operation branch. Return the
-current Linear Story URL plus every linked Notion source URL as the authoritative product-source
-bundle for technical design. No permanent shaping artifact remains in Git.
+When all outcomes read back correctly, return the current Linear Story URL plus every linked Notion
+source URL as the authoritative product-source bundle for technical design. No shaping or recovery
+artifact is written to Git.
 
 ## Red flags
 

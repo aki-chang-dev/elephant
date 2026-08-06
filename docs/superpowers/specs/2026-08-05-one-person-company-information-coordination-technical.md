@@ -4,11 +4,16 @@ story: information-coordination
 slug: one-person-company-information-coordination
 kind: technical
 story_kind: product-facing
-status: ready
+status: superseded
 product_contract: docs/superpowers/specs/2026-08-05-one-person-company-information-coordination-product-v2.md
 ---
 
 # Information coordination — minimal native-integration architecture
+
+> Historical implementation contract. Its recovery-branch, retry, full-review-context, and fixed
+> review-depth details were superseded by the approved proportional-assurance rules in the Product
+> Contract and the packaged Elephant skills/references. Do not use this file as runtime workflow
+> authority.
 
 This contract contains implementation decisions and evidence. The approved Product Contract is
 immutable during technical authoring and implementation.

@@ -1,96 +1,59 @@
 ---
-schema: elephant.story/v2
+schema: elephant.story/v3
 story: <Linear Story ID>
 slug: <slug>
 kind: technical
 story_kind: <product-facing | engineering-only>
+assurance: elevated
 status: draft
 ---
 
 # <Linear Story ID> — <Technical outcome>
 
-This transient contract contains implementation decisions and evidence. Product meaning remains in
-its fetched authoritative sources. The legal authoring exits are `ready` and
-`needs-product-decision`; unresolved technical questions keep `status: draft`.
+This transient contract exists only for a named elevated-assurance risk and is removed before
+integration.
 
-## 1. Product-source binding and traceability
+## 1. Current product authority
 
-For product-facing work, record every current source after fetching its full content:
-
-| Source | Exact ID and URL | Verified ownership/ancestry | Current observation |
-|---|---|---|---|
-| Linear Story | <ID and URL> | <Team and Product> | <native version/last edit when available> |
-| Notion Decision/Knowledge | <ID and URL> | <Product Home ancestry> | <native version/last edit when available> |
-
-Map every observable item from all fetched sources. A link alone is not evidence.
+Record exact source IDs/URLs, verified ownership/ancestry, current observations, and the complete
+requirement mapping relevant to this Story. For engineering-only work, record observable behavior,
+preservation invariants, and change-detecting evidence instead.
 
 | Source item | Observable requirement | Technical response | Verification |
 |---|---|---|---|
-| <source + section/item> | <outcome, flow, state, rule, copy, recovery, or acceptance> | <supporting mechanism> | <independent evidence> |
+| ... | ... | ... | ... |
 
-For engineering-only work, replace the tables with a behavior-preservation source: current
-observable user/business behavior, invariants that must remain unchanged, and evidence that will
-detect a change.
+## 2. Named elevated risk and evidence
 
-## 2. Current-system context
+- Risk trigger:
+- Repository/source evidence:
+- Consequence if mishandled:
 
-Record inspected repository paths, applicable instructions, current behavior, specifications,
-decision records, schema/migrations, and authoritative external engineering documentation.
+## 3. Technical approach and boundaries
 
-## 3. Technical scope
+Define affected responsibilities, interfaces/data flow, compatibility, and explicit exclusions.
 
-Describe implementation boundaries, affected modules, responsibilities, and explicit exclusions.
+## 4. Risk-specific contracts
 
-## 4. Domain and data contracts
+Include only applicable domain/data, security/privacy/operations, migration/rollback/recovery, and
+product-state contracts. Omit categories unrelated to the named risk.
 
-Define applicable invariants, ownership, schema/migration behavior, tenancy, money-path semantics,
-and consistency rules.
+## 5. Execution and verification
 
-## 5. Interfaces and data flow
+State the bounded implementation sequence when needed and the independent evidence that proves the
+approved outcome and named risk controls.
 
-Define interfaces, data movement, validation boundaries, error propagation, and compatibility.
+## 6. Product-decision return or open technical questions
 
-## 6. Product-state implementation
+At `ready`, no unresolved item remains. For changed or ambiguous product meaning, set
+`needs-product-decision` and provide one brief containing the source/evidence, distinct observable
+outcomes, required decision, and invalidated work.
 
-Explain how every mapped flow, state, rule, default, permission, critical-copy boundary, and
-recovery path is supported without changing meaning. For engineering-only work, prove observable
-behavior remains unchanged.
+## 7. Review and basis
 
-## 7. Security, privacy, and operations
-
-Cover authorization, isolation, secrets/sensitive data, destructive behavior, retries,
-observability, rollout, rollback, recovery, and production failure handling as applicable.
-
-## 8. Compatibility and migration
-
-Describe compatibility, rollout/migration order, mixed-version behavior, rollback, and cleanup.
-
-## 9. Verification strategy
-
-Name evidence that independently proves traceability, preserved behavior, failure/recovery paths,
-migration safety, security, and operational properties.
-
-## 10. Risks and open technical questions
-
-This section contains no open technical question at `ready`. When product meaning is unresolved,
-set `status: needs-product-decision` and include exactly one bounded brief:
-
-- Source ambiguity/change:
-- Evidence and exact source link:
-- Distinct observable outcomes:
-- Decision required:
-- Technical work invalidated or blocked:
-
-## 11. Review and basis evidence
-
-Record each selected canonical role, risk trigger, verdict, blocking findings, fixer changes, and
-affected-role recheck. Reviewers report findings only.
-
-- Current source observations re-fetched: <evidence>
-- Current contract-basis marker: <stable marker binding sources, mapping, choices, verification>
-- Superseded delivery evidence: <older plan/execution/review/conformance invalidated, or None>
-- Plan and execution evidence: <plan bound to current marker; branch/worktree>
-- Implementation and code-review evidence:
-- Post-implementation conformance:
-- Verification and acceptance evidence:
-- Integration and closeout evidence:
+- Selected role → named trigger → role-scoped packet:
+- Verdicts, load-bearing findings, fixes, and affected rechecks:
+- Current source observations:
+- Contract-basis marker:
+- Plan/execution evidence:
+- Final delivery review and integration evidence:

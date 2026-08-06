@@ -58,18 +58,11 @@ Resolve all material ambiguity in this conversation. Ask for one approval of the
 proposal. That approval covers the displayed native writes and config projection; do not ask for a
 second data-entry review.
 
-### 3. Preserve the approved outcome during application
+### 3. Apply through native products
 
-After approval and before the first external write, create a non-main operation branch. Add and
-commit one short-lived `pending-application.md` containing the approved intended outcomes, verified
-target scopes, and semantic preconditions. Publish the branch when a configured remote is
-available. If it cannot be published, state that recovery is limited to this working copy.
-
-The note is a human recovery aid, not permission to write. Another device may use it for read-only
-reconciliation only. Resume writes only in the original authenticated approved host context. Any
-semantic change to the intended outcome or preconditions requires a revised proposal.
-
-### 4. Apply through native products
+The approving conversation carries intended outcomes, target scopes, and semantic preconditions
+until the workspace map is integrated. A cold context without that conversation may reconcile
+already visible authoritative native results read-only but does not continue writes.
 
 Execute the approved operations sequentially. Before each create, search the exact verified parent
 scope. Reuse or update one semantically equivalent object, create when none exists, and stop when
@@ -84,27 +77,24 @@ the browser-created result afterward through semantic Linear reads. If neither r
 required Product label, stop before the first setup write. An optional overview may instead end in
 one concise UI handoff.
 
-If an operation is interrupted or its result is unclear, do not create a duplicate. Reconcile the
-exact native scope, adopt one equivalent result, and stop on ambiguity. Retry a definitively
-rejected operation only after refreshing its preconditions. For an indeterminate create with zero
-results, retry once only when the connector is healthy, approved semantic preconditions are
-unchanged, and two fresh authoritative scoped reads across its normal consistency window still
-show absence. Never delete or roll back user-visible Linear or Notion content automatically.
+If an operation is interrupted or its result is unclear, do not create a duplicate or retry
+automatically. Reconcile the exact native scope, adopt one equivalent result, and stop on ambiguity.
+An indeterminate result remains pending until a later run can prove the intended object exists or
+fresh preconditions permit a new attempt. For a definitively rejected operation, stop and record
+the direct resume action; only a later explicit resume run may revalidate preconditions and decide
+whether to make a new attempt. Never delete or roll back user-visible content automatically.
 
 Report recovery in user terms: what is already visible, what remains unapplied or unconfirmed, that
 the approved outcome is preserved, and the direct place/action for continuation.
 
-### 5. Write and integrate config last
+### 4. Write and integrate config last
 
 Only after every required external result reads back correctly, materialize its verified ID or URL
-into the declared field, validate the complete workspace map, and atomically replace the one config
-file. Build a config-only change against the current remote integration head. Stop on semantic
-drift, overlap, or conflict; never force-push or guess through a config conflict.
+into the declared field and validate the complete workspace map in the current isolated workspace.
+Stop on semantic drift, overlap, or conflict; never force-push or guess through a config conflict.
 
-Integrate through the repository's configured workflow, push without force, and verify the remote
-integration branch contains the validated config. The final integrated change excludes the pending
-note and its operation history. Then remove the note and clean up the local and remote operation
-branch.
+Integrate the config through the repository's configured workflow, push without force, and verify
+the remote integration branch contains it. Setup creates no separate recovery branch or note.
 
 ## Completion
 

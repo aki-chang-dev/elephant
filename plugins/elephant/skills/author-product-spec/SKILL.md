@@ -15,7 +15,9 @@ Before acting, read completely:
 
 - `../../references/information-routing.md`
 - `../../references/notion-knowledge.md`
-- `../../references/linear-planning.md`
+
+Load `linear-planning.md` only if the approved result must mutate a Linear object or relation rather
+than place an ordinary link in Notion.
 
 ## Discover current meaning without writes
 
