@@ -1,6 +1,6 @@
 {
   "name": "elephant",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A product-first coordination workflow for one owner and agents across Linear planning, Notion knowledge, and GitHub delivery.",
   "author": {
     "name": "Aki Chang",
