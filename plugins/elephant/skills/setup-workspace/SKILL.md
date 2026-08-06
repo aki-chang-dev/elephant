@@ -38,6 +38,20 @@ For a single Product, keep membership implicit and label-free. For multiple Prod
 existing managed Linear work and follow the transition rules in `linear-planning.md` before
 proposing a change.
 
+Classify every proposed operation before presenting the proposal:
+
+- **Elephant** when the active semantic connector or authenticated browser can execute the
+  operation and its result can be verified by semantic read;
+- **Owner setup** when Elephant cannot execute the low-frequency administrative operation but can
+  verify its result afterward by semantic read;
+- **Unavailable** when no execution route produces a result Elephant can verify. A required
+  unavailable operation blocks the proposal; an optional operation is omitted or declared
+  degraded.
+
+Treat capability as operation-specific. Connector availability does not imply workspace rename,
+label creation, view creation, or native-integration administration. A declared tool rejected by
+its backing service is unavailable for the current run.
+
 ### 2. Present one human proposal
 
 Show one compact proposal containing:
@@ -49,33 +63,48 @@ Show one compact proposal containing:
 - existing valuable content worth migrating later, without moving it now;
 - the exact final workspace-config projection.
 
+Group every proposed operation into **required structure** and **enhancements**, and give each its
+execution owner: **Elephant**, **Owner setup**, or **Unavailable**. Keep unavailable required
+structure out of an approval request; omit unavailable enhancements or state their degraded
+outcome. The single approval covers both Elephant's writes and the displayed owner checklist.
+
 Keep optional Objective, Project, Milestone, view, Shared Knowledge, Knowledge Map, Decisions, and
 Knowledge structures absent until a real need exists. Existing IDs and URLs are literal. For an
 object to be created, show its human target and the exact config field its verified returned value
 will fill; do not invent the final value.
 
 Resolve all material ambiguity in this conversation. Ask for one approval of the whole human
-proposal. That approval covers the displayed native writes and config projection; do not ask for a
-second data-entry review.
+proposal. That approval covers the displayed native writes, owner checklist, and config projection;
+do not ask for a second data-entry review.
 
 ### 3. Apply through native products
 
 The approving conversation carries intended outcomes, target scopes, and semantic preconditions
 until the workspace map is integrated. A cold context without that conversation may reconcile
-already visible authoritative native results read-only but does not continue writes.
+already visible authoritative native results read-only, but must present the reconstructed compact
+proposal once before any remaining external or config write.
 
-Execute the approved operations sequentially. Before each create, search the exact verified parent
-scope. Reuse or update one semantically equivalent object, create when none exists, and stop when
-multiple or conflicting objects exist. Fetch every changed object and verify its ownership and
-human-visible result before continuing. Preserve unrelated labels, relations, Teams, and page
-content.
+Apply approved **Elephant** operations sequentially and verify each result. Before each create,
+search the exact verified parent scope. Reuse or update one semantically equivalent object, create
+when none exists, and stop when multiple or conflicting objects exist. Fetch every changed object
+and verify its ownership and human-visible result before continuing. Preserve unrelated labels,
+relations, Teams, and page content.
 
 Use the authenticated in-app browser only for approved setup administration that the Linear
 connector cannot perform. First prove the workspace and Team with semantic reads, then visibly
 confirm the browser is on that same Linear tenant and exact target. Stop on any mismatch. Verify
-the browser-created result afterward through semantic Linear reads. If neither route can create a
-required Product label, stop before the first setup write. An optional overview may instead end in
-one concise UI handoff.
+the browser-created result afterward through semantic Linear reads.
+
+If **Owner setup** operations remain, return one numbered checklist after the supported writes.
+Each item names the exact tenant, native object type, Product or company scope, final visible
+values, shortest known UI location or direct entry link, whether it is required or an enhancement,
+and the semantic read Elephant will use to verify it. Never ask the owner to copy opaque IDs.
+
+The owner's completion message is a resume signal, not verification evidence. Re-read every exact
+native scope: adopt one equivalent result, keep zero pending, and stop on multiple or conflicting
+results. A required owner-provisioned object must read back before its stable ID or URL enters the
+workspace map. Unsupported enhancements may degrade when an ordinary scoped query or link keeps
+the workflow correct.
 
 If an operation is interrupted or its result is unclear, do not create a duplicate or retry
 automatically. Reconcile the exact native scope, adopt one equivalent result, and stop on ambiguity.

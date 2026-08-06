@@ -155,6 +155,41 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
         self.assertNotIn("Retry a definitively rejected operation", setup)
         self.assertIn("later explicit resume run", setup)
 
+    def test_setup_classifies_execution_capability_before_approval(self) -> None:
+        text = read("plugins/elephant/skills/setup-workspace/SKILL.md")
+        for requirement in (
+            "Elephant",
+            "Owner setup",
+            "Unavailable",
+            "required structure",
+            "enhancements",
+            "before presenting the proposal",
+        ):
+            self.assertIn(requirement, text)
+
+    def test_setup_allows_verified_owner_provisioning_without_a_ledger(self) -> None:
+        setup = read("plugins/elephant/skills/setup-workspace/SKILL.md")
+        planning = read("plugins/elephant/references/linear-planning.md")
+        for requirement in (
+            "one numbered checklist",
+            "opaque IDs",
+            "semantic read",
+            "resume signal",
+            "workspace.yaml",
+        ):
+            self.assertIn(requirement, setup)
+        self.assertIn("setup-only", planning)
+        self.assertIn("no manual runtime fallback", planning)
+        self.assertNotIn(
+            "If neither route can create a required Product label, stop before the first setup write",
+            setup,
+        )
+
+    def test_multi_product_label_contract_remains_intact(self) -> None:
+        planning = read("plugins/elephant/references/linear-planning.md")
+        self.assertIn("Issue, Project, and Initiative", planning)
+        self.assertIn("Create and verify all three label types", planning)
+
 
 if __name__ == "__main__":
     unittest.main()

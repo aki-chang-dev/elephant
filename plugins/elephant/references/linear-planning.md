@@ -24,6 +24,8 @@ implicit and no Product labels are added. With multiple Products, every managed 
 and Initiative carries exactly one verified Product label from its own Linear label namespace. A
 Milestone inherits Product from its Project. Preserve unrelated labels and relations on updates.
 
+Issue, Project, and Initiative Product labels are distinct native label types, not substitutes.
+
 Verify ownership by object type before use: Issue Team, Project Team set, Initiative workspace, and
 Milestone parent Project. Conflicting, missing, or out-of-scope membership stops the write and
 prompts one bounded Product question.
@@ -84,15 +86,21 @@ first establish the exact workspace and Team; the browser must visibly show the 
 and exact target on Linear's origin. A mismatch stops before mutation, and every browser result is
 verified afterward through semantic Linear reads.
 
+Manual provisioning is setup-only. When neither the connector nor authenticated browser can
+perform an approved low-frequency administrative operation, setup may hand it to the owner only
+when the resulting native object can be found and verified through a semantic read. This does not
+create a manual runtime fallback: after setup, Elephant-managed Issues, Projects, and Initiatives
+must maintain their verified Product labels automatically; there is no manual runtime fallback.
+
 For a single-to-multiple Product transition, keep the old implicit configuration authoritative.
 Inventory every in-scope Issue, Project, Initiative, and Milestone, classify it as the former
-Product, the new Product, or an explicit exclusion, and resolve ambiguity before approval. Create
-and verify all three label types for every Product, backfill only approved objects while preserving
-unrelated content, then run a fresh inventory. Publish the multi-Product configuration only when no
-managed object is unlabeled or ambiguous.
+Product, the new Product, or an explicit exclusion, and resolve ambiguity before approval. Create and verify all three label types
+for every Product, backfill only approved objects while preserving unrelated content, then run a
+fresh inventory. Publish the multi-Product configuration only when no managed object is unlabeled
+or ambiguous.
 
 An optional company overview may surface active Initiatives and Projects by Product, next
-Milestones, health/risk, priority, and current attention. Reuse a suitable view. If neither the
-connector nor authenticated browser can create an optional view, provide one concise UI handoff;
-store its URL only after semantic read-back. Required Product labels have no manual runtime
-fallback.
+Milestones, health/risk, priority, and current attention. Reuse a suitable view. The optional
+overview, display-name cleanup, and native integration administration are non-blocking enhancements
+when their documented fallbacks preserve correct navigation. Store an overview URL only after
+semantic read-back.
