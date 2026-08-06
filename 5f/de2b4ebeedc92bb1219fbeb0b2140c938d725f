@@ -1,0 +1,27 @@
+plugins/elephant/skills/setup-workspace/SKILL.md
+  s_7c6e11e61c7ee5::t_7e9de9c9e0e295 41-54,66-70,77-78,84-85
+  s_7c6e11e61c7ee5::t_1b15bbf779c358 87-91,96-107
+plugins/elephant/references/linear-planning.md
+  s_7c6e11e61c7ee5::t_ed307c443903f2 91-93
+  s_7c6e11e61c7ee5::t_5bf6286eee430a 103-106
+  s_7c6e11e61c7ee5::t_d1ae2116a7a3a1 27-28,89-90
+  s_7c6e11e61c7ee5::t_f5455ae9badb67 97-100
+tests/test_information_coordination.py
+  s_7c6e11e61c7ee5::t_0729236c9a9d86 158-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "5fde2b4ebeedc92bb1219fbeb0b2140c938d725f",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
