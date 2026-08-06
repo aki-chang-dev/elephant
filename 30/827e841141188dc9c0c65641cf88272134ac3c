@@ -1,0 +1,28 @@
+tests/test_information_coordination.py
+  s_7c6e11e61c7ee5::t_ec950c89266981 6,210-212,236
+  s_7c6e11e61c7ee5::t_418a8ddee45aa0 4,17-18,20-21,24-25,198-203,205-209,213-215,223-234,237-261,263-278
+  s_7c6e11e61c7ee5::t_94f8915c9bd2e0 19,22-23
+  s_7c6e11e61c7ee5::t_050ef8faa870e7 204
+docs/testing/dual-runtime-smoke-tests.md
+  s_7c6e11e61c7ee5::t_d18bb4133d1884 38-39
+docs/superpowers/plans/2026-08-06-capability-adaptive-workspace-setup.md
+  s_7c6e11e61c7ee5::t_d18bb4133d1884 140-144,354-355,385-386
+plugins/elephant/skills/setup-workspace/SKILL.md
+  s_7c6e11e61c7ee5::t_d18bb4133d1884 99-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "30827e841141188dc9c0c65641cf88272134ac3c",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
