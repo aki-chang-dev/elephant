@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
+import re
 import unittest
+from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +12,15 @@ VALIDATOR = ROOT / "scripts" / "validate-compatibility.py"
 
 def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def markdown_subsection(text: str, heading: str) -> str:
+    marker = f"### {heading}\n"
+    _, found, remainder = text.partition(marker)
+    if not found:
+        raise ValueError(f"missing Markdown subsection: {heading}")
+    subsection = re.split(r"\n(?=#{1,3} )", remainder, maxsplit=1)[0]
+    return " ".join(subsection.split())
 
 
 def load_validator():
@@ -185,6 +195,24 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
             setup,
         )
 
+    def test_owner_setup_checklist_keeps_approved_precision(self) -> None:
+        for relative in (
+            "plugins/elephant/skills/setup-workspace/SKILL.md",
+            "docs/superpowers/plans/2026-08-06-capability-adaptive-workspace-setup.md",
+        ):
+            with self.subTest(relative=relative):
+                text = " ".join(read(relative).split())
+                self.assertIn(
+                    "final human-visible name and applicable color, description, or relation",
+                    text,
+                )
+                self.assertIn(
+                    "The checklist contains no implementation explanation, connector "
+                    "diagnostics, internal setup state, or request for the owner to copy "
+                    "opaque IDs.",
+                    text,
+                )
+
     def test_multi_product_label_contract_remains_intact(self) -> None:
         planning = read("plugins/elephant/references/linear-planning.md")
         self.assertIn("Issue, Project, and Initiative", planning)
@@ -192,14 +220,62 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
 
     def test_dual_runtime_smoke_covers_setup_capability_profiles(self) -> None:
         text = read("docs/testing/dual-runtime-smoke-tests.md")
-        for profile in (
-            "Codex CLI profile",
-            "Browser-capable profile",
-            "Unverifiable profile",
-            "Owner setup",
+        cli = markdown_subsection(text, "Codex CLI profile")
+        browser = markdown_subsection(text, "Browser-capable profile")
+        unverifiable = markdown_subsection(text, "Unverifiable profile")
+
+        for requirement in (
+            "semantic Linear/Notion connectors",
+            "no browser",
+            "required administrative create unavailable",
+            "collection semantically readable",
+            "**Owner setup**",
+            "execute supported approved writes",
+            "one exact checklist",
             "semantic read-back",
+            "without requesting opaque IDs",
+            "reuse",
+            "stable-ID capture",
+            "no duplicate",
+            "config-last",
         ):
-            self.assertIn(profile, text)
+            with self.subTest(profile="Codex CLI", requirement=requirement):
+                self.assertIn(requirement, cli)
+
+        for requirement in (
+            "authenticated browser",
+            "connector gap",
+            "same proposal",
+            "same Product protocol",
+            "same final workspace map",
+            "only the executor differs",
+        ):
+            with self.subTest(profile="browser-capable", requirement=requirement):
+                self.assertIn(requirement, browser)
+
+        for requirement in (
+            "both the write path and semantic read-back",
+            "required Product-label namespace",
+            "**Unavailable**",
+            "before approval",
+            "must not publish a workspace map",
+        ):
+            with self.subTest(profile="unverifiable", requirement=requirement):
+                self.assertIn(requirement, unverifiable)
+
+    def test_release_verification_invokes_installed_smoke_as_package(self) -> None:
+        plan = read(
+            "docs/superpowers/plans/2026-08-06-capability-adaptive-workspace-setup.md"
+        )
+        package_aware_command = (
+            "PYTHONPATH=plugins/elephant python3 -c \\\n"
+            "  'from elephant_runtime.installed_smoke import run_installed_smoke; "
+            "print(run_installed_smoke())'"
+        )
+        self.assertEqual(plan.count(package_aware_command), 2)
+        self.assertNotIn(
+            "python3 plugins/elephant/elephant_runtime/installed_smoke.py", plan
+        )
 
 
 if __name__ == "__main__":

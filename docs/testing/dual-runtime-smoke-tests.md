@@ -35,7 +35,8 @@ behavior.
 ### Browser-capable profile
 
 Run the same target structure where an authenticated browser can perform the connector gap. The
-proposal and final workspace map must express the same Product protocol; only the executor differs.
+same proposal, same Product protocol, and same final workspace map must be produced; only the
+executor differs.
 
 ### Unverifiable profile
 

@@ -137,9 +137,11 @@ the first write when connector and browser creation are absent with this behavio
 ```markdown
 Apply approved **Elephant** operations sequentially and verify each result. If **Owner setup**
 operations remain, return one numbered checklist after the supported writes. Each item names the
-exact tenant, native object type, Product or company scope, final visible values, shortest known UI
-location or direct entry link, whether it is required or an enhancement, and the semantic read
-Elephant will use to verify it. Never ask the owner to copy opaque IDs.
+exact tenant, native object type, Product or company scope, final human-visible name and applicable
+color, description, or relation, shortest known UI location or direct entry link, whether it is
+required or an enhancement, and the semantic read Elephant will use to verify it. The checklist
+contains no implementation explanation, connector diagnostics, internal setup state, or request
+for the owner to copy opaque IDs.
 
 The owner's completion message is a resume signal, not verification evidence. Re-read every exact
 native scope: adopt one equivalent result, keep zero pending, and stop on multiple or conflicting
@@ -349,7 +351,8 @@ Run:
 ```bash
 python3 scripts/validate-compatibility.py
 python3 -m unittest discover -s tests -p 'test_*.py'
-python3 plugins/elephant/elephant_runtime/installed_smoke.py
+PYTHONPATH=plugins/elephant python3 -c \
+  'from elephant_runtime.installed_smoke import run_installed_smoke; print(run_installed_smoke())'
 git diff --check
 git status --short
 ```
@@ -379,7 +382,8 @@ Run:
 ```bash
 python3 scripts/validate-compatibility.py
 python3 -m unittest discover -s tests -p 'test_*.py'
-python3 plugins/elephant/elephant_runtime/installed_smoke.py
+PYTHONPATH=plugins/elephant python3 -c \
+  'from elephant_runtime.installed_smoke import run_installed_smoke; print(run_installed_smoke())'
 git log --oneline -5
 git status --short --branch
 ```

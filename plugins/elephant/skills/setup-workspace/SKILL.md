@@ -96,9 +96,11 @@ confirm the browser is on that same Linear tenant and exact target. Stop on any 
 the browser-created result afterward through semantic Linear reads.
 
 If **Owner setup** operations remain, return one numbered checklist after the supported writes.
-Each item names the exact tenant, native object type, Product or company scope, final visible
-values, shortest known UI location or direct entry link, whether it is required or an enhancement,
-and the semantic read Elephant will use to verify it. Never ask the owner to copy opaque IDs.
+Each item names the exact tenant, native object type, Product or company scope, final human-visible
+name and applicable color, description, or relation, shortest known UI location or direct entry
+link, whether it is required or an enhancement, and the semantic read Elephant will use to verify
+it. The checklist contains no implementation explanation, connector diagnostics, internal setup
+state, or request for the owner to copy opaque IDs.
 
 The owner's completion message is a resume signal, not verification evidence. Re-read every exact
 native scope: adopt one equivalent result, keep zero pending, and stop on multiple or conflicting
