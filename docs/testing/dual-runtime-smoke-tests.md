@@ -23,6 +23,26 @@ Given two repository Products, setup must distinguish each Product from its engi
 and require Product classification on Linear Issues, Projects, and Initiatives. Ambiguous existing
 objects stop the affected operation instead of triggering a global scan or guessed match.
 
+### Codex CLI profile
+
+Run with semantic Linear/Notion connectors and no browser. Make at least one required
+administrative create unavailable while keeping its collection semantically readable. The proposal
+must classify that operation as **Owner setup**, execute supported approved writes, emit one exact
+checklist, and resume through semantic read-back without requesting opaque IDs. Rerun after the
+owner creates the object and verify reuse, stable-ID capture, no duplicate, and config-last
+behavior.
+
+### Browser-capable profile
+
+Run the same target structure where an authenticated browser can perform the connector gap. The
+proposal and final workspace map must express the same Product protocol; only the executor differs.
+
+### Unverifiable profile
+
+Remove both the write path and semantic read-back for one required Product-label namespace. Setup
+must classify the operation as **Unavailable** before approval and must not publish a workspace
+map that runtime workflows cannot consume.
+
 ## Missing integrations
 
 If Linear is unavailable, planning work stops with the missing authoritative source. If Notion is

@@ -48,6 +48,19 @@ Observed behavior:
 GREEN verdict: passed all scenarios. The normal configured single-Product path is small enough for
 the twenty-minute target and introduces no custom integration infrastructure or extra owner gate.
 
+## setup-workspace — capability-boundary RED/GREEN
+
+Scenario: initialize a real multi-Product repository from Codex CLI where semantic reads cover all
+three Linear label namespaces, writes can create Issue and Initiative labels but not Project
+labels, Team/workspace rename is unavailable, and no authenticated in-app browser exists.
+
+RED observation: setup treated the missing Project-label write path as a protocol failure and had
+promised rename and administration work before classifying the active host's operations.
+
+GREEN outcome: setup preserves all three Product-label namespaces, performs supported writes,
+hands off exact Project-label and display-name administration, reads the resulting labels back,
+and writes config only after every required label is verified. No setup ledger is created.
+
 ## shape-story — RED baseline
 
 Scenario: start from a one-sentence Product idea with an existing Linear Story/planning context and

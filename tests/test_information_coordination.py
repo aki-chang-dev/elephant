@@ -190,6 +190,17 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
         self.assertIn("Issue, Project, and Initiative", planning)
         self.assertIn("Create and verify all three label types", planning)
 
+    def test_dual_runtime_smoke_covers_setup_capability_profiles(self) -> None:
+        text = read("docs/testing/dual-runtime-smoke-tests.md")
+        for profile in (
+            "Codex CLI profile",
+            "Browser-capable profile",
+            "Unverifiable profile",
+            "Owner setup",
+            "semantic read-back",
+        ):
+            self.assertIn(profile, text)
+
 
 if __name__ == "__main__":
     unittest.main()
