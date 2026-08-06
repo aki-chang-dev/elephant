@@ -1,0 +1,23 @@
+docs/testing/native-information-coordination-pressure-tests.md
+  s_7c6e11e61c7ee5::t_4fa95dfc557b69 51-63
+tests/test_information_coordination.py
+  s_7c6e11e61c7ee5::t_afd2c9345c9b97 193-203
+docs/testing/dual-runtime-smoke-tests.md
+  s_7c6e11e61c7ee5::t_4fa95dfc557b69 26-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "bd221a893cc8e0cc9598330053cc700c65e42dfc",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
