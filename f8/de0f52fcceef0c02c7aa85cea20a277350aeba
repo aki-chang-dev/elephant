@@ -1,0 +1,22 @@
+docs/superpowers/plans/2026-08-06-capability-adaptive-workspace-setup.md
+  s_7c6e11e61c7ee5::t_cb98a0e65f73a4 383,387
+  s_7c6e11e61c7ee5::t_6985a2e1bf468c 1-382,384-386,388-389
+docs/superpowers/specs/2026-08-06-capability-adaptive-workspace-setup-design.md
+  s_7c6e11e61c7ee5::t_6985a2e1bf468c 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "f8de0f52fcceef0c02c7aa85cea20a277350aeba",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
