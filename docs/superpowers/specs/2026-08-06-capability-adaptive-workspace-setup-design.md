@@ -3,7 +3,7 @@ schema: elephant.story/v2
 story: capability-adaptive-workspace-setup
 slug: capability-adaptive-workspace-setup
 kind: product
-status: review
+status: approved
 design_sensitivity: Low
 amends:
   - docs/superpowers/specs/2026-08-05-one-person-company-information-coordination-product-v2.md
