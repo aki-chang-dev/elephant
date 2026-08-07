@@ -20,8 +20,10 @@ propose databases, provider manifests, certification, or a delivery profile.
 ## Multi Product setup
 
 Given two repository Products, setup must distinguish each Product from its engineering domains
-and require Product classification on Linear Issues, Projects, and Initiatives. Ambiguous existing
-objects stop the affected operation instead of triggering a global scan or guessed match.
+and require Product classification on every managed Linear object. Issue labels exist from setup;
+Project and Initiative label namespaces activate only for Products with existing objects or an
+approved first write. Ambiguous existing objects stop the affected operation instead of triggering
+a global scan or guessed match.
 
 ### Codex CLI profile
 
@@ -30,7 +32,8 @@ administrative create unavailable while keeping its collection semantically read
 must classify that operation as **Owner setup**, execute supported approved writes, emit one exact
 checklist, and resume through semantic read-back without requesting opaque IDs. Rerun after the
 owner creates the object and verify reuse, stable-ID capture, no duplicate, and config-last
-behavior.
+behavior. An unused Project or Initiative label namespace does not block setup even when its create
+or read operation is unavailable.
 
 ### Browser-capable profile
 
@@ -40,9 +43,10 @@ executor differs.
 
 ### Unverifiable profile
 
-Remove both the write path and semantic read-back for one required Product-label namespace. Setup
-must classify the operation as **Unavailable** before approval and must not publish a workspace
-map that runtime workflows cannot consume.
+Remove both the write path and semantic read-back for one currently required Product-label
+namespace: an Issue namespace, or a Project/Initiative namespace required by existing inventory.
+Setup must classify the operation as **Unavailable** before approval and must not publish a
+workspace map that runtime workflows cannot consume.
 
 ## Missing integrations
 

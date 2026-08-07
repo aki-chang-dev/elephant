@@ -23,8 +23,11 @@ the configured repository.
 Start with the current Linear Story and its Project, Initiative, Milestone, dependencies, and the
 configured Product planning entry. If that is insufficient, search within the Product's Linear
 scope. For one Product, constrain reads to the configured Team and planning/backlog entries. For
-multiple Products, additionally require the matching Product labels. Cross to Notion only through
-a direct relation or when the question explicitly needs product meaning absent from Linear.
+multiple Products, require the matching Product label for the object type being read. An absent
+Project or Initiative label ID means that namespace is not configured for routine Product-scoped
+reads; route discovery of existing objects or first-use activation through `setup-workspace` or
+`decompose-roadmap`. Cross to Notion only through a direct relation or when the question explicitly
+needs product meaning absent from Linear.
 
 ### Product meaning and decisions
 

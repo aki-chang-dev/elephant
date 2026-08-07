@@ -213,10 +213,23 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
                     text,
                 )
 
-    def test_multi_product_label_contract_remains_intact(self) -> None:
-        planning = read("plugins/elephant/references/linear-planning.md")
-        self.assertIn("Issue, Project, and Initiative", planning)
-        self.assertIn("Create and verify all three label types", planning)
+    def test_multi_product_labels_activate_with_their_planning_level(self) -> None:
+        planning = " ".join(
+            read("plugins/elephant/references/linear-planning.md").split()
+        )
+        setup = " ".join(
+            read("plugins/elephant/skills/setup-workspace/SKILL.md").split()
+        )
+        roadmap = " ".join(
+            read("plugins/elephant/skills/decompose-roadmap/SKILL.md").split()
+        )
+
+        self.assertIn("Issue Product labels are required during setup", planning)
+        self.assertIn("inactive for that Product", planning)
+        self.assertIn("existing managed Projects and Initiatives", setup)
+        self.assertIn("does not block setup", setup)
+        self.assertIn("persist its verified label ID", roadmap)
+        self.assertIn("before the first object write", roadmap)
 
     def test_dual_runtime_smoke_covers_setup_capability_profiles(self) -> None:
         text = read("docs/testing/dual-runtime-smoke-tests.md")
@@ -238,6 +251,7 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
             "stable-ID capture",
             "no duplicate",
             "config-last",
+            "unused Project or Initiative label namespace does not block setup",
         ):
             with self.subTest(profile="Codex CLI", requirement=requirement):
                 self.assertIn(requirement, cli)
@@ -255,7 +269,7 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
 
         for requirement in (
             "both the write path and semantic read-back",
-            "required Product-label namespace",
+            "currently required Product-label namespace",
             "**Unavailable**",
             "before approval",
             "must not publish a workspace map",

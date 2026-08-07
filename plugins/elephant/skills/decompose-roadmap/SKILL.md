@@ -73,7 +73,8 @@ Present one compact human roadmap recap:
 4. backlog/current attention and native priority;
 5. dependencies, conflicts, and roadmap consequences;
 6. deferred/out-of-scope outcomes and their reconsideration conditions;
-7. exact Linear objects, relations, labels, and statuses approval will apply;
+7. exact Linear objects, relations, labels, statuses, and any first-use label activation/config
+   update approval will apply;
 8. unresolved product questions.
 
 Resolve material questions before recap. Wait for one explicit approval of the complete proposal.
@@ -85,9 +86,13 @@ roadmap or approve data entry afterward.
 Use native Linear operations and `linear-planning.md` recovery rules:
 
 1. Re-fetch current scoped objects and semantic preconditions.
-2. For each approved target, search its exact native scope. Reuse/update one equivalent object,
+2. Before the first Project or Initiative write for a Product with no matching configured label,
+   run one bounded `setup-workspace` refresh under this recap's approval: search/reuse or provision
+   the exact native label, persist its verified label ID in `.agents/elephant/workspace.yaml`,
+   integrate the config, and re-read the valid map before the first object write. If provisioning
+   or semantic verification is unavailable, leave that planning level inactive and stop its write.
+3. For each approved target, search its exact native scope. Reuse/update one equivalent object,
    create when none exists, and stop on multiple/conflicting matches.
-3. Create or verify required multi-Product labels before labeled planning writes.
 4. Apply Initiatives, then Projects and their Team sets, then Milestones, Stories, relations,
    priority, and statuses in dependency-safe order. Preserve unrelated labels, relations, and text.
 5. Read every mutation back and verify ownership, content, containment, Product classification, and

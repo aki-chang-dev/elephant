@@ -74,7 +74,9 @@ Elephant starts from the idea, not from a mandatory hierarchy. It introduces onl
 Linear structure that makes the work easier to understand:
 
 - **Product** is the durable product boundary. A single-Product workspace needs no Product labels;
-  a multi-Product workspace labels Issues, Projects, and Initiatives so routing stays explicit.
+  a multi-Product workspace labels every managed Issue, Project, and Initiative so routing stays
+  explicit. Issue labels exist from setup; Project and Initiative label namespaces activate only
+  when that Product first uses the matching planning level.
 - **Objective** expresses a useful strategic destination and is represented by a Linear
   **Initiative**. A Story may link directly as `Related Objective` without manufacturing a Project
   or contributing progress to that Objective.

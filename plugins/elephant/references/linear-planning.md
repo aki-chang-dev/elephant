@@ -25,6 +25,10 @@ and Initiative carries exactly one verified Product label from its own Linear la
 Milestone inherits Product from its Project. Preserve unrelated labels and relations on updates.
 
 Issue, Project, and Initiative Product labels are distinct native label types, not substitutes.
+Issue Product labels are required during setup because Story and Backlog are the base planning
+level. A missing Project or Initiative label ID means that planning level is inactive for that
+Product. Activate it when existing inventory or an approved first write needs that object type;
+until then, an unavailable connector operation for that unused namespace does not block setup.
 
 Verify ownership by object type before use: Issue Team, Project Team set, Initiative workspace, and
 Milestone parent Project. Conflicting, missing, or out-of-scope membership stops the write and
@@ -92,12 +96,18 @@ when the resulting native object can be found and verified through a semantic re
 create a manual runtime fallback: after setup, Elephant-managed Issues, Projects, and Initiatives
 must maintain their verified Product labels automatically; there is no manual runtime fallback.
 
+First use of a Project or Initiative namespace runs one bounded setup refresh inside the approved
+roadmap apply. Search and verify the exact native label, persist its stable ID in the workspace map,
+and integrate that config before the first object write. Never substitute another label type,
+repeatedly rediscover an active label by name, or write an unlabeled object.
+
 For a single-to-multiple Product transition, keep the old implicit configuration authoritative.
 Inventory every in-scope Issue, Project, Initiative, and Milestone, classify it as the former
-Product, the new Product, or an explicit exclusion, and resolve ambiguity before approval. Create and verify all three label types
-for every Product, backfill only approved objects while preserving unrelated content, then run a
-fresh inventory. Publish the multi-Product configuration only when no managed object is unlabeled
-or ambiguous.
+Product, the new Product, or an explicit exclusion, and resolve ambiguity before approval. Create
+and verify Issue labels for every Product. Create Project and Initiative labels only for Products
+that own existing objects in those namespaces, then backfill approved objects while preserving
+unrelated content and run a fresh inventory. Publish the multi-Product configuration only when no
+existing managed object is unlabeled or ambiguous.
 
 An optional company overview may surface active Initiatives and Projects by Product, next
 Milestones, health/risk, priority, and current attention. Reuse a suitable view. The optional

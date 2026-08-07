@@ -36,7 +36,10 @@ directory, Team, or deployable is a Product.
 
 For a single Product, keep membership implicit and label-free. For multiple Products, inventory
 existing managed Linear work and follow the transition rules in `linear-planning.md` before
-proposing a change.
+proposing a change. Create or verify Issue Product labels for every Product. Inventory existing
+managed Projects and Initiatives, activate the matching label namespace only for Products that own
+objects there, and backfill those objects before completion. An unavailable unused Project or
+Initiative namespace does not block setup.
 
 Classify every proposed operation before presenting the proposal:
 
@@ -50,7 +53,9 @@ Classify every proposed operation before presenting the proposal:
 
 Treat capability as operation-specific. Connector availability does not imply workspace rename,
 label creation, view creation, or native-integration administration. A declared tool rejected by
-its backing service is unavailable for the current run.
+its backing service is unavailable for the current run. Classify only operations required by
+current native inventory and the approved proposal; do not probe or provision future planning
+levels merely to complete a matrix.
 
 ### 2. Present one human proposal
 
@@ -69,9 +74,10 @@ structure out of an approval request; omit unavailable enhancements or state the
 outcome. The single approval covers both Elephant's writes and the displayed owner checklist.
 
 Keep optional Objective, Project, Milestone, view, Shared Knowledge, Knowledge Map, Decisions, and
-Knowledge structures absent until a real need exists. Existing IDs and URLs are literal. For an
-object to be created, show its human target and the exact config field its verified returned value
-will fill; do not invent the final value.
+Knowledge structures absent until a real need exists. Keep their Product-label namespaces absent
+too unless existing native objects require classification. Existing IDs and URLs are literal. For
+an object to be created, show its human target and the exact config field its verified returned
+value will fill; do not invent the final value.
 
 Resolve all material ambiguity in this conversation. Ask for one approval of the whole human
 proposal. That approval covers the displayed native writes, owner checklist, and config projection;
