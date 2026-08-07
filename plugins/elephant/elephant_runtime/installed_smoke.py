@@ -48,8 +48,6 @@ def _multi_product() -> dict[str, object]:
             "planning_ref": "second-planning",
             "backlog_ref": "second-backlog",
             "issue_label_id": "issue-label-second",
-            "project_label_id": "project-label-second",
-            "initiative_label_id": "initiative-label-second",
         },
         "notion": {"home_id": "second-home", "knowledge_map_id": "second-map"},
     }

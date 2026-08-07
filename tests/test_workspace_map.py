@@ -108,19 +108,35 @@ class WorkspaceMapValidationTests(unittest.TestCase):
             },
         )
 
-    def test_multi_product_rejects_each_missing_label(self) -> None:
-        for field in (
-            "issue_label_id",
-            "project_label_id",
-            "initiative_label_id",
-        ):
-            with self.subTest(field=field):
-                value = multi_product()
-                del value["products"]["second"]["linear"][field]
-                self.assertIn(
-                    f"products.second.linear.{field}: required for multiple Products",
-                    validate_workspace_map(value),
-                )
+    def test_multi_product_allows_inactive_project_and_initiative_labels(self) -> None:
+        value = multi_product()
+        for product in value["products"].values():
+            del product["linear"]["project_label_id"]
+            del product["linear"]["initiative_label_id"]
+
+        self.assertEqual(validate_workspace_map(value), ())
+        self.assertEqual(
+            planning_scope(value, product_key="second").product_labels,
+            {"issue": "issue-label-second"},
+        )
+
+    def test_multi_product_still_requires_issue_label(self) -> None:
+        value = multi_product()
+        del value["products"]["second"]["linear"]["issue_label_id"]
+        self.assertIn(
+            "products.second.linear.issue_label_id: required for multiple Products",
+            validate_workspace_map(value),
+        )
+
+    def test_multi_product_rejects_duplicate_present_optional_labels(self) -> None:
+        value = multi_product()
+        value["products"]["second"]["linear"]["project_label_id"] = value[
+            "products"
+        ]["sample"]["linear"]["project_label_id"]
+        self.assertIn(
+            "products.second.linear.project_label_id: duplicate Product label",
+            validate_workspace_map(value),
+        )
 
     def test_rejects_unknown_schema_and_missing_roots(self) -> None:
         value = deepcopy(SINGLE)

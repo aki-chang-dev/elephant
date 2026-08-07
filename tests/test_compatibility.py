@@ -138,11 +138,7 @@ class CompatibilityValidatorTests(unittest.TestCase):
                 "multi_product": {
                     "product": "second",
                     "team_id": "linear-team",
-                    "labels": {
-                        "issue": "issue-label-second",
-                        "project": "project-label-second",
-                        "initiative": "initiative-label-second",
-                    },
+                    "labels": {"issue": "issue-label-second"},
                 },
             },
         )

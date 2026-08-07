@@ -292,18 +292,21 @@ def validate_workspace_map(document: Mapping[str, object]) -> tuple[str, ...]:
             problems,
         )
         if multiple:
+            issue_label = product_linear.get("issue_label_id")
+            if not _anchor(issue_label):
+                problems.append(
+                    f"products.{key}.linear.issue_label_id: required for multiple Products"
+                )
             for namespace, field in _LABEL_FIELDS.items():
                 label = product_linear.get(field)
                 if not _anchor(label):
+                    continue
+                assert isinstance(label, str)
+                if label in labels_by_namespace[namespace]:
                     problems.append(
-                        f"products.{key}.linear.{field}: required for multiple Products"
+                        f"products.{key}.linear.{field}: duplicate Product label"
                     )
-                elif isinstance(label, str):
-                    if label in labels_by_namespace[namespace]:
-                        problems.append(
-                            f"products.{key}.linear.{field}: duplicate Product label"
-                        )
-                    labels_by_namespace[namespace].add(label)
+                labels_by_namespace[namespace].add(label)
 
         product_notion = raw_product.get("notion")
         if not isinstance(product_notion, Mapping):
@@ -362,6 +365,7 @@ def planning_scope(
         labels = {
             namespace: str(route.linear[field])
             for namespace, field in _LABEL_FIELDS.items()
+            if field in route.linear
         }
     planning_ref = route.linear.get("planning_ref")
     backlog_ref = route.linear.get("backlog_ref")
