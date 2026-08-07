@@ -1,0 +1,19 @@
+docs/superpowers/plans/2026-08-07-progressive-product-label-activation.md
+  s_7c6e11e61c7ee5::t_60c4287eaf5a4e 1-327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "f7ae3587be2b1be277f1a3fc441bbfc3d3b1d586",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
