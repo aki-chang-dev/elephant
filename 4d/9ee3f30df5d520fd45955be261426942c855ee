@@ -1,0 +1,23 @@
+tests/test_compatibility.py
+  s_7c6e11e61c7ee5::t_e622c2c0d1a25d 29
+plugins/elephant/.claude-plugin/plugin.json
+  s_7c6e11e61c7ee5::t_b53fd096fe0865 3
+plugins/elephant/.codex-plugin/plugin.json
+  s_7c6e11e61c7ee5::t_b53fd096fe0865 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "4d9ee3f30df5d520fd45955be261426942c855ee",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
