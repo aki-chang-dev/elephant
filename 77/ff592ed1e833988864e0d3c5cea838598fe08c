@@ -1,0 +1,32 @@
+tests/test_information_coordination.py
+  s_7c6e11e61c7ee5::t_37e301f2d0c129 217-225
+  s_7c6e11e61c7ee5::t_bd6e2bbc5e3d4c 216,227-232,254,272
+README.md
+  s_7c6e11e61c7ee5::t_75955659b09571 77-79
+plugins/elephant/references/linear-planning.md
+  s_7c6e11e61c7ee5::t_e3834224573e24 28-31,99-103,106-110
+plugins/elephant/references/information-routing.md
+  s_7c6e11e61c7ee5::t_e3834224573e24 26-30
+plugins/elephant/skills/decompose-roadmap/SKILL.md
+  s_7c6e11e61c7ee5::t_75955659b09571 76-77,89-94
+docs/testing/dual-runtime-smoke-tests.md
+  s_7c6e11e61c7ee5::t_461d91c9c1e1a6 23-26,35-36,46-49
+plugins/elephant/skills/setup-workspace/SKILL.md
+  s_7c6e11e61c7ee5::t_75955659b09571 39-42,56-58,77-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.39-trip",
+  "base_commit_sha": "77ff592ed1e833988864e0d3c5cea838598fe08c",
+  "prompts": {},
+  "sessions": {
+    "s_7c6e11e61c7ee5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb1d3-382d-74a0-a3ab-08795928ae6a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Aki Chang <its.akichang@gmail.com>"
+    }
+  }
+}
