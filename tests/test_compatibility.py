@@ -26,7 +26,7 @@ EXPECTED_DESCRIPTION = (
     "A product-first coordination workflow for one owner and agents across "
     "Linear planning, Notion knowledge, and GitHub delivery."
 )
-EXPECTED_VERSION = "0.5.1"
+EXPECTED_VERSION = "0.5.2"
 EXPECTED_KEYWORDS = {
     "superpowers",
     "workflow",
