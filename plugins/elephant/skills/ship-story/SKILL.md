@@ -44,7 +44,7 @@ Select the first incomplete result from native and Git evidence:
 2. assurance depth is supported by current evidence;
 3. any required transient artifact is current;
 4. isolated implementation has started;
-5. repository verification and final delivery review pass;
+5. repository verification, author acceptance check, and any required independent review pass;
 6. pull request is integrated;
 7. Linear closeout is current and transient artifacts are absent.
 
@@ -79,8 +79,9 @@ Apply `delivery-assurance.md` without asking the owner to classify risk.
 - Add a concise transient plan only when implementation has multiple dependent steps.
 - Execute with the repository's required testing, changeset, verification, and risk controls.
 
-Every path ends in one independent final delivery review. Repository-mandated checks remain valid;
-Elephant does not add a second generic code-review layer merely because one is available.
+Every path ends in an author acceptance check. Run one independent final delivery review for
+elevated assurance, an explicit user request, or a repository requirement. Reuse an equivalent
+repository review; Elephant adds no duplicate generic review layer.
 
 ## Keep Linear meaningfully current
 
@@ -100,19 +101,23 @@ standalone Story. Unchanged polling creates nothing.
 
 ## Final delivery review
 
-After implementation and repository verification, re-establish complete current product authority
-or behavior-preservation evidence and run `implementation-conformance.md` once in the applicable
-ordinary/elevated mode. The reviewer receives current implementation evidence, not review history.
+After implementation and repository verification, re-establish current product authority or
+behavior-preservation evidence and check the approved outcome against the actual user flow.
+Use `implementation-conformance.md` for this author check and for independent review when the
+selected assurance or repository/user instruction requires it; do not spawn a reviewer by default.
 
-Fix load-bearing findings. Map each fix to affected requirements/files/evidence and recheck only
-that packet. Unsupported preferences receive a concise evidence-based ruling and do not enlarge
-scope. `NEEDS_PRODUCT_DECISION` returns to shaping and invalidates affected downstream work.
+Apply the findings and rechecks policy in `delivery-assurance.md`: adjudicate before fixing,
+resolve accepted blockers, and use one focused recheck when needed. Provide the scenario, supported
+usage, non-goals, current evidence, and prior dispositions on recheck. Stop general review after
+that recheck; further independent scrutiny needs a named unresolved material risk. Unsupported
+preferences and non-blocking improvements do not enlarge scope. `NEEDS_PRODUCT_DECISION` returns
+to shaping only for a material unresolved product choice.
 
 ## Integrate and close out
 
 Follow the repository's configured non-destructive Git workflow without invoking a generic owner
-choice menu. Before integration, confirm current product meaning, repository verification, final
-review, required checks, and absence of transient delivery artifacts in the final diff.
+choice menu. Before integration, confirm current product meaning, repository verification,
+any required independent review, required checks, and absence of transient delivery artifacts in the final diff.
 
 Keep the exact Linear Issue identifier in branch/PR identity. After Git activity, verify the native
 Linear–GitHub relation; when unavailable, add the ordinary PR URL. After verified integration,

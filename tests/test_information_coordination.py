@@ -133,7 +133,8 @@ class NativeCoordinationPackagingTests(unittest.TestCase):
 
     def test_copy_critic_is_conditional(self) -> None:
         text = read("plugins/elephant/skills/shape-story/SKILL.md")
-        self.assertIn("always run `reviewers/product-ux-critic.md`", text)
+        self.assertNotIn("always run `reviewers/product-ux-critic.md`", text)
+        self.assertIn("Run `reviewers/product-ux-critic.md` only", text)
         self.assertIn("Run `reviewers/copy-critic.md` only", text)
 
     def test_routine_native_writes_use_no_git_recovery_note(self) -> None:

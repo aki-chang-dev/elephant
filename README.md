@@ -57,16 +57,23 @@ priority must change—not for routine data entry or technical review.
 
 ## Proportionate assurance
 
-Ordinary Stories use an in-session checklist or concise plan, repository verification, and one
-independent final delivery review. Elephant adds specialist technical review only when current
-evidence shows money, destructive data/migration, security or authorization, concurrency or
-transactions, production rollout/recovery, or major system-boundary risk. Uncertain risk takes the
-safer path and is explained at closeout.
+Ordinary Stories use an in-session checklist or concise plan, repository verification, and an
+author acceptance check in the actual user scenario. Independent review is used for evidenced
+material risk or an explicit user/repository requirement; an equivalent repository review suffices.
+Elevated assurance adds a Technical Contract and only specialists relevant to the named risk.
+Inspect uncertainty before escalating; unfamiliarity alone is not a risk trigger.
 
-Review packets contain only decision-relevant context; complete product authority remains present
-for product and final conformance. Fixes recheck only affected requirements and evidence. Elephant
-does not treat parallel workers as token savings or impose a hard context quota that could remove
-decision-critical evidence.
+Blocking findings need a supported scenario, concrete evidence, and material consequence. The
+author adjudicates before fixing and prefers the smallest sufficient correction. Low-frequency
+severe risks still block; speculative improvements do not. One initial review and one focused
+recheck are the default. Persistent blockers require a concrete investigation or correction, not
+another general review loop. Completion requires acceptance and resolved blockers, not zero
+suggestions. Product and copy critics follow the same materiality and stopping rules.
+
+Review packets contain decision-relevant context, supported usage, and non-goals; complete product
+authority remains present for product and final conformance. Rechecks carry prior dispositions.
+Elephant does not treat parallel workers as token savings or impose a hard context quota that
+could remove decision-critical evidence.
 
 ## Planning model
 

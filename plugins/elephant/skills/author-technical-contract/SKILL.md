@@ -1,6 +1,6 @@
 ---
 name: author-technical-contract
-description: Use when an elevated-assurance Story has named technical risk or unresolved technical uncertainty that requires implementation decisions and specialist scrutiny before execution.
+description: Use when an elevated-assurance Story has named technical risk or evidence-backed unresolved material technical uncertainty that requires implementation decisions and specialist scrutiny before execution.
 ---
 
 # Author Technical Contract
@@ -67,14 +67,18 @@ Select only roles whose evidence boundary is material:
 Record each selected role and trigger. Give each specialist a role-scoped packet: the relevant
 contract sections, source items, repository paths/evidence, and canonical prompt. Product-
 conformance receives complete current product authority. External links alone are not evidence.
-Reviewers are read-only.
+Reviewers are read-only. Include the shared findings and rechecks policy from
+`delivery-assurance.md`, supported usage, non-goals, and the specific risk question in each packet.
 
 ## Fix, recheck, and exit
 
-A load-bearing finding cites a current requirement, repository rule, or concrete risk. Close an
-unsupported preference with an evidence-based ruling; it cannot expand scope. The author fixes
-valid findings, maps changes to affected requirements/sections/evidence, and reruns only affected
-roles. Product findings return to shaping; pure technical conflicts use the adjudicator.
+Apply the shared findings and rechecks policy: the author adjudicates each finding before editing,
+fixes accepted blockers, and supplies dispositions plus affected requirements/sections/evidence for
+one focused recheck by affected roles. Non-blocking suggestions require no repair. After that
+recheck, stop automatic cycling and resolve a persistent blocker through concrete investigation or
+bounded correction; another independent check needs a named risk author verification cannot settle.
+Product findings return to shaping only for material unresolved product choices; use the adjudicator
+once for conflicting technical evidence. A round limit never makes an unresolved blocker ready.
 
 Set `status: ready` only when sources are current, the named risk has a supported response and
 verification, no blocking finding remains, and all affected rechecks pass. Record one stable basis

@@ -16,6 +16,7 @@ Run this skill in the main conversation. Before acting, read completely:
 - `../../references/information-routing.md`
 - `../../references/linear-planning.md`
 - `../../references/notion-knowledge.md`
+- `../../references/delivery-assurance.md` (review selection, findings, and stopping conditions)
 - `product-contract-template.md`
 
 The bundled template is a working recap shape, not a durable repository Product Contract. Keep the
@@ -97,19 +98,23 @@ implementation plan, review, test output, or routine progress.
 
 ## Critique and resolution
 
-Before recap approval, always run `reviewers/product-ux-critic.md` with the latest working recap and
-fetched product context. Run `reviewers/copy-critic.md` only when the outcome creates or changes
-user-visible labels, hints, placeholders, confirmations, feedback, empty/loading/error/disabled/
-success language, or another material copy boundary.
+Before recap approval, the author checks that the actual user flow and acceptance are coherent.
+Run `reviewers/product-ux-critic.md` only when a named material product uncertainty benefits from
+an independent perspective, or the user/repository requires it. Run `reviewers/copy-critic.md` only
+when wording creates a material risk of misunderstanding an action, consequence, or recovery;
+ordinary labels and copy edits use the author check.
 
-They report findings and never edit the recap or invent product decisions. Deduplicate findings,
-apply clear product/copy fixes as the author, and rerun each affected critic. Ask the owner one
-question at a time only when a finding genuinely requires product judgment.
+Give selected critics the latest recap, fetched context, supported scenarios, non-goals, and the
+findings and rechecks policy from `delivery-assurance.md`. They report findings without editing or
+inventing product decisions. The author adjudicates before fixing; only material unresolved product
+choices block approval. Use one focused recheck of accepted blockers when needed, carrying prior
+dispositions. Apply the shared stopping conditions instead of repeatedly polishing the recap.
+Ask the owner only for a product choice that the existing context cannot settle.
 
 ## One shaping recap and approval
 
-When critic findings are resolved, present exactly one human-readable recap using the bundled
-template. It must include:
+When the author check and any accepted critic blockers are resolved, present exactly one human-readable
+recap using the bundled template. It must include:
 
 1. user, current problem, desired outcome, and business consequence;
 2. experience flow, states, recovery, information, and copy;

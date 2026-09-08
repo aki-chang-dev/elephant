@@ -45,7 +45,8 @@ approved outcome and named risk controls.
 
 ## 6. Product-decision return or open technical questions
 
-At `ready`, no unresolved item remains. For changed or ambiguous product meaning, set
+At `ready`, no blocking product or technical question remains. Deferred non-blocking improvements
+do not prevent readiness. For changed or ambiguous product meaning, set
 `needs-product-decision` and provide one brief containing the source/evidence, distinct observable
 outcomes, required decision, and invalidated work.
 
