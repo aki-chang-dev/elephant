@@ -11,7 +11,7 @@
       "source": "./plugins/elephant",
       "description": "A product-first coordination workflow for one owner and agents across Linear planning, Notion knowledge, and GitHub delivery.",
       "category": "workflow",
-      "keywords": ["superpowers", "workflow", "roadmap", "delivery", "product-first", "linear", "notion", "github"]
+      "keywords": ["workflow", "roadmap", "delivery", "product-first", "linear", "notion", "github"]
     }
   ]
 }

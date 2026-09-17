@@ -1,6 +1,6 @@
 {
   "name": "elephant",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "A product-first coordination workflow for one owner and agents across Linear planning, Notion knowledge, and GitHub delivery.",
   "skills": "./skills/",
   "author": {
@@ -12,7 +12,6 @@
   "repository": "https://github.com/aki-chang-dev/elephant",
   "license": "MIT",
   "keywords": [
-    "superpowers",
     "workflow",
     "roadmap",
     "delivery",
@@ -24,7 +23,7 @@
   "interface": {
     "displayName": "Elephant",
     "shortDescription": "Take products from idea to shipped stories.",
-    "longDescription": "A Claude Code and Codex workflow built on Superpowers: turn one-sentence ideas into user-centered outcomes, keep live planning in Linear, retain durable product knowledge in Notion, and connect implementation through GitHub.",
+    "longDescription": "A standalone Claude Code and Codex workflow: turn one-sentence ideas into user-centered outcomes, keep live planning in Linear, retain durable product knowledge in Notion, and connect implementation through GitHub.",
     "developerName": "Aki Chang",
     "category": "Productivity",
     "capabilities": [

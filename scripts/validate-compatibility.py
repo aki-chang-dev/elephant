@@ -211,6 +211,23 @@ def _validate_runtime(root: Path, errors: list[str]) -> None:
                 sys.modules.pop(name, None)
 
 
+def _validate_standalone_package(root: Path, errors: list[str]) -> None:
+    # Historical design documents and regression fixtures are not installed instructions.
+    paths = [
+        root / "README.md",
+        root / ".agents/plugins/marketplace.json",
+        root / ".claude-plugin/marketplace.json",
+        *(root / PLUGIN).rglob("*"),
+    ]
+    for path in paths:
+        if not path.is_file() or path.suffix not in {".md", ".json", ".py"}:
+            continue
+        if "superpowers" in path.read_text(encoding="utf-8").lower():
+            errors.append(
+                f"standalone package references Superpowers: {path.relative_to(root)}"
+            )
+
+
 def validate_repository(root: Path) -> list[str]:
     root = root.resolve()
     errors: list[str] = []
@@ -218,6 +235,7 @@ def validate_repository(root: Path) -> list[str]:
     _validate_forbidden_assets(root, errors)
     _validate_manifests(root, errors)
     _validate_skill_frontmatter(root, errors)
+    _validate_standalone_package(root, errors)
     _validate_runtime(root, errors)
     return errors
 

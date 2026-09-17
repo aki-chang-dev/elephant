@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -26,9 +28,8 @@ EXPECTED_DESCRIPTION = (
     "A product-first coordination workflow for one owner and agents across "
     "Linear planning, Notion knowledge, and GitHub delivery."
 )
-EXPECTED_VERSION = "0.5.3"
+EXPECTED_VERSION = "0.5.4"
 EXPECTED_KEYWORDS = {
-    "superpowers",
     "workflow",
     "roadmap",
     "delivery",
@@ -142,6 +143,54 @@ class CompatibilityValidatorTests(unittest.TestCase):
                 },
             },
         )
+
+    def test_packaged_runtime_runs_without_host_or_other_plugins(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "elephant"
+            shutil.copytree(PLUGIN, package, ignore=shutil.ignore_patterns("__pycache__"))
+            result = subprocess.run(
+                [
+                    sys.executable, "-I", "-S", "-c",
+                    "import json, sys; sys.path.insert(0, sys.argv[1]); "
+                    "from elephant_runtime.installed_smoke import run_installed_smoke; "
+                    "print(json.dumps(run_installed_smoke()))",
+                    str(package),
+                ],
+                cwd=directory, capture_output=True, text=True, check=True,
+            )
+            smoke = json.loads(result.stdout)
+            self.assertEqual(smoke["single_product"]["product"], "sample")
+            self.assertEqual(smoke["multi_product"]["labels"], {"issue": "issue-label-second"})
+
+    def test_validator_rejects_workflow_dependency_in_active_assets(self) -> None:
+        validator = load_validator()
+        for relative in (
+            "README.md",
+            ".claude-plugin/marketplace.json",
+            "plugins/elephant/.codex-plugin/plugin.json",
+            "plugins/elephant/skills/ship-story/SKILL.md",
+            "plugins/elephant/references/delivery-assurance.md",
+            "plugins/elephant/elephant_runtime/dependency.py",
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("Superpowers:writing-plans\n", encoding="utf-8")
+                errors: list[str] = []
+                validator._validate_standalone_package(root, errors)
+                self.assertEqual(errors, [f"standalone package references Superpowers: {relative}"])
+
+    def test_validator_allows_historical_design_documents(self) -> None:
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            history = root / "docs/superpowers/specs/original-design.md"
+            history.parent.mkdir(parents=True)
+            history.write_text("Use superpowers:writing-plans\n", encoding="utf-8")
+            errors: list[str] = []
+            validator._validate_standalone_package(root, errors)
+            self.assertEqual(errors, [])
 
     def test_validator_rejects_each_superseded_asset(self) -> None:
         validator = load_validator()
