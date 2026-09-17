@@ -5,10 +5,16 @@ categories only—never connector payloads, credentials, or external-object dump
 
 ## Install and inventory
 
-Install Elephant from its marketplace in each host, start a new session, and inspect the available
+Install Elephant alone, with no other workflow plugin installed, from its marketplace in each
+host. Start a new session and inspect the available
 skills. Both hosts must expose exactly the seven current workflow skills: `kickoff`,
 `author-product-spec`, `decompose-roadmap`, `setup-workspace`, `shape-story`,
 `author-technical-contract`, and `ship-story`. No `init-profile` entry may remain.
+
+Resume an ordinary Story using the repository's delivery conventions. Planning, implementation,
+verification, and closeout must not request another workflow plugin or its skills. Repository
+integration instructions and existing owner authorization determine closeout without a generic
+integration-choice menu. Historical design documents are not runtime prerequisites.
 
 ## Single Product setup
 

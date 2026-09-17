@@ -112,7 +112,9 @@ reported rather than guessed.
 
 ## Install
 
-Install Superpowers first.
+Elephant is standalone; no additional workflow plugin is required. Connect Linear and Notion
+for the operations that need them, and provide Git/GitHub access for delivery. Repository
+instructions define implementation, verification, and integration conventions.
 
 Claude Code:
 

@@ -1,6 +1,6 @@
 {
   "name": "elephant",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "A product-first coordination workflow for one owner and agents across Linear planning, Notion knowledge, and GitHub delivery.",
   "author": {
     "name": "Aki Chang",
@@ -9,5 +9,5 @@
   "homepage": "https://github.com/aki-chang-dev/elephant",
   "repository": "https://github.com/aki-chang-dev/elephant",
   "license": "MIT",
-  "keywords": ["superpowers", "workflow", "roadmap", "delivery", "product-first", "linear", "notion", "github"]
+  "keywords": ["workflow", "roadmap", "delivery", "product-first", "linear", "notion", "github"]
 }
