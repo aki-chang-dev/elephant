@@ -58,6 +58,16 @@ If the Story lacks a coherent problem, outcome, observable acceptance, or requir
 run `elephant:shape-story` in the main conversation. Product-semantic change always returns there.
 Engineering-only work requires current behavior-preservation evidence. Ambiguity is product-facing.
 
+## Use shaping research in technical design
+
+Retrieve the Story's research sources and any deferred technical evidence from shaping; apply the
+handoff rules in `../../references/shaping-research.md`. Combine these observations with the
+approved product outcome and current repository/provider evidence before selecting assurance or
+implementation. Validate consequential claims and resolve missing or conflicting technical facts
+through focused investigation. Sources inform technical choices; they are not an approved design.
+Do not repeat settled product questions or require a new survey when existing evidence suffices.
+If a finding would change the user outcome or acceptance, return that bounded decision to shaping.
+
 ## Select assurance and execution depth
 
 Apply `delivery-assurance.md` without asking the owner to classify risk.

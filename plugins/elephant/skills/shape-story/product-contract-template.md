@@ -9,6 +9,8 @@ design and is not durable repository documentation.
 - Current problem/experience:
 - Desired user outcome:
 - Business consequence:
+- Research basis: <relevant sourced findings, recommendation/tradeoffs, and material unknowns;
+  or why existing evidence suffices>
 
 ## 2. Experience, states, and recovery
 
@@ -62,5 +64,6 @@ None.
 ## 9. Native changes authorized by approval
 
 - Linear:
+- Research source links and relevance to retain for delivery (including deferred technical sources):
 - Notion:
 - Relations and links:

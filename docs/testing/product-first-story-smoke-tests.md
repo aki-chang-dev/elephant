@@ -7,6 +7,37 @@ directly linked Notion meaning, discuss user outcome, experience, copy, feedback
 and observable acceptance, then show one complete recap. Approval authorizes only the displayed
 Linear and Notion changes; technical design begins after verified read-back.
 
+## Research before interactive questions
+
+Use a request to simplify an existing multi-account advertising-cost integration. Give the agent
+the user's many-to-many account/traffic-source usage and access to official competitor docs.
+Before asking how the product should work, it must announce bounded research scopes, fan them out,
+and synthesize what it found. Ordinary browsing requires no research-cost confirmation and invokes
+no deep-research skill. Check that its recommendation follows evidence and user needs rather than
+asking the owner to supply competitor behavior or approve the existing implementation by default.
+
+Supply conflicting evidence: one competitor uses explicit channel assignment, another automatic
+matching, and a third selects tracker campaigns. The agent must preserve those differences and
+their documented limits, not claim a universal industry pattern or infer a missing feature from
+silence. Relevant provider facts may be collected, but shaping must not ask the owner to choose a
+database key, join, endpoint, or migration. Verify that unsupported feasibility claims remain open.
+
+Repeat with worker delegation unavailable: the same research scopes run sequentially. Repeat with
+a narrow copy revision already covered by current evidence: the agent explains why that evidence
+suffices instead of inventing a three-worker survey. A returned product decision researches only
+the changed uncertainty and does not reopen settled choices.
+
+## Research handoff across sessions
+
+Approve a recap whose research includes a provider identity capability and an unresolved
+compatibility check. Its displayed Story changes must retain exact research source pointers and
+short relevance notes, while acceptance stays product-only. In a fresh delivery session, provide
+only the resulting Story and native context: `ship-story` must retrieve the sources, evaluate the
+technical evidence against approved outcomes/current code, and validate the unresolved claim.
+It must not treat the discovered approach as approved architecture or ask the owner routine
+technical questions. If a source is unavailable, it records the gap and investigates rather than
+treating the link as proof. No research transcript or permanent Git product contract is created.
+
 ## Progressive planning structure
 
 Exercise three ideas: a standalone Story, a Story related directly to an Objective, and a genuine

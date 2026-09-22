@@ -41,6 +41,7 @@ REQUIRED_ASSETS = (
     "plugins/elephant/elephant_runtime/installed_smoke.py",
     "plugins/elephant/references/information-routing.md",
     "plugins/elephant/references/delivery-assurance.md",
+    "plugins/elephant/references/shaping-research.md",
     "plugins/elephant/references/linear-planning.md",
     "plugins/elephant/references/notion-knowledge.md",
     "plugins/elephant/skills/shape-story/product-contract-template.md",
