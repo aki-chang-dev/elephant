@@ -36,6 +36,13 @@ descendants. Expand to Shared Knowledge and finally workspace-wide Notion search
 narrower evidence is insufficient. Read Linear through a direct relation only when current
 planning state is necessary.
 
+### External research
+
+After establishing Product context, use `shaping-research.md` for competitor and industry evidence
+before interactive product questions. This targeted external search supplements the native sources;
+it does not redefine Product authority or authorize a broader internal-workspace search. Provider
+and technical documentation may also be consulted when delivery must validate feasibility.
+
 ### Executable behavior
 
 Start with the linked GitHub branch or pull request and repository paths, then search only the

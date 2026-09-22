@@ -20,7 +20,7 @@ one-sentence idea
    → setup-workspace        repository/Product/domain entry-point map
 
 Linear Story
-→ shape-story               product-only discussion + one recap approval
+→ shape-story               targeted fan-out research → product discussion → one recap approval
 → ship-story                proportionate assurance, implementation, PR, native closeout
    → author-technical-contract only for named elevated technical risk
 ```
@@ -51,6 +51,13 @@ workflow.
 The owner starts with an idea and participates deeply in product shaping. One shaping recap
 approval authorizes the displayed Linear and Notion changes. Technical design, specialist review,
 planning, implementation, code review, factual progress, and closeout are agent-owned.
+
+Before interactive product questions, Elephant researches relevant competitor flows and documented
+approaches through bounded subagents, then answers factual questions itself and recommends a
+product direction. Ordinary targeted research needs no cost-confirmation gate or deep-research
+skill. Technical findings stay separate until `ship-story` evaluates them with the approved outcome.
+When workers are unavailable, the same research runs sequentially; applicable existing evidence
+can be reused. Story source links preserve the research handoff without a second product contract.
 
 Elephant returns to the owner when product meaning, acceptance, Product ownership, or strategic
 priority must change—not for routine data entry or technical review.

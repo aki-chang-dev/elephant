@@ -17,6 +17,7 @@ Run this skill in the main conversation. Before acting, read completely:
 - `../../references/linear-planning.md`
 - `../../references/notion-knowledge.md`
 - `../../references/delivery-assurance.md` (review selection, findings, and stopping conditions)
+- `../../references/shaping-research.md` (research before interactive product questions)
 - `product-contract-template.md`
 
 The bundled template is a working recap shape, not a durable repository Product Contract. Keep the
@@ -47,6 +48,20 @@ When technical delivery returns a product-decision question, fetch the current L
 linked Notion pages again, shape only the bounded decision and the follow-ups needed to keep the
 whole user outcome coherent, and apply the approved source updates through this same flow. Do not
 create a successor file. A changed observable requirement invalidates downstream technical work.
+
+## Research before product questions
+
+Before starting interactive product questions, apply `shaping-research.md`. Internally identify
+the product decisions, then fan out bounded subagents to collect relevant competitor flows,
+product rules, and documented implementation approaches. Ordinary targeted research proceeds
+without a cost-confirmation gate or a deep-research skill. A clarification strictly necessary to
+identify the Product or research scope may come first; do not turn it into a design questionnaire.
+
+Synthesize the evidence in the main conversation: answer factual questions yourself, explain the
+recommended product direction and meaningful alternatives, and ask only the remaining product
+tradeoffs. Competitor practice informs the recommendation; it does not override the user's needs.
+Keep technical findings in the deferred evidence handoff for `ship-story`, separate from the
+product discussion and acceptance. Revisit only changed or unresolved research on a bounded return.
 
 ## Product conversation
 
@@ -169,6 +184,10 @@ artifact is written to Git.
 
 - The owner is asked to supply Objective, Project, Milestone, priority, or knowledge fields before
   the idea is understood.
+- Interactive design questions start before relevant research is synthesized, or ask the owner
+  to answer facts that targeted research can establish.
+- Competitor evidence is treated as a mandated design, or technical research becomes a shaping
+  implementation decision.
 - A question asks how the system will be built rather than what the user experiences.
 - Optional planning levels are created merely to complete a hierarchy.
 - Notion receives a roadmap copy or low-value delivery history.
